@@ -64,7 +64,51 @@ const png = Buffer.concat([
   chunk('IEND', new Uint8Array()),
 ])
 
+function encode(w: number, h: number, pixels: Uint8Array): Buffer {
+  const head = Buffer.alloc(13)
+  head.writeUInt32BE(w, 0)
+  head.writeUInt32BE(h, 4)
+  head.set([8, 6, 0, 0, 0], 8)
+  const lines = Buffer.alloc((w * 4 + 1) * h)
+  for (let y = 0; y < h; y++) lines.set(pixels.subarray(y * w * 4, (y + 1) * w * 4), y * (w * 4 + 1) + 1)
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', head), chunk('IDAT', deflateSync(lines)), chunk('IEND', new Uint8Array())])
+}
+
+// The placeholder hero: four 16x16 frames drawn from text. `.` is transparent.
+const HERO_COLOURS: Record<string, Rgb> = { o: [24, 20, 37], b: [76, 159, 254], w: [240, 240, 240], s: [245, 217, 10], r: [229, 72, 77] }
+const BODY = [
+  '....oooooo......',
+  '...obbbbbbo.....',
+  '..obbbbbbbbo....',
+  '..obbwobbwoo....',
+  '..obbwobbwoo....',
+  '..obbbbbbbbo....',
+  '..obbbrrrbbo....',
+  '...obbbbbbo.....',
+  '..oossssssoo....',
+  '.osobbbbbboso...',
+  '.osobbbbbboso...',
+  '..oobbbbbboo....',
+]
+const LEGS: string[][] = [
+  ['...obbobbo......', '...obbobbo......', '...orrorro......', '...oooooo.......'], // idle
+  ['..obbo.obbo.....', '.obbo...obbo....', '.orro...orro....', '.ooo....ooo.....'], // run, legs apart
+  ['...obbbbo.......', '....obbo........', '....orro........', '....oooo........'], // run, legs together
+  ['..obbo..obbo....', '..orro..orro....', '..ooo...ooo.....', '................'], // jump
+]
+const hero = new Uint8Array(64 * 16 * 4)
+LEGS.forEach((legs, frame) => {
+  ;[...BODY, ...legs].forEach((row, y) => {
+    ;[...row].forEach((c, x) => {
+      const colour = HERO_COLOURS[c]
+      if (colour) hero.set([...colour, 255], (y * 64 + frame * 16 + x) * 4)
+    })
+  })
+})
+
 const dir = new URL('../sample/assets/', import.meta.url)
 mkdirSync(dir, { recursive: true })
 writeFileSync(new URL('tiles.png', dir), png)
+writeFileSync(new URL('hero.png', dir), encode(64, 16, hero))
+console.log('wrote sample/assets/hero.png (64x16, 4 frames of 16x16)')
 console.log(`wrote sample/assets/tiles.png (${width}x${height}, ${COLS * ROWS} tiles)`)

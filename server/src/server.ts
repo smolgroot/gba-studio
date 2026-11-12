@@ -9,6 +9,8 @@ import { watch } from 'chokidar'
 import fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import { WebSocketServer } from 'ws'
+import { Builder } from './build.ts'
+import type { BuildMode } from './build.ts'
 import { HttpError, ProjectFolder } from './project.ts'
 import type { DocKind } from '@gba-studio/core'
 
@@ -92,6 +94,22 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
   }
 
   const sockets = new WebSocketServer({ noServer: true })
+  const broadcast = (message: unknown) => {
+    const text = JSON.stringify(message)
+    for (const ws of sockets.clients) ws.send(text)
+  }
+
+  // Builds run the commands in studio/project.json, in the game folder.
+  const builder = new Builder(project, broadcast)
+  app.get('/api/build', () => builder.status())
+  app.post<{ Body: { mode?: unknown } }>('/api/build', async (request) => {
+    await builder.start(request.body?.mode as BuildMode)
+    return builder.status()
+  })
+  app.post('/api/build/stop', async () => {
+    builder.stop()
+    return { ok: true }
+  })
   app.server.on('upgrade', (request, socket, head) => {
     if (request.url !== '/ws') return socket.destroy()
     sockets.handleUpgrade(request, socket, head, (ws) => sockets.emit('connection', ws, request))
@@ -105,9 +123,8 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
     pending.add(path.relative(project.root, file).split(path.sep).join('/'))
     clearTimeout(timer)
     timer = setTimeout(() => {
-      const message = JSON.stringify({ type: 'changed', paths: [...pending] })
+      broadcast({ type: 'changed', paths: [...pending] })
       pending.clear()
-      for (const ws of sockets.clients) ws.send(message)
     }, 120)
   })
 
@@ -119,6 +136,7 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
     url: `http://${options.host === '0.0.0.0' ? 'localhost' : options.host}:${port}`,
     close: async () => {
       clearTimeout(timer)
+      builder.stop()
       await watcher.close()
       for (const ws of sockets.clients) ws.terminate()
       sockets.close()

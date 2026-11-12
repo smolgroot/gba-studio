@@ -1,0 +1,6 @@
+# Host-side workspace: the build helper and the runtime's host-testable parts.
+# `sample/` targets the GBA with nightly build-std, so it builds from its own folder.
+[workspace]
+resolver = "3"
+members = ["codegen", "runtime"]
+exclude = ["sample"]

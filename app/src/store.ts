@@ -1,23 +1,23 @@
 import { create } from 'zustand'
 import type { Audio, MultiKind, Project, Room, Sprite, Tileset, World } from '@gba-studio/core'
 import { api, watchFiles } from './api.ts'
-import type { Bundle } from './api.ts'
+import type { BuildMessage, BuildStatus, Bundle } from './api.ts'
 
 /** What is open in the document area and described in Properties. */
 export interface Selection {
-  kind: 'world' | 'project' | 'audio' | 'room' | 'tileset' | 'sprite' | 'asset'
+  kind: 'world' | 'project' | 'audio' | 'play' | 'room' | 'tileset' | 'sprite' | 'asset'
   /** Document id, or the file path of an asset. */
   id?: string
 }
 export const selectionKey = (s: Selection): string => `${s.kind}:${s.id ?? ''}`
 
-const KINDS: ReadonlyArray<Selection['kind']> = ['world', 'project', 'audio', 'room', 'tileset', 'sprite', 'asset']
+const KINDS: ReadonlyArray<Selection['kind']> = ['world', 'project', 'audio', 'play', 'room', 'tileset', 'sprite', 'asset']
 /** The open item lives in the URL's hash (`#room:entry`), so a reload or a shared link comes back to it. */
 export function selectionFromHash(): Selection {
   const [kind, ...rest] = decodeURIComponent(location.hash.slice(1)).split(':')
   const id = rest.join(':')
   if (!KINDS.includes(kind as Selection['kind'])) return { kind: 'world' }
-  const single = kind === 'world' || kind === 'project' || kind === 'audio'
+  const single = kind === 'world' || kind === 'project' || kind === 'audio' || kind === 'play'
   return single ? { kind: kind as Selection['kind'] } : id ? { kind: kind as Selection['kind'], id } : { kind: 'world' }
 }
 
@@ -69,6 +69,10 @@ interface StudioState {
   /** Counts disk changes, so image previews refetch. */
   revision: number
   selection: Selection
+  build: BuildStatus | null
+  /** Runs a build and streams its output into `build.log`. */
+  runBuild: (mode: 'dev' | 'release') => Promise<void>
+  stopBuild: () => Promise<void>
   history: Record<string, History>
   load: () => Promise<void>
   init: (name: string) => Promise<void>
@@ -112,7 +116,7 @@ export const useStudio = create<StudioState>((set, get) => {
 
   const step = (from: 'past' | 'future') => {
     const { selection, bundle, history } = get()
-    if (!bundle || selection.kind === 'asset') return
+    if (!bundle || selection.kind === 'asset' || selection.kind === 'play') return
     const key = docKey(selection.kind, selection.id)
     const entry = history[key]
     const current = getDoc(bundle.docs, selection.kind, selection.id)
@@ -134,6 +138,17 @@ export const useStudio = create<StudioState>((set, get) => {
     revision: 0,
     selection: selectionFromHash(),
     history: {},
+    build: null,
+    runBuild: async (mode) => {
+      try {
+        set({ build: await api.build(mode), saveError: null })
+      } catch (error) {
+        set({ saveError: `Build: ${(error as Error).message}` })
+      }
+    },
+    stopBuild: async () => {
+      await api.stopBuild().catch(() => undefined)
+    },
     load: async () => {
       const started = writes
       try {
@@ -174,7 +189,16 @@ export const useStudio = create<StudioState>((set, get) => {
         (connected) => {
           set({ connected })
           // The disk may have changed while the link was down.
-          if (connected) void get().load()
+          if (connected) {
+            void get().load()
+            void api.buildStatus().then((build) => set({ build })).catch(() => undefined)
+          }
+        },
+        (message: BuildMessage) => {
+          const build = get().build
+          if (message.type === 'build-started') set({ build: { running: true, mode: message.mode, command: message.command, exitCode: null, stopped: false, seconds: null, log: [], roms: build?.roms ?? {} } })
+          else if (message.type === 'build-log') set({ build: build && { ...build, log: [...build.log, ...message.lines].slice(-5000) } })
+          else set({ build: message.status })
         },
       ),
     commit: (kind, id, doc) => {
@@ -234,7 +258,7 @@ export const useStudio = create<StudioState>((set, get) => {
 
 /** Whether the open document has steps to undo or redo. */
 export function useHistoryDepth(): { undo: number; redo: number } {
-  const entry = useStudio((s) => (s.selection.kind === 'asset' ? undefined : s.history[docKey(s.selection.kind, s.selection.id)]))
+  const entry = useStudio((s) => (s.selection.kind === 'asset' || s.selection.kind === 'play' ? undefined : s.history[docKey(s.selection.kind, s.selection.id)]))
   return { undo: entry?.past.length ?? 0, redo: entry?.future.length ?? 0 }
 }
 
@@ -246,6 +270,7 @@ export function selectionTitle(selection: Selection, bundle: Bundle | null): str
     case 'world': return 'World'
     case 'project': return 'Project settings'
     case 'audio': return 'Audio'
+    case 'play': return 'Play'
     case 'room': return docs?.rooms[id!]?.name ?? id!
     case 'tileset': return docs?.tilesets[id!]?.name ?? id!
     case 'sprite': return docs?.sprites[id!]?.name ?? id!

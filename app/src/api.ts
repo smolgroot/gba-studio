@@ -12,6 +12,27 @@ export interface Bundle {
   assets: AssetFile[]
 }
 
+export interface RomInfo {
+  path: string
+  size: number
+  modified: number
+}
+export interface BuildStatus {
+  running: boolean
+  mode: 'dev' | 'release' | null
+  command: string | null
+  exitCode: number | null
+  stopped: boolean
+  seconds: number | null
+  log: string[]
+  roms: Partial<Record<'dev' | 'release', RomInfo>>
+}
+/** What the server pushes while a build runs. */
+export type BuildMessage =
+  | { type: 'build-started'; mode: 'dev' | 'release'; command: string }
+  | { type: 'build-log'; lines: string[] }
+  | { type: 'build-finished'; status: BuildStatus }
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
   const body = (await response.json().catch(() => null)) as { error?: string } | null
@@ -29,6 +50,9 @@ export const api = {
   init: (name: string) => request<Bundle>('/api/init', json('POST', { name })),
   save: (kind: DocKind, id: string | undefined, doc: unknown) =>
     request<{ ok: true }>(`/api/doc/${kind}${id ? `/${encodeURIComponent(id)}` : ''}`, json('PUT', doc)),
+  buildStatus: () => request<BuildStatus>('/api/build'),
+  build: (mode: 'dev' | 'release') => request<BuildStatus>('/api/build', json('POST', { mode })),
+  stopBuild: () => request<{ ok: true }>('/api/build/stop', json('POST', {})),
   remove: (kind: DocKind, id: string) => request<{ ok: true }>(`/api/doc/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   upload: (path: string, file: Blob, overwrite: boolean) =>
     request<{ ok: true; path: string }>(`/api/upload?path=${encodeURIComponent(path)}${overwrite ? '&overwrite=1' : ''}`, {
@@ -44,7 +68,7 @@ export function fileUrl(path: string, revision: number): string {
 }
 
 /** Calls `onChange` when files change on disk and `onStatus` as the link goes up and down; reconnects by itself. */
-export function watchFiles(onChange: (paths: string[]) => void, onStatus: (connected: boolean) => void): () => void {
+export function watchFiles(onChange: (paths: string[]) => void, onStatus: (connected: boolean) => void, onBuild?: (message: BuildMessage) => void): () => void {
   let socket: WebSocket | undefined
   let retry: ReturnType<typeof setTimeout> | undefined
   let stopped = false
@@ -52,8 +76,9 @@ export function watchFiles(onChange: (paths: string[]) => void, onStatus: (conne
     socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`)
     socket.onopen = () => onStatus(true)
     socket.onmessage = (event) => {
-      const message = JSON.parse(String(event.data)) as { type: string; paths: string[] }
+      const message = JSON.parse(String(event.data)) as { type: 'changed'; paths: string[] } | BuildMessage
       if (message.type === 'changed') onChange(message.paths)
+      else onBuild?.(message)
     }
     socket.onclose = () => {
       onStatus(false)

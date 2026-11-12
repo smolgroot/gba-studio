@@ -2,10 +2,10 @@
   "version": 1,
   "name": "Sample Metroidvania",
   "build": {
-    "dev": "cargo build",
-    "release": "cargo build --release",
-    "devRom": "dist/game-dev.gba",
-    "releaseRom": "dist/game.gba"
+    "dev": "mkdir -p dist && cargo build && agb-gbafix target/thumbv4t-none-eabi/debug/sample -o dist/sample-dev.gba",
+    "devRom": "dist/sample-dev.gba",
+    "release": "mkdir -p dist && cargo build --release && agb-gbafix target/thumbv4t-none-eabi/release/sample -o dist/sample.gba",
+    "releaseRom": "dist/sample.gba"
   },
   "collisionClasses": [
     {
@@ -58,6 +58,7 @@
       "id": "player-start",
       "name": "Player start",
       "colour": "#3e63dd",
+      "sprite": "hero",
       "props": []
     }
   ]

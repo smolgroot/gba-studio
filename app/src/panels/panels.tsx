@@ -8,6 +8,7 @@ import GridOnIcon from '@mui/icons-material/GridOn'
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined'
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined'
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined'
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined'
 import PublicIcon from '@mui/icons-material/Public'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
@@ -31,6 +32,7 @@ import { selectionKey, useStudio } from '../store.ts'
 import type { Selection } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
+import { PlayView } from './play.tsx'
 import { ImportButton, UndoButtons, nameFromPath } from './common.tsx'
 import { Heading, RoomEditor, RoomProperties } from './room.tsx'
 import { SpriteEditor, SpriteProperties } from './sprite.tsx'
@@ -175,6 +177,7 @@ export function ProjectPanel() {
       <List>
         <Row selection={{ kind: 'world' }} icon={<PublicIcon sx={iconSx} />} label="World" detail={`${docs.world?.rooms.length ?? 0} rooms`} />
         <Row selection={{ kind: 'project' }} icon={<SettingsOutlinedIcon sx={iconSx} />} label="Project settings" />
+        <Row selection={{ kind: 'play' }} icon={<PlayCircleOutlineIcon sx={iconSx} />} label="Play" />
         <Row selection={{ kind: 'audio' }} icon={<AudiotrackIcon sx={iconSx} />} label="Audio" detail={`${docs.audio?.tracks.length ?? 0} tracks · ${docs.audio?.sfx.length ?? 0} sounds`} />
       </List>
       <Section title="Rooms" action={<AddButton title={tilesets.length ? 'New room' : 'A room needs a tileset: create one first'} disabled={!tilesets.length} onClick={() => setCreating('room')} />}>
@@ -230,6 +233,7 @@ export function DocumentPanel({ selection }: { selection: Selection }) {
     case 'asset': return <AssetView path={id!} />
     case 'project': return <ProjectSettings />
     case 'audio': return <AudioEditor />
+    case 'play': return <PlayView />
   }
 }
 
@@ -366,6 +370,8 @@ export function PropertiesPanel() {
         <Field label="Format version"><Typography>{docs.project.version}</Typography></Field>
       </Fields>
     )
+  } else if (kind === 'play') {
+    body = <Empty>Plays the ROM from the last build. Rebuilds restart it while “Restart on rebuild” is on.</Empty>
   } else if (kind === 'audio' && docs.audio) {
     body = (
       <Fields>

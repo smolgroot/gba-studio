@@ -10,6 +10,11 @@
       "room": "shaft",
       "x": 2,
       "y": 0
+    },
+    {
+      "room": "kitchen",
+      "x": 3,
+      "y": -1
     }
   ],
   "start": "entry"

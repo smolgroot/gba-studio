@@ -1,10 +1,15 @@
 // Writes the sample project's documents under sample/studio/: two rooms on the world
 // grid, built from the placeholder tileset. Run after changing the format.
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { FORMAT_VERSION, SCREEN, docPath, newProject, rleEncode } from '../core/src/index.ts'
-import type { DocKind, Room, Tileset } from '../core/src/index.ts'
+import type { DocKind, Room, Sprite, Tileset } from '../core/src/index.ts'
 
 const root = new URL('../sample/', import.meta.url)
+// The sample is also where people try the studio: never write over their work unasked.
+if (existsSync(new URL('studio/project.json', root)) && !process.argv.includes('--force')) {
+  console.error('sample/studio already exists. Pass --force to replace its documents with the generated ones.')
+  process.exit(1)
+}
 function write(kind: DocKind, id: string | undefined, data: unknown): void {
   const file = new URL(docPath(kind, id), root)
   mkdirSync(new URL('.', file), { recursive: true })
@@ -57,7 +62,8 @@ entryBack.fill(26, 8, 10, 8, WALL)
 // One screen wide, two tall: a shaft with girders to climb.
 const shaft = grid(1, 2)
 shaft.ground(0, 37, 30)
-shaft.fill(0, 0, 2, 37, ROCK)
+// The left wall stops three tiles above the floor: the doorway from the entry room.
+shaft.fill(0, 0, 2, 34, ROCK)
 shaft.fill(28, 0, 2, 17, ROCK)
 shaft.fill(28, 20, 2, 17, ROCK)
 for (const [x, y] of [[4, 31], [16, 26], [6, 21], [18, 15], [8, 9]] as const) shaft.fill(x, y, 6, 1, GIRDER)
@@ -86,6 +92,24 @@ const rooms: Record<string, Room> = {
   },
 }
 
+// The hero: frames follow make-sample-assets.ts (idle, two run frames, jump).
+const hero: Sprite = {
+  version: FORMAT_VERSION,
+  name: 'Hero',
+  image: 'assets/hero.png',
+  frame: { width: 16, height: 16 },
+  anchor: { x: 6, y: 16 },
+  hitbox: { x: 2, y: 2, width: 9, height: 14 },
+  animations: [
+    { name: 'idle', frames: [{ index: 0, duration: 60 }], loop: true },
+    { name: 'run', frames: [{ index: 1, duration: 6 }, { index: 2, duration: 6 }], loop: true },
+    { name: 'jump', frames: [{ index: 3, duration: 60 }], loop: true },
+  ],
+}
+project.entityTypes = [{ id: 'player-start', name: 'Player start', colour: '#3e63dd', sprite: 'hero', props: [] }]
+project.build = { dev: 'mkdir -p dist && cargo build && agb-gbafix target/thumbv4t-none-eabi/debug/sample -o dist/sample-dev.gba', devRom: 'dist/sample-dev.gba', release: 'mkdir -p dist && cargo build --release && agb-gbafix target/thumbv4t-none-eabi/release/sample -o dist/sample.gba', releaseRom: 'dist/sample.gba' }
+
+write('sprite', 'hero', hero)
 write('project', undefined, project)
 write('audio', undefined, audio)
 write('tileset', 'tiles', tiles)

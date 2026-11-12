@@ -1,0 +1,15 @@
+[package]
+name = "gba_studio_rt"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Runtime for games built with GBA-Studio: room data, tile collision, and agb helpers"
+publish = false
+
+[features]
+# The drawing half: scrolling rooms and sprite animation on agb. Without it the crate
+# is plain data and collision, usable in host-side game logic and tests.
+agb = ["dep:agb"]
+
+[dependencies]
+agb = { version = "0.25.0", optional = true }

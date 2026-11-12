@@ -5,9 +5,9 @@ yourself: PNG pixel art, MIDI or tracker music, and rooms painted on a grid of G
 screens. It targets Rust games built on [agb](https://agbrs.dev) and knows nothing
 about any particular game.
 
-Status: **the editors work; the ROM pipeline does not exist yet.** You can paint
-rooms, arrange the world, set up tilesets and sprites with animations, and import
-music and sounds. Nothing here builds or runs a ROM yet (see the roadmap).
+Status: **the editors work and a ROM can be built and played from them.** A sample
+game in `sample/` is made entirely from a studio project; the Build panel runs its
+build and the Play panel runs the result in the browser.
 
 ## What it does today
 
@@ -24,6 +24,10 @@ music and sounds. Nothing here builds or runs a ROM yet (see the roadmap).
 - **Audio:** import WAV as sound effects, and XM, MOD and MIDI (with an SF2
   soundfont) as music tracks; assign a track to a room. WAV plays in the studio;
   music formats are only converted at build time, so they cannot be heard here yet.
+- **Build and Play:** run the project's dev or release build (commands set in
+  Project settings), read the streamed log, stop it, and play the ROM in the browser
+  on the Pecten emulator core, with sound and on-screen buttons on touch devices. The
+  ROM restarts by itself when rebuilt.
 - **Everywhere:** every edit saves by itself, undo and redo per document, and files
   changed on disk by other tools (your pixel editor, git, a coding agent) reload live.
 
@@ -67,6 +71,36 @@ pnpm typecheck
 | `app/` | React + Vite + MUI interface, with dockable panels on wide screens and one panel at a time on narrow ones. |
 | `sample/` | A two-room sample project with a placeholder tileset. Regenerate with `node scripts/make-sample-assets.ts` and `node scripts/make-sample-project.ts`. |
 
+## Making a game with it
+
+A game is a Rust crate on agb that depends on the two crates here:
+
+```toml
+[dependencies]
+gba_studio_rt = { path = "../runtime", features = ["agb"] }
+[build-dependencies]
+gba_studio_build = { path = "../codegen" }
+```
+
+`build.rs` is one line, `gba_studio_build::build();`. It reads `studio/`, converts the
+PNGs to GBA tiles and palettes (a tileset's tiles must fit 16 palettes of 15 colours,
+a sprite sheet one palette of 15), and fails the build with every problem it found.
+The game brings the result in with `include_data!()` (rooms, collision, entities,
+the world), `include_gfx!()` (tiles, sprites, animations) and `include_audio!()`.
+`gba_studio_rt` also has a `Body` that moves through the collision cells, with walls,
+one-way platforms and slopes, and `RoomView`, which scrolls a room larger than the
+GBA's backgrounds. `sample/src/main.rs` is a complete example in about 150 lines.
+
+The sample builds from its own folder (it needs the nightly toolchain pinned in
+`sample/rust-toolchain.toml` and `cargo install agb-gbafix`):
+
+```sh
+cd sample && cargo build        # or use Build dev in the studio
+```
+
+`pnpm test` runs the TypeScript tests and `cargo test` the Rust ones. After rebuilding
+the Pecten emulator core, `scripts/sync-pecten.sh` copies it into the app.
+
 ## Project format
 
 Plain JSON in the game's repository, made to diff well in git. The schemas in
@@ -93,9 +127,6 @@ watches them and never rewrites them.
 - **Editors, still to do:** hear MIDI, XM and MOD in the studio; edit collision
   classes and entity property definitions (today in `studio/project.json`); palette
   and tile budget checks; selection with copy and paste in the map editor.
-- **M3 Pipeline:** a Rust `build.rs` helper that turns the project into agb data, a
-  small runtime crate, a sample game, and Build and Play panels (Play runs the ROM in
-  the browser on the Pecten emulator core).
 - **M4:** adopt it in Diamond Hands, one piece at a time.
 - **M5:** touch polish, autotile brushes, optional desktop wrapper.
 - **M6 AI-ready:** `validate` and `build` commands with JSON output, an MCP server

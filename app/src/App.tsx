@@ -11,6 +11,7 @@ import { DockviewReact, themeDark } from 'dockview-react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { useEffect, useRef, useState } from 'react'
 import { DocumentPanel, ProblemsPanel, ProjectPanel, PropertiesPanel } from './panels/panels.tsx'
+import { BuildPanel } from './panels/play.tsx'
 import { PalettePanel } from './panels/room.tsx'
 import { BAR } from './theme.ts'
 import { selectionFromHash, selectionKey, selectionTitle, useStudio } from './store.ts'
@@ -155,6 +156,7 @@ const dockComponents = {
   properties: () => <PropertiesPanel />,
   palette: () => <PalettePanel />,
   problems: () => <ProblemsPanel />,
+  build: () => <BuildPanel />,
   document: (props: IDockviewPanelProps<Selection>) => <DocumentPanel selection={props.params} />,
 }
 
@@ -204,7 +206,9 @@ function DockLayout() {
         dock.addPanel({ id: 'project', component: 'project', title: 'Project', position: { referencePanel: docId, direction: 'left' }, initialWidth: 290 })
         dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: docId, direction: 'right' }, initialWidth: 330 })
         dock.addPanel({ id: 'palette', component: 'palette', title: 'Tiles & Layers', position: { referencePanel: 'properties', direction: 'below' } })
-        dock.addPanel({ id: 'problems', component: 'problems', title: 'Problems', position: { referencePanel: docId, direction: 'below' }, initialHeight: 150 })
+        dock.addPanel({ id: 'problems', component: 'problems', title: 'Problems', position: { referencePanel: docId, direction: 'below' }, initialHeight: 190 })
+        dock.addPanel({ id: 'build', component: 'build', title: 'Build', position: { referencePanel: 'problems', direction: 'within' } })
+        dock.getPanel('problems')?.api.setActive()
         dock.getPanel(docId)?.api.setActive()
         // Clicking a document tab selects it, so Properties describes what is in front.
         dock.onDidActivePanelChange(({ panel }) => {
@@ -221,7 +225,7 @@ function StackLayout() {
   const selection = useStudio((s) => s.selection)
   const bundle = useStudio((s) => s.bundle)
   const problems = bundle?.problems.length ?? 0
-  const [tab, setTab] = useState<'project' | 'document' | 'palette' | 'properties' | 'problems'>('document')
+  const [tab, setTab] = useState<'project' | 'document' | 'palette' | 'properties' | 'problems' | 'build'>('document')
   // Picking an item in the project list shows it.
   const shown = useRef(selectionKey(selection))
   useEffect(() => {
@@ -239,6 +243,7 @@ function StackLayout() {
         {tab === 'palette' && <PalettePanel />}
         {tab === 'properties' && <PropertiesPanel />}
         {tab === 'problems' && <ProblemsPanel />}
+        {tab === 'build' && <BuildPanel />}
       </Box>
       <Tabs
         value={tab}
@@ -251,6 +256,7 @@ function StackLayout() {
         <Tab value="document" label={selectionTitle(selection, bundle)} sx={{ minHeight: 44, minWidth: 0 }} />
         {selection.kind === 'room' && <Tab value="palette" label="Tiles" sx={{ minHeight: 44, minWidth: 0 }} />}
         <Tab value="properties" label="Properties" sx={{ minHeight: 44, minWidth: 0 }} />
+        <Tab value="build" label="Build" sx={{ minHeight: 44, minWidth: 0 }} />
         <Tab value="problems" label={problems ? `Problems (${problems})` : 'Problems'} sx={{ minHeight: 44, minWidth: 0 }} />
       </Tabs>
     </Box>
