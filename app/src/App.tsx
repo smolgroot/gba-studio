@@ -1,0 +1,224 @@
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import Tab from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
+import TextField from '@mui/material/TextField'
+import Typography from '@mui/material/Typography'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { DockviewReact, themeDark } from 'dockview-react'
+import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
+import { useEffect, useRef, useState } from 'react'
+import { DocumentPanel, ProblemsPanel, ProjectPanel, PropertiesPanel } from './panels/panels.tsx'
+import { selectionKey, selectionTitle, useStudio } from './store.ts'
+import type { Selection } from './store.ts'
+
+export function App() {
+  const bundle = useStudio((s) => s.bundle)
+  const error = useStudio((s) => s.error)
+  // Docked panels need room; a phone or a narrow window gets one panel at a time.
+  const wide = useMediaQuery('(min-width:900px)')
+
+  useEffect(() => {
+    // Load at once; do not wait for the websocket to come up.
+    void useStudio.getState().load()
+    return useStudio.getState().watch()
+  }, [])
+
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <TopBar />
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        {!bundle ? (
+          <Centre>{error ? `Cannot reach the studio server: ${error}` : 'Loading…'}</Centre>
+        ) : !bundle.initialised ? (
+          <NewProject />
+        ) : wide ? (
+          <DockLayout />
+        ) : (
+          <StackLayout />
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+function Centre({ children }: { children: React.ReactNode }) {
+  return (
+    <Box sx={{ height: '100%', display: 'grid', placeItems: 'center', p: 4, textAlign: 'center' }}>
+      <Typography color="text.secondary">{children}</Typography>
+    </Box>
+  )
+}
+
+function TopBar() {
+  const bundle = useStudio((s) => s.bundle)
+  const connected = useStudio((s) => s.connected)
+  const error = useStudio((s) => s.error)
+  const errors = bundle?.problems.filter((p) => p.severity === 'error').length ?? 0
+  const warnings = (bundle?.problems.length ?? 0) - errors
+  return (
+    <Box component="header" sx={{ height: 30, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3, px: 3, bgcolor: '#141414', borderBottom: 1, borderColor: 'divider' }}>
+      <Typography sx={{ fontWeight: 700, letterSpacing: 0.4 }}>GBA-Studio</Typography>
+      {bundle && (
+        <Typography color="text.secondary" noWrap sx={{ flex: 1 }}>
+          {bundle.docs.project?.name ?? bundle.folder}
+        </Typography>
+      )}
+      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        {bundle?.initialised && (
+          <>
+            <Count icon={<ErrorOutlineIcon sx={{ fontSize: 14 }} />} count={errors} colour="error.main" label="errors" />
+            <Count icon={<WarningAmberIcon sx={{ fontSize: 14 }} />} count={warnings} colour="warning.main" label="warnings" />
+          </>
+        )}
+        {/* Shown only when something is wrong: the folder on disk is not being followed. */}
+        {bundle && (!connected || error) && (
+          <Typography variant="body2" color="warning.main" role="status">
+            {error ? 'Server unreachable' : 'Reconnecting…'}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+function Count({ icon, count, colour, label }: { icon: React.ReactNode; count: number; colour: string; label: string }) {
+  return (
+    <Box aria-label={`${count} ${label}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: count ? colour : 'text.secondary' }}>
+      {icon}
+      <Typography variant="body2" color="inherit">{count}</Typography>
+    </Box>
+  )
+}
+
+function NewProject() {
+  const folder = useStudio((s) => s.bundle!.folder)
+  const error = useStudio((s) => s.error)
+  const init = useStudio((s) => s.init)
+  const [name, setName] = useState(folder)
+  return (
+    <Box sx={{ height: '100%', display: 'grid', placeItems: 'center', p: 4 }}>
+      <Box
+        component="form"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (name.trim()) void init(name)
+        }}
+        sx={{ width: 'min(360px, 100%)', display: 'flex', flexDirection: 'column', gap: 3 }}
+      >
+        <Typography variant="h6" component="h1">New project</Typography>
+        <Typography color="text.secondary">
+          The folder “{folder}” has no studio project yet. Creating one adds a studio/ folder with three small JSON files; nothing else is touched.
+        </Typography>
+        <TextField label="Project name" value={name} onChange={(event) => setName(event.target.value)} autoFocus />
+        {error && <Typography color="error">{error}</Typography>}
+        <Button type="submit" variant="contained" disabled={!name.trim()}>Create project</Button>
+      </Box>
+    </Box>
+  )
+}
+
+const DOC_PREFIX = 'doc:'
+const dockComponents = {
+  project: () => <ProjectPanel />,
+  properties: () => <PropertiesPanel />,
+  problems: () => <ProblemsPanel />,
+  document: (props: IDockviewPanelProps<Selection>) => <DocumentPanel selection={props.params} />,
+}
+
+/** Desktop: panels dock, split and tab like an image editor's. Every opened item is a tab in the middle. */
+function DockLayout() {
+  const selection = useStudio((s) => s.selection)
+  const bundle = useStudio((s) => s.bundle)
+  const [api, setApi] = useState<DockviewApi | null>(null)
+  const firstDoc = useRef(selection)
+
+  // Open the selected item's tab, or bring it forward.
+  useEffect(() => {
+    if (!api) return
+    const id = DOC_PREFIX + selectionKey(selection)
+    const existing = api.getPanel(id)
+    if (existing) {
+      if (!existing.api.isActive) existing.api.setActive()
+      return
+    }
+    const sibling = api.panels.find((p) => p.id.startsWith(DOC_PREFIX))
+    api.addPanel({
+      id,
+      component: 'document',
+      title: selectionTitle(selection, useStudio.getState().bundle),
+      params: selection,
+      position: sibling ? { referencePanel: sibling.id, direction: 'within' } : { referencePanel: 'project', direction: 'right' },
+    })
+  }, [api, selection])
+
+  // Tabs follow renames on disk.
+  useEffect(() => {
+    if (!api) return
+    for (const panel of api.panels) {
+      if (panel.id.startsWith(DOC_PREFIX)) panel.api.setTitle(selectionTitle(panel.params as Selection, bundle))
+    }
+  }, [api, bundle])
+
+  return (
+    <DockviewReact
+      theme={themeDark}
+      components={dockComponents}
+      onReady={(event) => {
+        const dock = event.api
+        const first = firstDoc.current
+        const docId = DOC_PREFIX + selectionKey(first)
+        dock.addPanel({ id: docId, component: 'document', title: selectionTitle(first, useStudio.getState().bundle), params: first })
+        dock.addPanel({ id: 'project', component: 'project', title: 'Project', position: { referencePanel: docId, direction: 'left' }, initialWidth: 250 })
+        dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: docId, direction: 'right' }, initialWidth: 260 })
+        dock.addPanel({ id: 'problems', component: 'problems', title: 'Problems', position: { referencePanel: docId, direction: 'below' }, initialHeight: 140 })
+        dock.getPanel(docId)?.api.setActive()
+        // Clicking a document tab selects it, so Properties describes what is in front.
+        dock.onDidActivePanelChange(({ panel }) => {
+          if (panel?.id.startsWith(DOC_PREFIX)) useStudio.getState().select(panel.params as Selection)
+        })
+        setApi(dock)
+      }}
+    />
+  )
+}
+
+/** Narrow screens: one panel at a time, switched by tabs along the bottom. */
+function StackLayout() {
+  const selection = useStudio((s) => s.selection)
+  const bundle = useStudio((s) => s.bundle)
+  const problems = bundle?.problems.length ?? 0
+  const [tab, setTab] = useState<'project' | 'document' | 'properties' | 'problems'>('document')
+  // Picking an item in the project list shows it.
+  const shown = useRef(selectionKey(selection))
+  useEffect(() => {
+    if (shown.current !== selectionKey(selection)) {
+      shown.current = selectionKey(selection)
+      setTab('document')
+    }
+  }, [selection])
+
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ flex: 1, minHeight: 0, bgcolor: 'background.paper' }}>
+        {tab === 'project' && <ProjectPanel />}
+        {tab === 'document' && <DocumentPanel key={selectionKey(selection)} selection={selection} />}
+        {tab === 'properties' && <PropertiesPanel />}
+        {tab === 'problems' && <ProblemsPanel />}
+      </Box>
+      <Tabs
+        value={tab}
+        onChange={(_event, value: typeof tab) => setTab(value)}
+        variant="fullWidth"
+        sx={{ flexShrink: 0, minHeight: 44, bgcolor: '#141414', borderTop: 1, borderColor: 'divider', pb: 'env(safe-area-inset-bottom)' }}
+      >
+        <Tab value="project" label="Project" sx={{ minHeight: 44, minWidth: 0 }} />
+        <Tab value="document" label={selectionTitle(selection, bundle)} sx={{ minHeight: 44, minWidth: 0 }} />
+        <Tab value="properties" label="Properties" sx={{ minHeight: 44, minWidth: 0 }} />
+        <Tab value="problems" label={problems ? `Problems (${problems})` : 'Problems'} sx={{ minHeight: 44, minWidth: 0 }} />
+      </Tabs>
+    </Box>
+  )
+}

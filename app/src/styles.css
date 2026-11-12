@@ -1,0 +1,31 @@
+html, body, #root { height: 100%; }
+body { overflow: hidden; overscroll-behavior: none; }
+
+/* Dockview, in the studio's greys. */
+.dockview-theme-dark {
+  --dv-group-view-background-color: #262626;
+  --dv-tabs-and-actions-container-background-color: #1c1c1c;
+  --dv-activegroup-visiblepanel-tab-background-color: #262626;
+  --dv-activegroup-hiddenpanel-tab-background-color: #1c1c1c;
+  --dv-inactivegroup-visiblepanel-tab-background-color: #262626;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #1c1c1c;
+  --dv-activegroup-visiblepanel-tab-color: #e6e6e6;
+  --dv-activegroup-hiddenpanel-tab-color: #9a9a9a;
+  --dv-inactivegroup-visiblepanel-tab-color: #c4c4c4;
+  --dv-inactivegroup-hiddenpanel-tab-color: #8a8a8a;
+  --dv-separator-border: #111;
+  --dv-paneview-header-border-color: #111;
+  --dv-tabs-and-actions-container-height: 26px;
+  --dv-tabs-and-actions-container-font-size: 11px;
+  --dv-drag-over-background-color: rgba(76, 159, 254, 0.25);
+}
+
+.pixelated { image-rendering: pixelated; }
+/* Transparent pixels show over a checkerboard, as in any image editor. */
+.checker {
+  background-color: #2f2f2f;
+  background-image: linear-gradient(45deg, #383838 25%, transparent 25%, transparent 75%, #383838 75%),
+    linear-gradient(45deg, #383838 25%, transparent 25%, transparent 75%, #383838 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}

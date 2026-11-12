@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "name": "Placeholder tiles",
+  "image": "assets/tiles.png",
+  "collision": {
+    "1": "solid",
+    "2": "solid",
+    "3": "oneway",
+    "4": "slope-up",
+    "5": "slope-down",
+    "6": "hazard"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "gba-studio-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @gba-studio/server --filter @gba-studio/app dev",
+    "build": "pnpm --filter @gba-studio/app build",
+    "start": "node server/src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -b core server app",
+    "sample:assets": "node scripts/make-sample-assets.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}
