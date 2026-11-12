@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   Project, Room, SCREEN, Sprite, Track, countColours, docPath, fromBgr555, newProject, rleDecode, rleEncode, rleLength,
-  toBgr555, validateProject,
+  toBgr555, validateProject, emptyRoom, resizeGrid, resizeRoom, slugify, uniqueId,
 } from '../src/index.ts'
 import type { Documents } from '../src/index.ts'
 
@@ -120,5 +120,36 @@ describe('validateProject', () => {
     const d = docs()
     d.sprites.hero = { version: 1, name: 'Hero', image: 'assets/hero.png', frame: { width: 24, height: 24 }, anchor: { x: 0, y: 0 }, animations: [] }
     expect(messages(d).some((m) => m.startsWith('frame 24x24 is not a GBA sprite size'))).toBe(true)
+  })
+})
+
+describe('room helpers', () => {
+  it('makes ids from names', () => {
+    expect(slugify('Crystal Cave 2')).toBe('crystal-cave-2')
+    expect(slugify('  Über/Boss!! ')).toBe('uber-boss')
+    expect(slugify('???')).toBe('item')
+    expect(uniqueId('cave', ['cave', 'cave-2'])).toBe('cave-3')
+    expect(uniqueId('cave', [])).toBe('cave')
+  })
+  it('resizes a grid from its top-left corner', () => {
+    const grid = Uint16Array.from([1, 2, 3, 4, 5, 6]) // 3x2
+    expect([...resizeGrid(grid, 3, 2, 2, 3)]).toEqual([1, 2, 4, 5, 0, 0])
+    expect([...resizeGrid(grid, 3, 2, 4, 1)]).toEqual([1, 2, 3, 0])
+  })
+  it('resizes a room, keeping tiles and dropping entities that fall outside', () => {
+    const room = emptyRoom('R', 2, 1, 't')
+    const cells = new Uint16Array(60 * 20)
+    cells[0] = 7
+    cells[59] = 9
+    room.layers[0]!.data = rleEncode(cells)
+    room.entities = [{ type: 'a', x: 10, y: 10, props: {} }, { type: 'a', x: 300, y: 10, props: {} }]
+    const smaller = resizeRoom(room, 1, 2)
+    const out = rleDecode(smaller.layers[0]!.data)
+    expect(out.length).toBe(30 * 40)
+    expect(out[0]).toBe(7)
+    expect([...out].filter((c) => c !== 0)).toEqual([7])
+    expect(smaller.entities).toHaveLength(1)
+    expect(Room.safeParse(smaller).success).toBe(true)
+    expect(rleLength(resizeRoom(smaller, 3, 3).layers[0]!.data)).toBe(90 * 60)
   })
 })

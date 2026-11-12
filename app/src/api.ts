@@ -29,6 +29,13 @@ export const api = {
   init: (name: string) => request<Bundle>('/api/init', json('POST', { name })),
   save: (kind: DocKind, id: string | undefined, doc: unknown) =>
     request<{ ok: true }>(`/api/doc/${kind}${id ? `/${encodeURIComponent(id)}` : ''}`, json('PUT', doc)),
+  remove: (kind: DocKind, id: string) => request<{ ok: true }>(`/api/doc/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  upload: (path: string, file: Blob, overwrite: boolean) =>
+    request<{ ok: true; path: string }>(`/api/upload?path=${encodeURIComponent(path)}${overwrite ? '&overwrite=1' : ''}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: file,
+    }),
 }
 
 /** URL of a file in the game folder; `revision` changes when the disk does, so previews reload. */

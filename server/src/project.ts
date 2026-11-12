@@ -1,8 +1,8 @@
 // Reads and writes a game folder's studio documents. Everything stays inside that folder.
 import { existsSync, realpathSync } from 'node:fs'
-import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { Id, MULTI_DOCS, SINGLE_DOCS, STUDIO_DIR, docPath, newProject, schemaFor, validateProject } from '@gba-studio/core'
+import { AssetPath, Id, MULTI_DOCS, SINGLE_DOCS, STUDIO_DIR, docPath, newProject, schemaFor, validateProject } from '@gba-studio/core'
 import type { DocKind, Documents, MultiKind, Problem, SingleKind } from '@gba-studio/core'
 
 export class HttpError extends Error {
@@ -154,6 +154,38 @@ export class ProjectFolder {
     await this.writeJson(docPath('project'), project)
     await this.writeJson(docPath('world'), world)
     await this.writeJson(docPath('audio'), audio)
+  }
+
+  /** Deletes a room, tileset or sprite document. What refers to it shows up in Problems. */
+  async remove(kind: DocKind, id: string | undefined): Promise<void> {
+    if (!(kind in MULTI_DOCS)) throw new HttpError(400, `a ${kind} document cannot be deleted`)
+    let file: string
+    try {
+      file = docPath(kind, id)
+    } catch (error) {
+      throw new HttpError(400, (error as Error).message)
+    }
+    await unlink(this.resolve(file)).catch(() => {
+      throw new HttpError(404, 'no such document')
+    })
+  }
+
+  /** Stores an imported asset file (image, music, sound). Never replaces a file unless asked to. */
+  async upload(rel: string, data: Buffer, overwrite: boolean): Promise<void> {
+    if (!AssetPath.safeParse(rel).success) throw new HttpError(400, 'not a path inside the game folder')
+    const parts = rel.split('/')
+    if (parts.some((part) => part.startsWith('.')) || parts.slice(0, -1).some((part) => SKIP_DIRS.has(part))) {
+      throw new HttpError(400, 'assets cannot be stored in that folder')
+    }
+    if (!ASSET_EXTENSIONS.has(path.extname(rel).toLowerCase())) {
+      throw new HttpError(415, `not an asset type the studio handles (${[...ASSET_EXTENSIONS].join(' ')})`)
+    }
+    const abs = this.resolve(rel)
+    if (existsSync(abs) && !overwrite) throw new HttpError(409, `${rel} already exists`)
+    await mkdir(path.dirname(abs), { recursive: true })
+    const temp = `${abs}.${process.pid}.tmp`
+    await writeFile(temp, data)
+    await rename(temp, abs)
   }
 
   private async writeJson(file: string, data: unknown): Promise<void> {

@@ -37,8 +37,12 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
     if (request.method === 'GET' || request.method === 'HEAD') return
     const origin = request.headers.origin
     if (origin && new URL(origin).host !== request.headers.host) throw new HttpError(403, 'cross-origin request refused')
-    if (!request.headers['content-type']?.startsWith('application/json')) throw new HttpError(415, 'send JSON')
+    if (request.method === 'DELETE') return
+    const type = request.headers['content-type'] ?? ''
+    const wanted = request.url.startsWith('/api/upload') ? 'application/octet-stream' : 'application/json'
+    if (!type.startsWith(wanted)) throw new HttpError(415, `send ${wanted}`)
   })
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 256 * 1024 * 1024 }, (_request, body, done) => done(null, body))
 
   app.get('/api/project', () => project.load())
 
@@ -52,6 +56,18 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
   app.put<{ Params: { kind: string; id?: string }; Body: unknown }>('/api/doc/:kind/:id?', async (request) => {
     await project.save(request.params.kind as DocKind, request.params.id, request.body)
     return { ok: true }
+  })
+
+  app.delete<{ Params: { kind: string; id: string } }>('/api/doc/:kind/:id', async (request) => {
+    await project.remove(request.params.kind as DocKind, request.params.id)
+    return { ok: true }
+  })
+
+  // An imported file's bytes as the body; `path` says where in the game folder it goes.
+  app.post<{ Querystring: { path?: string; overwrite?: string }; Body: Buffer }>('/api/upload', async (request) => {
+    if (!request.query.path || !Buffer.isBuffer(request.body)) throw new HttpError(400, 'a path and a file body are needed')
+    await project.upload(request.query.path, request.body, request.query.overwrite === '1')
+    return { ok: true, path: request.query.path }
   })
 
   // Raw files of the game folder, for image and audio previews.
