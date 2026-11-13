@@ -11,7 +11,9 @@ import type { FastifyInstance } from 'fastify'
 import { WebSocketServer } from 'ws'
 import { Builder } from './build.ts'
 import type { BuildMode } from './build.ts'
+import { handle } from './mcp.ts'
 import { HttpError, ProjectFolder } from './project.ts'
+import type { StudioView, ToolContext } from './tools.ts'
 import type { DocKind } from '@gba-studio/core'
 
 const APP_DIST = fileURLToPath(new URL('../../app/dist', import.meta.url))
@@ -110,6 +112,66 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
     builder.stop()
     return { ok: true }
   })
+
+  // The studio's page says what is open in it, so an agent can be told "this room".
+  let view: StudioView | null = null
+  app.post<{ Body: StudioView }>('/api/context', async (request) => {
+    const kind = request.body?.selection?.kind
+    if (typeof kind === 'string') view = { selection: request.body.selection, editor: request.body.editor }
+    return { ok: true }
+  })
+
+  // The same tools as `gba-studio mcp`, over HTTP (MCP's streamable HTTP transport,
+  // answering in plain JSON). Run from here they share the studio's build runner, and
+  // can see and steer what the page shows.
+  const tools: ToolContext = {
+    project,
+    builder,
+    studio: {
+      view: () => (sockets.clients.size ? view : null),
+      open: (selection) => {
+        broadcast({ type: 'open', selection })
+        return sockets.clients.size
+      },
+    },
+  }
+  interface RpcMessage {
+    jsonrpc: '2.0'
+    id?: number | string
+    method: string
+    params?: Record<string, unknown>
+  }
+  const answer = async (message: RpcMessage): Promise<unknown> => {
+    // Notifications carry no id and get no answer.
+    if (message?.id === undefined) return undefined
+    try {
+      const result = await handle(message, tools)
+      if (message.method === 'tools/call') {
+        const called = result as { content: Array<{ text?: string }>; isError?: boolean }
+        broadcast({ type: 'agent', tool: String(message.params?.name), summary: (called.content[0]?.text ?? '').split('\n')[0]!.slice(0, 160), failed: called.isError === true })
+      }
+      return { jsonrpc: '2.0', id: message.id, result }
+    } catch (error) {
+      return { jsonrpc: '2.0', id: message.id, error: { code: (error as { code?: number }).code ?? -32603, message: (error as Error).message } }
+    }
+  }
+  // One request at a time: two edits to one room must not interleave.
+  let queue: Promise<unknown> = Promise.resolve()
+  app.post<{ Body: RpcMessage | RpcMessage[] }>('/mcp', async (request, reply) => {
+    const body = request.body
+    const run = queue.then(async () => {
+      if (!Array.isArray(body)) return answer(body)
+      const answers: unknown[] = []
+      for (const message of body) answers.push(await answer(message))
+      return answers.filter((a) => a !== undefined)
+    })
+    queue = run.catch(() => undefined)
+    const result = await run
+    if (result === undefined || (Array.isArray(result) && result.length === 0)) return reply.status(202).send()
+    return result
+  })
+  // This server never opens a stream of its own, which the transport lets it say this way.
+  app.get('/mcp', (_request, reply) => reply.status(405).header('allow', 'POST').send({ error: 'this MCP endpoint answers POST requests only' }))
   app.server.on('upgrade', (request, socket, head) => {
     if (request.url !== '/ws') return socket.destroy()
     sockets.handleUpgrade(request, socket, head, (ws) => sockets.emit('connection', ws, request))

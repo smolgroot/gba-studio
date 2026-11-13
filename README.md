@@ -182,41 +182,68 @@ art, music and levels.
 gba-studio validate <folder> [--json]            # every problem; exit 1 on errors
 gba-studio build <folder> [--release] [--json]   # run the project's build command
 gba-studio schema                                # JSON Schema of every document kind
-gba-studio agents <folder>                       # write AGENTS.md into the game folder
+gba-studio agents <folder> [--claude]            # write AGENTS.md; --claude also sets up Claude Code
 gba-studio mcp <folder>                          # MCP server over stdio
 ```
 
-From a checkout, `gba-studio` is `node <this repo>/server/src/cli.ts`. To give Claude
-Code the tools for a game, put this in the game folder's `.mcp.json`:
+From a checkout, `gba-studio` is `node <this repo>/server/src/cli.ts`.
 
-```json
-{
-  "mcpServers": {
-    "gba-studio": { "command": "node", "args": ["/path/to/gba-studio/server/src/cli.ts", "mcp", "."] }
-  }
-}
+### Setting up Claude Code
+
+```sh
+gba-studio agents ../my-game --claude
 ```
 
-The MCP server has 19 tools:
+writes three things into the game folder, leaving anything already there alone
+unless you add `--force`:
+
+- `AGENTS.md`: which files are hand-made and must not be regenerated, how the format
+  works, and which tools to use. (Also written whenever a project is created.)
+- `.claude/skills/gba-studio/SKILL.md`: a skill that tells Claude when to use the
+  tools and in what order: look, change, check, show, run.
+- `.mcp.json`: the studio's server, added beside any other servers in the file.
+
+### Two ways to connect
+
+| | Stdio: `gba-studio mcp <folder>` | The running studio: `http://127.0.0.1:4517/mcp` |
+| --- | --- | --- |
+| Needs the studio open | No | Yes |
+| Sees what you have on screen (`studio_view`) | No | Yes |
+| Can show you an item (`studio_open`) | No | Yes |
+| Builds appear in the Build panel | No | Yes |
+| What it did shows in the studio's top bar | No | Yes |
+
+Either way, the edits are file saves: an open studio shows them at once, and
+**Ctrl+Z in the studio undoes an agent's change** to a document, like any other step.
+To use the studio's endpoint from Claude Code:
+
+```json
+{ "mcpServers": { "gba-studio": { "type": "http", "url": "http://127.0.0.1:4517/mcp" } } }
+```
+
+The endpoint refuses requests from other web pages, like the rest of the server.
+
+### The tools
 
 | Tools | What they do |
 | --- | --- |
 | `project_overview`, `validate`, `list_assets` | Summarise the project, list its problems, list asset files |
 | `read_document`, `write_document`, `delete_document` | Whole documents, checked against the schemas before writing |
 | `room_read_cells`, `room_fill`, `room_paint` | Read and change tile layers and collision by cell, without touching the run-length data |
-| `room_create`, `room_resize`, `world_place` | Make and size rooms, arrange the world map, set the start room |
+| `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset and music, arrange the world map |
 | `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
-| `render_room`, `render_tileset` | Pictures of a room (optionally tinted by collision) and of a tileset with its grid, so the agent can look |
+| `entity_type_set`, `entity_type_remove` | Entity types and their typed properties |
+| `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
+| `sprite_create`, `sprite_set_animation`, `sprite_remove_animation`, `sprite_set_geometry` | Sprites from a sheet in the folder, their animations, anchor and hitbox |
+| `audio_add` | Add a WAV, XM, MOD or MIDI file in the folder as a sound effect or track |
+| `render_room`, `render_tileset`, `render_sprite` | Pictures: a room (optionally tinted by collision), a tileset or sprite sheet with its grid |
 | `build`, `run_rom` | Build the ROM; run it headless for given frames and held buttons and get a picture after each step |
+| `studio_view`, `studio_open` | What the author has open; put an item in front of them (studio endpoint only) |
 
-Every write is validated and answered with the problems it left in that file. Writes
-are plain file saves, so a studio open on the same folder shows them as they happen.
-Errors inside a tool come back as text the agent can act on ("no layer "nope"; layers
-are: 0 "Back wall", 1 "Ground", or "collision"").
-
-Creating a project writes an `AGENTS.md` into the game folder. It tells agents which
-files are hand-made and must not be regenerated, how the format works, and which
-tools to use.
+Every write is validated and answered with the problems it left in that file. Errors
+inside a tool come back as text the agent can act on ("the tileset has 16 tiles,
+numbered 0 to 15; there is no tile 99"). No tool creates, changes or deletes a file
+under `assets/`: agents can use the art and music that is there, not make it.
 
 ## Making a game with it
 
@@ -352,11 +379,12 @@ Roughly in order. Each item is useful on its own.
 
 ### Agents, still to do
 
-- MCP over HTTP from the running studio, so an agent's edits land in the studio's
-  undo history and the agent can see what you have selected.
-- A Claude Code skill that wraps the server for games built with the studio.
-- Tools for tilesets and sprites at the same level as the room tools (set a tile's
-  collision class, define an animation), which today go through `write_document`.
+- Try the tools with a real agent on a real game and tune their descriptions from
+  what it gets wrong; so far they have been driven by test scripts only.
+- An agent-visible selection in the map (a rectangle you drag, that `studio_view`
+  reports), so "fill this area" needs no coordinates.
+- A tool that asks "can the player get from here to there", on the runtime's
+  physics.
 
 ### Editors
 

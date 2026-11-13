@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Audio, MultiKind, Project, Room, Sprite, Tileset, World } from '@gba-studio/core'
 import { api, watchFiles } from './api.ts'
-import type { BuildMessage, BuildStatus, Bundle } from './api.ts'
+import type { AgentMessage, BuildMessage, BuildStatus, Bundle } from './api.ts'
 
 /** What is open in the document area and described in Properties. */
 export interface Selection {
@@ -46,6 +46,24 @@ function withDoc<K extends EditKind>(docs: Docs, kind: K, id: string | undefined
 }
 const docKey = (kind: EditKind, id?: string): string => `${kind}:${id ?? ''}`
 
+/** Whether two documents say the same thing, whatever order their keys are in. */
+function same(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  if (Array.isArray(a)) return a.length === (b as unknown[]).length && a.every((item, i) => same(item, (b as unknown[])[i]))
+  const [x, y] = [a as Record<string, unknown>, b as Record<string, unknown>]
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)])
+  for (const key of keys) if (!same(x[key], y[key])) return false
+  return true
+}
+const EDIT_KINDS: EditKind[] = ['project', 'world', 'audio', 'room', 'tileset', 'sprite']
+function docKeys(docs: Docs): Array<[EditKind, string | undefined]> {
+  return EDIT_KINDS.flatMap((kind): Array<[EditKind, string | undefined]> =>
+    kind === 'room' || kind === 'tileset' || kind === 'sprite' ? Object.keys(docs[`${kind}s`]).map((id) => [kind, id]) : [[kind, undefined]],
+  )
+}
+
 interface History {
   past: unknown[]
   future: unknown[]
@@ -70,6 +88,8 @@ interface StudioState {
   revision: number
   selection: Selection
   build: BuildStatus | null
+  /** The last thing a coding agent did through the studio, for the top bar. */
+  agent: { tool: string; summary: string; failed: boolean; at: number } | null
   /** Runs a build and streams its output into `build.log`. */
   runBuild: (mode: 'dev' | 'release') => Promise<void>
   stopBuild: () => Promise<void>
@@ -139,6 +159,7 @@ export const useStudio = create<StudioState>((set, get) => {
     selection: selectionFromHash(),
     history: {},
     build: null,
+    agent: null,
     runBuild: async (mode) => {
       try {
         set({ build: await api.build(mode), saveError: null })
@@ -163,7 +184,25 @@ export const useStudio = create<StudioState>((set, get) => {
             docs = withDoc(docs, kind, id || undefined, getDoc(local.docs, kind, id || undefined))
           }
         }
-        set({ bundle: { ...fresh, docs }, error: null })
+        // A document that reads the same keeps its identity, so nothing redraws for it.
+        // One that something else changed on disk (a coding agent, git) becomes an undo
+        // step: Ctrl+Z in the studio takes the change back.
+        let history = get().history
+        if (local) {
+          for (const [kind, id] of docKeys(docs)) {
+            const mine = getDoc(local.docs, kind, id)
+            const theirs = getDoc(docs, kind, id)
+            if (mine === undefined || theirs === undefined || mine === theirs) continue
+            if (same(mine, theirs)) {
+              docs = withDoc(docs, kind, id, mine)
+            } else {
+              const key = docKey(kind, id)
+              const entry = history[key] ?? { past: [], future: [] }
+              history = { ...history, [key]: { past: [...entry.past, mine].slice(-HISTORY_LIMIT), future: [] } }
+            }
+          }
+        }
+        set({ bundle: { ...fresh, docs }, history, error: null })
       } catch (error) {
         set({ error: (error as Error).message })
       }
@@ -194,9 +233,13 @@ export const useStudio = create<StudioState>((set, get) => {
             void api.buildStatus().then((build) => set({ build })).catch(() => undefined)
           }
         },
-        (message: BuildMessage) => {
+        (message: BuildMessage | AgentMessage) => {
           const build = get().build
-          if (message.type === 'build-started') set({ build: { running: true, mode: message.mode, command: message.command, exitCode: null, stopped: false, seconds: null, log: [], roms: build?.roms ?? {} } })
+          if (message.type === 'agent') set({ agent: { tool: message.tool, summary: message.summary, failed: message.failed, at: Date.now() } })
+          else if (message.type === 'open') {
+            const kind = message.selection.kind as Selection['kind']
+            if (KINDS.includes(kind)) get().select({ kind, ...(message.selection.id ? { id: message.selection.id } : {}) })
+          } else if (message.type === 'build-started') set({ build: { running: true, mode: message.mode, command: message.command, exitCode: null, stopped: false, seconds: null, log: [], roms: build?.roms ?? {} } })
           else if (message.type === 'build-log') set({ build: build && { ...build, log: [...build.log, ...message.lines].slice(-5000) } })
           else set({ build: message.status })
         },

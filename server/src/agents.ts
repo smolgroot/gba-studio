@@ -30,11 +30,17 @@ The studio has an MCP server for this folder. Start it with:
 gba-studio mcp .
 \`\`\`
 
-(\`node <path to gba-studio>/server/src/cli.ts mcp .\` from a checkout.) Begin with
+(\`node <path to gba-studio>/server/src/cli.ts mcp .\` from a checkout.) When the studio
+is open on this folder it serves the same tools at \`http://127.0.0.1:4517/mcp\`;
+through that endpoint \`studio_view\` tells you what the author has on screen and
+\`studio_open\` shows them an item. \`gba-studio agents . --claude\` sets Claude Code
+up with a skill and the server entry. Begin with
 \`project_overview\`. \`render_room\` and \`render_tileset\` return pictures, and
 \`room_read_cells\` returns cells as text. Change rooms with \`room_fill\`,
 \`room_paint\` and the \`entity_\` tools rather than by editing JSON: tile layers are
-run-length encoded and easy to corrupt. \`build\` and \`run_rom\` build the game and
+run-length encoded and easy to corrupt. Tilesets, sprites, animations, entity types
+and audio have tools of their own (\`tileset_set_collision\`, \`sprite_set_animation\`,
+\`entity_type_set\`, \`audio_add\` and others). \`build\` and \`run_rom\` build the game and
 return pictures of it running. If the studio is open, it shows your changes as you
 make them.
 
@@ -76,4 +82,89 @@ world (\`body.step(&data::WORLD, drop_through)\`), and \`gba_studio_rt::gfx::Wor
 draws the rooms around a camera. The data and physics half of the runtime has no
 dependencies and runs on the host, so rules can be unit tested with \`cargo test\`.
 `
+}
+
+export const SKILL_FILE = '.claude/skills/gba-studio/SKILL.md'
+
+/** A Claude Code skill for a game made with the studio: when to reach for the tools, and how to work. */
+export function claudeSkill(projectName: string): string {
+  return `---
+name: gba-studio
+description: Work on ${projectName}, a Game Boy Advance game whose rooms, world map, tilesets, sprites and audio are made in GBA-Studio (JSON under studio/, assets under assets/). Use for any request about levels, rooms, the world map, tiles, collision, entities and where they are placed, sprites and animations, music and sound effects, building the ROM, or seeing the game run. Also use before writing game code that reads room or entity data.
+---
+
+# Working on a GBA-Studio game
+
+The author draws the art, writes the music and paints the rooms. You help with the
+rest: game code in \`src/\`, and changes to the project they ask for. Read
+\`AGENTS.md\` in this folder once; it has the file ownership rules and the format.
+
+## Rules that do not bend
+
+- Files under \`assets/\` are hand-made. Read them. Never regenerate, replace, resize,
+  recolour or delete one, and never draw art or compose music in code as a stand-in.
+  If an asset is missing, say exactly what is needed (size, frame layout, format).
+- In rooms, change what was asked and nothing else. A room is someone's drawing.
+- Never edit a room's tile data by hand in JSON. It is run-length encoded; use the
+  tools.
+- Generated files in \`OUT_DIR\` are output. Change the project and rebuild.
+
+## Tools
+
+Use the \`gba-studio\` MCP tools. If they are not available, tell the author to start
+the studio (\`gba-studio .\`) or add the server (\`gba-studio agents . --claude\`), and
+fall back to \`gba-studio validate . --json\` and \`gba-studio build . --json\`.
+
+A working order that avoids mistakes:
+
+1. **Orient.** \`project_overview\`. If the author says "this room" or "the selected
+   entity", call \`studio_view\` to see what they have open.
+2. **Look.** \`render_room\` (add \`collision: true\` to see what is solid),
+   \`render_tileset\`, \`render_sprite\`. \`room_read_cells\` when you need exact tile
+   numbers. Do not guess tile numbers: count them in the tileset picture, where
+   tile n is at column n % columns, row floor(n / columns).
+3. **Change.** \`room_fill\` for rectangles, \`room_paint\` for shapes, \`entity_add\`,
+   \`entity_update\`, \`entity_remove\`, \`room_create\`, \`room_resize\`, \`world_place\`.
+   For assets already in the folder: \`tileset_create\`, \`tileset_set_collision\`,
+   \`sprite_create\`, \`sprite_set_animation\`, \`sprite_set_geometry\`, \`audio_add\`.
+   For new kinds of things in rooms: \`entity_type_set\`.
+4. **Check.** Every change answers with the problems left in that file. Run
+   \`validate\` at the end. Render the room again and look at it.
+5. **Show.** \`studio_open\` puts what you changed in front of the author. Their
+   Ctrl+Z in the studio undoes your change to a document.
+6. **Run.** \`build\`, then \`run_rom\` with steps of frames and held buttons; it returns
+   a picture after each step. The game starts from power-on every time, so script
+   the whole path to what you want to see.
+
+## Coordinates
+
+- Tiles are 8 px. A screen is 30x20 tiles (240x160 px). Rooms are whole screens.
+- Room tools take x and y in tiles from the room's top-left.
+- Entities are placed in pixels, by their feet (middle of the bottom edge). To stand
+  on a floor whose top is tile row r at tile column c: \`x = c * 8 + 4\`, \`y = r * 8\`.
+- The world map counts screens. Rooms that touch are connected in the game and the
+  camera scrolls between them, so line doorways up: a gap in one room's edge must
+  meet a gap in its neighbour's.
+
+## Game code
+
+Behaviour is Rust in \`src/\`, on agb and \`gba_studio_rt\`:
+
+- \`data::WORLD\`, \`data::ROOMS\`, \`data::EntityKind\`, \`data::class::*\` come from
+  \`include_data!()\`. Match on \`EntityKind::of(entity)\` to give a type its behaviour;
+  read its typed properties with \`entity.int("name")\`, \`.bool\`, \`.str\`.
+- \`physics::Body\` moves through \`&data::WORLD\` in world pixels: walls, one-way
+  platforms, slopes. \`gfx::WorldView\` draws the rooms; \`gfx::AnimPlayer\` plays a
+  sprite's animations by name.
+- Adding an entity type is two steps: \`entity_type_set\` in the project, then its
+  behaviour in code. After a project change, rebuild before relying on new
+  constants: they are generated.
+- The data and physics half of the runtime runs on the host. Put rules there and
+  test them with \`cargo test\` before trying them on the ROM.
+`
+}
+
+/** The entry that gives Claude Code the studio's tools for a game folder. */
+export function mcpServerEntry(cliPath: string): { command: string; args: string[] } {
+  return { command: 'node', args: [cliPath, 'mcp', '.'] }
 }

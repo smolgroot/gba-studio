@@ -32,6 +32,10 @@ export type BuildMessage =
   | { type: 'build-started'; mode: 'dev' | 'release'; command: string }
   | { type: 'build-log'; lines: string[] }
   | { type: 'build-finished'; status: BuildStatus }
+/** What a coding agent did through the studio's MCP endpoint, or asks the page to show. */
+export type AgentMessage =
+  | { type: 'agent'; tool: string; summary: string; failed: boolean }
+  | { type: 'open'; selection: { kind: string; id?: string } }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
@@ -53,6 +57,7 @@ export const api = {
   buildStatus: () => request<BuildStatus>('/api/build'),
   build: (mode: 'dev' | 'release') => request<BuildStatus>('/api/build', json('POST', { mode })),
   stopBuild: () => request<{ ok: true }>('/api/build/stop', json('POST', {})),
+  context: (view: unknown) => request<{ ok: true }>('/api/context', json('POST', view)),
   remove: (kind: DocKind, id: string) => request<{ ok: true }>(`/api/doc/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   upload: (path: string, file: Blob, overwrite: boolean) =>
     request<{ ok: true; path: string }>(`/api/upload?path=${encodeURIComponent(path)}${overwrite ? '&overwrite=1' : ''}`, {
@@ -68,7 +73,7 @@ export function fileUrl(path: string, revision: number): string {
 }
 
 /** Calls `onChange` when files change on disk and `onStatus` as the link goes up and down; reconnects by itself. */
-export function watchFiles(onChange: (paths: string[]) => void, onStatus: (connected: boolean) => void, onBuild?: (message: BuildMessage) => void): () => void {
+export function watchFiles(onChange: (paths: string[]) => void, onStatus: (connected: boolean) => void, onMessage?: (message: BuildMessage | AgentMessage) => void): () => void {
   let socket: WebSocket | undefined
   let retry: ReturnType<typeof setTimeout> | undefined
   let stopped = false
@@ -76,9 +81,9 @@ export function watchFiles(onChange: (paths: string[]) => void, onStatus: (conne
     socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`)
     socket.onopen = () => onStatus(true)
     socket.onmessage = (event) => {
-      const message = JSON.parse(String(event.data)) as { type: 'changed'; paths: string[] } | BuildMessage
+      const message = JSON.parse(String(event.data)) as { type: 'changed'; paths: string[] } | BuildMessage | AgentMessage
       if (message.type === 'changed') onChange(message.paths)
-      else onBuild?.(message)
+      else onMessage?.(message)
     }
     socket.onclose = () => {
       onStatus(false)

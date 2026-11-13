@@ -3,13 +3,13 @@
 // nothing is read or written outside the game folder.
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
-import { FORMAT_VERSION, Id, MULTI_DOCS, SCREEN, SINGLE_DOCS, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@gba-studio/core'
+import { FORMAT_VERSION, Id, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@gba-studio/core'
 import type { DocKind, Documents, Problem, Room } from '@gba-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
 import { HttpError } from './project.ts'
 import type { ProjectFolder } from './project.ts'
-import { effectiveCollision, encodePng, loadPng, renderRoom, renderTileset, roomCells, scale } from './render.ts'
+import { effectiveCollision, encodePng, loadPng, renderRoom, renderSheet, renderTileset, roomCells, scale } from './render.ts'
 
 export interface ToolResult {
   text: string
@@ -24,9 +24,21 @@ export interface Tool {
   run: (args: never, context: ToolContext) => Promise<ToolResult>
 }
 
+/** What is open in the studio, as its page last reported it. */
+export interface StudioView {
+  selection: { kind: string; id?: string }
+  /** In a room: the tool, the layer being painted, and the selected entity's number. */
+  editor?: { tool?: string; layer?: number | string; entity?: number | null }
+}
+
 export interface ToolContext {
   project: ProjectFolder
   builder: Builder
+  /** Present when the tools run inside the studio's own server, with its page reachable. */
+  studio?: {
+    view: () => StudioView | null
+    open: (selection: StudioView['selection']) => number
+  }
 }
 
 const Kind = z.enum(['project', 'world', 'audio', 'room', 'tileset', 'sprite'])
@@ -350,6 +362,207 @@ export const TOOLS: Tool[] = [
     const classes = Object.entries(docs.tilesets[tileset]!.collision).map(([tile, cls]) => `${tile}: ${cls}`)
     return { text: `${tileset}: ${cols} columns, ${rows} rows, ${cols * rows} tiles, drawn at ${factor}x.\nCollision by tile: ${classes.join(', ') || 'none set'}.`, images: [encodePng(picture)] }
   }),
+
+  tool(
+    'room_update',
+    'Renames a room, or changes its tileset or its music track.',
+    z.object({ room: Id, name: z.string().min(1).optional(), tileset: Id.optional(), music: Id.nullable().optional().describe('A track id from the audio document, or null for none') }),
+    async ({ room: id, name, tileset, music }, context) => {
+      const { docs } = await documents(context)
+      const room = roomOf(docs, id)
+      return saveAndReport(context, 'room', id, { ...room, ...(name ? { name } : {}), ...(tileset ? { tileset } : {}), ...(music !== undefined ? { music: music ?? undefined } : {}) }, `Updated ${id}.`)
+    },
+  ),
+
+  tool('tileset_create', 'Makes a tileset from a PNG that is already in the game folder (see list_assets). Its size must be a multiple of 8.', z.object({ name: z.string().min(1), image: z.string().min(1) }), async ({ name, image }, context) => {
+    const { docs } = await documents(context)
+    const picture = await loadPng(context.project, image)
+    if (picture.width % TILE || picture.height % TILE) throw new HttpError(400, `${image} is ${picture.width}x${picture.height} px; a tileset's size must be a multiple of ${TILE}`)
+    const id = uniqueId(slugify(name), Object.keys(docs.tilesets))
+    return saveAndReport(context, 'tileset', id, { version: FORMAT_VERSION, name, image, collision: {} }, `Created tileset "${id}": ${(picture.width / TILE) * (picture.height / TILE)} tiles in ${picture.width / TILE} columns.`)
+  }),
+
+  tool(
+    'tileset_set_collision',
+    'Gives tiles of a tileset a collision class, which every room using the tile then has in that cell. Name the tiles as a list, or as a range from..to (inclusive). Look at the tiles with render_tileset first.',
+    z.object({ tileset: Id, class: Id.describe('A collision class id from project_overview'), tiles: z.array(z.number().int().min(0)).optional(), from: z.number().int().min(0).optional(), to: z.number().int().min(0).optional() }),
+    async ({ tileset: id, class: classId, tiles, from, to }, context) => {
+      const { docs } = await documents(context)
+      const tileset = docs.tilesets[id]
+      if (!tileset) throw new HttpError(404, `no tileset "${id}"; tilesets are: ${Object.keys(docs.tilesets).join(', ') || 'none'}`)
+      const classes = docs.project?.collisionClasses ?? []
+      if (!classes.some((c) => c.id === classId)) throw new HttpError(400, `"${classId}" is not a collision class; classes are: ${classes.map((c) => c.id).join(', ')}`)
+      const picture = await loadPng(context.project, tileset.image)
+      const count = Math.floor(picture.width / TILE) * Math.floor(picture.height / TILE)
+      const chosen = [...(tiles ?? []), ...(from !== undefined ? Array.from({ length: (to ?? from) - from + 1 }, (_, i) => from + i) : [])]
+      if (chosen.length === 0) throw new HttpError(400, 'name the tiles with "tiles", or with "from" and "to"')
+      const bad = chosen.find((tile) => tile >= count)
+      if (bad !== undefined) throw new HttpError(400, `the tileset has ${count} tiles, numbered 0 to ${count - 1}; there is no tile ${bad}`)
+      const collision = { ...tileset.collision }
+      // The project's first class is what a tile has when nothing is said: it is not stored.
+      for (const tile of chosen) {
+        if (classId === classes[0]!.id) delete collision[String(tile)]
+        else collision[String(tile)] = classId
+      }
+      return saveAndReport(context, 'tileset', id, { ...tileset, collision }, `Set ${chosen.length} tiles of ${id} to ${classId}.`)
+    },
+  ),
+
+  tool(
+    'sprite_create',
+    'Makes a sprite from a PNG sheet that is already in the game folder. The sheet is cut into frames of one size, numbered row by row from 0. The anchor is the point of a frame placed at an entity\'s position; left out, it is the feet (middle of the bottom edge).',
+    z.object({ name: z.string().min(1), image: z.string().min(1), frame_width: z.number().int(), frame_height: z.number().int(), anchor_x: z.number().int().optional(), anchor_y: z.number().int().optional() }),
+    async ({ name, image, frame_width: width, frame_height: height, anchor_x, anchor_y }, context) => {
+      const { docs } = await documents(context)
+      if (!SPRITE_SIZES.some(([w, h]) => w === width && h === height)) throw new HttpError(400, `${width}x${height} is not a GBA sprite size; sizes are: ${SPRITE_SIZES.map(([w, h]) => `${w}x${h}`).join(', ')}`)
+      const picture = await loadPng(context.project, image)
+      const frames = Math.floor(picture.width / width) * Math.floor(picture.height / height)
+      if (frames === 0) throw new HttpError(400, `${image} is ${picture.width}x${picture.height} px, smaller than one ${width}x${height} frame`)
+      const id = uniqueId(slugify(name), Object.keys(docs.sprites))
+      const sprite = { version: FORMAT_VERSION, name, image, frame: { width, height }, anchor: { x: anchor_x ?? width / 2, y: anchor_y ?? height }, animations: [] }
+      return saveAndReport(context, 'sprite', id, sprite, `Created sprite "${id}": ${frames} frames of ${width}x${height}.`)
+    },
+  ),
+
+  tool(
+    'sprite_set_animation',
+    'Adds an animation to a sprite, or replaces the one of that name. Frames play in the order given; a duration is in ticks of 1/60 s. Look at the sheet with render_sprite to find frame numbers.',
+    z.object({
+      sprite: Id,
+      name: z.string().regex(/^[a-z][a-z0-9_]*$/, 'snake_case'),
+      frames: z.array(z.object({ index: z.number().int().min(0), duration: z.number().int().min(1).max(255) })).min(1),
+      loop: z.boolean().default(true),
+    }),
+    async ({ sprite: id, name, frames, loop }, context) => {
+      const { docs } = await documents(context)
+      const sprite = docs.sprites[id]
+      if (!sprite) throw new HttpError(404, `no sprite "${id}"; sprites are: ${Object.keys(docs.sprites).join(', ') || 'none'}`)
+      const picture = await loadPng(context.project, sprite.image).catch(() => null)
+      if (picture) {
+        const count = Math.floor(picture.width / sprite.frame.width) * Math.floor(picture.height / sprite.frame.height)
+        const bad = frames.find((f) => f.index >= count)
+        if (bad) throw new HttpError(400, `the sheet has ${count} frames, numbered 0 to ${count - 1}; there is no frame ${bad.index}`)
+      }
+      const animation = { name, frames, loop }
+      const exists = sprite.animations.some((a) => a.name === name)
+      const animations = exists ? sprite.animations.map((a) => (a.name === name ? animation : a)) : [...sprite.animations, animation]
+      return saveAndReport(context, 'sprite', id, { ...sprite, animations }, `${exists ? 'Replaced' : 'Added'} animation "${name}" of ${id}: ${frames.length} steps, ${frames.reduce((sum, f) => sum + f.duration, 0)} ticks.`)
+    },
+  ),
+
+  tool('sprite_remove_animation', 'Removes an animation from a sprite.', z.object({ sprite: Id, name: z.string() }), async ({ sprite: id, name }, context) => {
+    const { docs } = await documents(context)
+    const sprite = docs.sprites[id]
+    if (!sprite) throw new HttpError(404, `no sprite "${id}"`)
+    if (!sprite.animations.some((a) => a.name === name)) throw new HttpError(404, `${id} has no animation "${name}"; it has: ${sprite.animations.map((a) => a.name).join(', ') || 'none'}`)
+    return saveAndReport(context, 'sprite', id, { ...sprite, animations: sprite.animations.filter((a) => a.name !== name) }, `Removed animation "${name}" from ${id}.`)
+  }),
+
+  tool(
+    'sprite_set_geometry',
+    'Sets a sprite\'s anchor and hitbox, in pixels within a frame. Pass hitbox null to remove it.',
+    z.object({
+      sprite: Id,
+      anchor: z.object({ x: z.number().int(), y: z.number().int() }).optional(),
+      hitbox: z.object({ x: z.number().int(), y: z.number().int(), width: z.number().int().positive(), height: z.number().int().positive() }).nullable().optional(),
+    }),
+    async ({ sprite: id, anchor, hitbox }, context) => {
+      const { docs } = await documents(context)
+      const sprite = docs.sprites[id]
+      if (!sprite) throw new HttpError(404, `no sprite "${id}"`)
+      return saveAndReport(context, 'sprite', id, { ...sprite, ...(anchor ? { anchor } : {}), ...(hitbox !== undefined ? { hitbox: hitbox ?? undefined } : {}) }, `Updated ${id}.`)
+    },
+  ),
+
+  tool('render_sprite', 'Draws a sprite\'s sheet enlarged with a line between frames. Frames are numbered row by row from 0 at the top-left.', z.object({ sprite: Id, scale: z.number().int().min(1).max(8).default(4) }), async ({ sprite: id, scale: factor }, context) => {
+    const { docs } = await documents(context)
+    const sprite = docs.sprites[id]
+    if (!sprite) throw new HttpError(404, `no sprite "${id}"; sprites are: ${Object.keys(docs.sprites).join(', ') || 'none'}`)
+    if (!sprite.image.toLowerCase().endsWith('.png')) throw new HttpError(409, `${sprite.image} is not a PNG and cannot be drawn here`)
+    const { picture, cols, rows } = await renderSheet(context.project, sprite.image, sprite.frame.width, sprite.frame.height, factor)
+    const animations = sprite.animations.map((a) => `${a.name}: frames ${a.frames.map((f) => `${f.index} (${f.duration})`).join(', ')}${a.loop ? ', loops' : ''}`)
+    return {
+      text: `${id}: ${cols * rows} frames of ${sprite.frame.width}x${sprite.frame.height} in ${cols} columns, drawn at ${factor}x. Anchor ${sprite.anchor.x}, ${sprite.anchor.y}.${sprite.hitbox ? ` Hitbox ${sprite.hitbox.width}x${sprite.hitbox.height} at ${sprite.hitbox.x}, ${sprite.hitbox.y}.` : ''}\nAnimations (frame and its ticks): ${animations.join('; ') || 'none'}.`,
+      images: [encodePng(picture)],
+    }
+  }),
+
+  tool(
+    'entity_type_set',
+    'Adds an entity type to the project, or changes the one with that id: its name, colour in the editor, sprite, and the typed properties each placed entity carries. What the type does in the game is Rust code matching on data::EntityKind.',
+    z.object({
+      id: Id,
+      name: z.string().min(1).optional(),
+      colour: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+      sprite: Id.nullable().optional().describe('A sprite id, or null for none'),
+      props: z.array(PropertyDef).optional().describe('Replaces the type\'s property definitions'),
+    }),
+    async ({ id, name, colour, sprite, props }, context) => {
+      const { docs } = await documents(context)
+      const project = docs.project
+      if (!project) throw new HttpError(409, 'studio/project.json is missing or has errors')
+      const existing = project.entityTypes.find((t) => t.id === id)
+      const type = {
+        ...(existing ?? { id, name: name ?? id, colour: '#f5a524', props: [] }),
+        ...(name ? { name } : {}),
+        ...(colour ? { colour } : {}),
+        ...(sprite !== undefined ? { sprite: sprite ?? undefined } : {}),
+        ...(props ? { props } : {}),
+      }
+      const entityTypes = existing ? project.entityTypes.map((t) => (t.id === id ? type : t)) : [...project.entityTypes, type]
+      return saveAndReport(context, 'project', undefined, { ...project, entityTypes }, `${existing ? 'Updated' : 'Added'} entity type "${id}".`)
+    },
+  ),
+
+  tool('entity_type_remove', 'Removes an entity type from the project. Entities of that type left in rooms are then reported as problems.', z.object({ id: Id }), async ({ id }, context) => {
+    const { docs } = await documents(context)
+    const project = docs.project
+    if (!project?.entityTypes.some((t) => t.id === id)) throw new HttpError(404, `no entity type "${id}"`)
+    await context.project.save('project', undefined, { ...project, entityTypes: project.entityTypes.filter((t) => t.id !== id) })
+    const { problems } = await context.project.load()
+    return { text: `Removed entity type "${id}".\n${problemLines(problems)}` }
+  }),
+
+  tool(
+    'audio_add',
+    'Adds a music or sound file that is already in the game folder to the project: WAV as a sound effect, XM and MOD as music tracks, MIDI as a track played through an SF2 soundfont (name it, or the first one in the folder is used).',
+    z.object({ file: z.string().min(1), name: z.string().min(1).optional(), soundfont: z.string().optional() }),
+    async ({ file, name, soundfont }, context) => {
+      const { docs, assets } = await context.project.load()
+      if (!assets.some((a) => a.path === file)) throw new HttpError(404, `${file} is not an asset file in the game folder; see list_assets`)
+      const audio = docs.audio ?? { version: FORMAT_VERSION, tracks: [], sfx: [] }
+      const extension = file.slice(file.lastIndexOf('.') + 1).toLowerCase()
+      const title = name ?? file.split('/').pop()!.replace(/\.[^.]+$/, '')
+      if (extension === 'wav') {
+        const id = uniqueId(slugify(title), audio.sfx.map((s) => s.id))
+        return saveAndReport(context, 'audio', undefined, { ...audio, sfx: [...audio.sfx, { id, name: title, file }] }, `Added sound effect "${id}".`)
+      }
+      const format = ({ mid: 'midi', midi: 'midi', xm: 'xm', mod: 'mod' } as const)[extension]
+      if (!format) throw new HttpError(400, `.${extension} is not a music or sound format the studio handles (wav, xm, mod, mid)`)
+      const font = format === 'midi' ? (soundfont ?? assets.find((a) => a.path.toLowerCase().endsWith('.sf2'))?.path) : undefined
+      if (format === 'midi' && !font) throw new HttpError(409, 'a MIDI file needs an SF2 soundfont to make sound, and there is none in the game folder; ask the author for one')
+      const id = uniqueId(slugify(title), audio.tracks.map((t) => t.id))
+      return saveAndReport(context, 'audio', undefined, { ...audio, tracks: [...audio.tracks, { id, name: title, file, format, ...(font ? { soundfont: font } : {}) }] }, `Added track "${id}" (${format}).`)
+    },
+  ),
+
+  tool('studio_view', 'Says what the author has open in the studio right now: the room, tileset or sprite on screen, and in a room the layer and entity selected. Use it to resolve "this room" or "the selected entity".', z.object({}), async (_args, context) => {
+    if (!context.studio) return { text: 'No studio is attached to this server. This tool works through the running studio\'s own MCP endpoint (http://127.0.0.1:4517/mcp by default).' }
+    const view = context.studio.view()
+    return { text: view ? json(view) : 'The studio is running, but no page of it is open in a browser.' }
+  }),
+
+  tool(
+    'studio_open',
+    'Opens an item in the author\'s studio so they see it: a room, tileset or sprite by id, or the world map, audio list, project settings or Play panel.',
+    z.object({ kind: z.enum(['world', 'project', 'audio', 'play', 'room', 'tileset', 'sprite']), id: Id.optional() }),
+    async ({ kind, id }, context) => {
+      if (!context.studio) return { text: 'No studio is attached to this server. This tool works through the running studio\'s own MCP endpoint.' }
+      if ((kind === 'room' || kind === 'tileset' || kind === 'sprite') && !id) throw new HttpError(400, `a ${kind} needs an id`)
+      const pages = context.studio.open({ kind, ...(id ? { id } : {}) })
+      return { text: pages ? `Opened ${kind}${id ? ` "${id}"` : ''} in the studio.` : 'The studio is running, but no page of it is open in a browser.' }
+    },
+  ),
 
   tool(
     'build',

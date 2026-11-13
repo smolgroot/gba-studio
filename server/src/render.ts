@@ -155,11 +155,9 @@ export async function renderRoom(project: ProjectFolder, docs: Documents, id: st
   return picture
 }
 
-/** A tileset enlarged, with a line between tiles so they can be counted: tile n is at column n % cols, row n / cols. */
-export async function renderTileset(project: ProjectFolder, docs: Documents, id: string, factor: number): Promise<{ picture: Picture; cols: number; rows: number }> {
-  const tileset = docs.tilesets[id]
-  if (!tileset) throw new HttpError(404, `no tileset "${id}"`)
-  const sheet = await loadPng(project, tileset.image)
+/** An image enlarged, with a line between cells of a given size so they can be counted row by row. */
+export async function renderSheet(project: ProjectFolder, image: string, cellWidth: number, cellHeight: number, factor: number): Promise<{ picture: Picture; cols: number; rows: number }> {
+  const sheet = await loadPng(project, image)
   const backdrop: Picture = { width: sheet.width, height: sheet.height, data: new Uint8Array(sheet.data.length) }
   for (let i = 0; i < sheet.data.length; i += 4) {
     if (sheet.data[i + 3]! >= 128) backdrop.data.set(sheet.data.subarray(i, i + 4), i)
@@ -167,7 +165,14 @@ export async function renderTileset(project: ProjectFolder, docs: Documents, id:
   }
   const picture = scale(backdrop, factor)
   for (let y = 0; y < picture.height; y++) for (let x = 0; x < picture.width; x++) {
-    if (x % (TILE * factor) === 0 || y % (TILE * factor) === 0) blend(picture, x, y, [255, 255, 255], 0.35)
+    if (x % (cellWidth * factor) === 0 || y % (cellHeight * factor) === 0) blend(picture, x, y, [255, 255, 255], 0.35)
   }
-  return { picture, cols: Math.floor(sheet.width / TILE), rows: Math.floor(sheet.height / TILE) }
+  return { picture, cols: Math.floor(sheet.width / cellWidth), rows: Math.floor(sheet.height / cellHeight) }
+}
+
+/** A tileset enlarged with its tile grid: tile n is at column n % cols, row n / cols. */
+export async function renderTileset(project: ProjectFolder, docs: Documents, id: string, factor: number): Promise<{ picture: Picture; cols: number; rows: number }> {
+  const tileset = docs.tilesets[id]
+  if (!tileset) throw new HttpError(404, `no tileset "${id}"`)
+  return renderSheet(project, tileset.image, TILE, TILE, factor)
 }

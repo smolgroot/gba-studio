@@ -25,11 +25,17 @@ The studio has an MCP server for this folder. Start it with:
 gba-studio mcp .
 ```
 
-(`node <path to gba-studio>/server/src/cli.ts mcp .` from a checkout.) Begin with
+(`node <path to gba-studio>/server/src/cli.ts mcp .` from a checkout.) When the studio
+is open on this folder it serves the same tools at `http://127.0.0.1:4517/mcp`;
+through that endpoint `studio_view` tells you what the author has on screen and
+`studio_open` shows them an item. `gba-studio agents . --claude` sets Claude Code
+up with a skill and the server entry. Begin with
 `project_overview`. `render_room` and `render_tileset` return pictures, and
 `room_read_cells` returns cells as text. Change rooms with `room_fill`,
 `room_paint` and the `entity_` tools rather than by editing JSON: tile layers are
-run-length encoded and easy to corrupt. `build` and `run_rom` build the game and
+run-length encoded and easy to corrupt. Tilesets, sprites, animations, entity types
+and audio have tools of their own (`tileset_set_collision`, `sprite_set_animation`,
+`entity_type_set`, `audio_add` and others). `build` and `run_rom` build the game and
 return pictures of it running. If the studio is open, it shows your changes as you
 make them.
 

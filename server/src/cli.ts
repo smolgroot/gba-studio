@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // The gba-studio command: the studio itself, and the same project code for scripts and agents.
 import { existsSync, statSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { Builder } from './build.ts'
 import { serveMcp } from './mcp.ts'
@@ -13,7 +14,8 @@ const USAGE = `Usage:
   gba-studio validate <game-folder> [--json]        check the project; exit 1 if it has errors
   gba-studio build <game-folder> [--release] [--json]  run the project's build command
   gba-studio mcp <game-folder>                      serve the project to a coding agent (MCP over stdio)
-  gba-studio agents <game-folder> [--force]         write AGENTS.md, the note for coding agents
+  gba-studio agents <game-folder> [--claude] [--force]  write AGENTS.md, the note for coding agents;
+                                                    --claude also adds a Claude Code skill and .mcp.json
   gba-studio schema                                 print the JSON Schema of every document kind
 
   --lan   listen on every interface, so a tablet on the same network can open
@@ -28,6 +30,7 @@ const { values, positionals } = parseArgs({
     json: { type: 'boolean', default: false },
     release: { type: 'boolean', default: false },
     force: { type: 'boolean', default: false },
+    claude: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },
 })
@@ -83,13 +86,17 @@ if (values.help || positionals.length === 0) {
   if (!bundle.initialised) fail('this folder has no studio project (no studio/project.json)')
   const written = await project.writeAgentsGuide(bundle.docs.project?.name ?? bundle.folder, values.force)
   console.log(written ? 'Wrote AGENTS.md' : 'AGENTS.md already exists; pass --force to replace it')
+  if (values.claude) {
+    const files = await project.writeClaudeSetup(bundle.docs.project?.name ?? bundle.folder, fileURLToPath(import.meta.url), values.force).catch((error: Error) => fail(error.message))
+    console.log(files.length ? `Wrote ${files.join(' and ')}` : 'The Claude Code skill and .mcp.json entry already exist; pass --force to replace them')
+  }
 } else {
   if (positionals.length !== 1) fail(USAGE)
   const folder = folderArgument(positionals[0])
   const port = Number(values.port)
   if (!Number.isInteger(port) || port < 0 || port > 65535) fail(`not a port: ${values.port}`)
   const { url, close } = await startServer({ folder, host: values.lan ? '0.0.0.0' : '127.0.0.1', port })
-  console.log(`GBA-Studio serving ${folder} at ${url}`)
+  console.log(`GBA-Studio serving ${folder} at ${url}\nMCP endpoint for coding agents: ${url}/mcp`)
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => void close().then(() => process.exit(0)))
   }

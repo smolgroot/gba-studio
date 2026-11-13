@@ -2,7 +2,7 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { AGENTS_FILE, agentsGuide } from './agents.ts'
+import { AGENTS_FILE, SKILL_FILE, agentsGuide, claudeSkill, mcpServerEntry } from './agents.ts'
 import { AssetPath, Id, MULTI_DOCS, SINGLE_DOCS, STUDIO_DIR, docPath, newProject, schemaFor, validateProject } from '@gba-studio/core'
 import type { DocKind, Documents, MultiKind, Problem, SingleKind } from '@gba-studio/core'
 
@@ -164,6 +164,37 @@ export class ProjectFolder {
     if (existsSync(abs) && !replace) return false
     await writeFile(abs, agentsGuide(name))
     return true
+  }
+
+  /**
+   * Sets a game folder up for Claude Code: a skill under .claude/skills, and the
+   * studio's MCP server in .mcp.json. Other servers in .mcp.json are kept, and an
+   * existing gba-studio entry or skill is left alone unless `replace` is set.
+   * Returns what it wrote.
+   */
+  async writeClaudeSetup(name: string, cliPath: string, replace: boolean): Promise<string[]> {
+    const written: string[] = []
+    const skill = this.resolve(SKILL_FILE)
+    if (!existsSync(skill) || replace) {
+      await mkdir(path.dirname(skill), { recursive: true })
+      await writeFile(skill, claudeSkill(name))
+      written.push(SKILL_FILE)
+    }
+    const file = this.resolve('.mcp.json')
+    let config: { mcpServers?: Record<string, unknown> } = {}
+    if (existsSync(file)) {
+      try {
+        config = JSON.parse(await readFile(file, 'utf8')) as typeof config
+      } catch {
+        throw new HttpError(409, '.mcp.json is not valid JSON; fix or remove it first')
+      }
+    }
+    if (!config.mcpServers?.['gba-studio'] || replace) {
+      config.mcpServers = { ...config.mcpServers, 'gba-studio': mcpServerEntry(cliPath) }
+      await writeFile(file, JSON.stringify(config, null, 2) + '\n')
+      written.push('.mcp.json')
+    }
+    return written
   }
 
   /** Deletes a room, tileset or sprite document. What refers to it shows up in Problems. */

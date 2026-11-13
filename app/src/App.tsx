@@ -14,6 +14,8 @@ import { DocumentPanel, ProblemsPanel, ProjectPanel, PropertiesPanel } from './p
 import { BuildPanel } from './panels/play.tsx'
 import { PalettePanel } from './panels/room.tsx'
 import { BAR } from './theme.ts'
+import { api } from './api.ts'
+import { useEditor } from './editor.ts'
 import { selectionFromHash, selectionKey, selectionTitle, useStudio } from './store.ts'
 import type { Selection } from './store.ts'
 
@@ -27,6 +29,30 @@ export function App() {
     // Load at once; do not wait for the websocket to come up.
     void useStudio.getState().load()
     return useStudio.getState().watch()
+  }, [])
+
+  // Tell the server what is open, so a coding agent can be pointed at "this room".
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const post = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        const { selection } = useStudio.getState()
+        const { tool, layer, entity } = useEditor.getState()
+        void api.context({ selection, ...(selection.kind === 'room' ? { editor: { tool, layer, entity } } : {}) }).catch(() => undefined)
+      }, 250)
+    }
+    const stopStudio = useStudio.subscribe((now, before) => {
+      if (now.selection !== before.selection || (now.connected && !before.connected)) post()
+    })
+    const stopEditor = useEditor.subscribe((now, before) => {
+      if (now.tool !== before.tool || now.layer !== before.layer || now.entity !== before.entity) post()
+    })
+    return () => {
+      clearTimeout(timer)
+      stopStudio()
+      stopEditor()
+    }
   }, [])
 
   // A link pasted into the address bar, or edited there, opens its item.
@@ -81,6 +107,15 @@ function TopBar() {
   const connected = useStudio((s) => s.connected)
   const error = useStudio((s) => s.error)
   const saveError = useStudio((s) => s.saveError)
+  const agent = useStudio((s) => s.agent)
+  // What an agent just did stays up for a few seconds.
+  const [agentShown, setAgentShown] = useState(false)
+  useEffect(() => {
+    if (!agent) return
+    setAgentShown(true)
+    const timer = setTimeout(() => setAgentShown(false), 8000)
+    return () => clearTimeout(timer)
+  }, [agent])
   const errors = bundle?.problems.filter((p) => p.severity === 'error').length ?? 0
   const warnings = (bundle?.problems.length ?? 0) - errors
   return (
@@ -92,6 +127,11 @@ function TopBar() {
         </Typography>
       )}
       <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        {agent && agentShown && (
+          <Typography variant="body2" color={agent.failed ? 'warning.main' : 'primary.main'} role="status" noWrap title={agent.summary} sx={{ maxWidth: '45vw' }}>
+            Agent · {agent.tool}: {agent.summary}
+          </Typography>
+        )}
         {saveError && (
           <Typography variant="body2" color="error" role="alert" noWrap title={saveError} sx={{ maxWidth: '40vw' }}>
             Not saved: {saveError}
