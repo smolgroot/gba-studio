@@ -1,5 +1,5 @@
-//! Drawing with agb: a room's tile layers scrolled under a camera, and sprite sheets
-//! with their animations.
+//! Drawing with agb: a room's tile layers scrolled under a camera, the pictures that
+//! drift behind them, and sprite sheets with their animations.
 
 use agb::{
     display::{
@@ -27,6 +27,133 @@ pub struct RoomGfx {
     pub layers: &'static [&'static [u8]],
     /// Where its top-left screen sits on the world grid, if it is on the map.
     pub world: Option<(i16, i16)>,
+    /// Pictures behind the tile layers, back to front: two at most.
+    pub backgrounds: &'static [BackgroundLayer],
+}
+
+/// A picture cut into tiles, drawn behind rooms. It repeats in both directions.
+pub struct BackgroundImage {
+    /// Its distinct tiles, and palettes of its own beside the room tileset's.
+    pub tiles: Tileset,
+    /// Size in tiles.
+    pub cols: u16,
+    pub rows: u16,
+    /// The tile in each cell row by row, as little-endian `u16`.
+    pub cells: &'static [u8],
+}
+
+impl BackgroundImage {
+    /// What the picture shows in a cell of the endless plane it repeats over, with its
+    /// palettes loaded from `palette` on.
+    fn tile(&'static self, pos: Vector2D<i32>, palette: u8) -> (&'static TileSet, TileSetting) {
+        let (col, row) = (pos.x.rem_euclid(self.cols as i32) as usize, pos.y.rem_euclid(self.rows as i32) as usize);
+        let at = (row * self.cols as usize + col) * 2;
+        let tile = u16::from_le_bytes([self.cells[at], self.cells[at + 1]]);
+        (&self.tiles.tiles, TileSetting::new(tile, TileEffect::new(false, false, palette + self.tiles.tile_palettes[tile as usize])))
+    }
+}
+
+/// A picture behind a room and how it follows the camera.
+pub struct BackgroundLayer {
+    pub image: &'static BackgroundImage,
+    /// How far it scrolls for every 256 pixels the camera moves, across and down:
+    /// 0 stands still, 256 moves with the room, less looks farther away.
+    pub parallax: (u16, u16),
+}
+
+impl BackgroundLayer {
+    /// The pixel of the picture at the screen's top-left corner, for a camera that
+    /// has moved `(dx, dy)` from where the picture was laid down.
+    pub const fn scroll(&self, dx: i32, dy: i32) -> (i32, i32) {
+        ((dx * self.parallax.0 as i32) >> 8, (dy * self.parallax.1 as i32) >> 8)
+    }
+}
+
+/// The GBA draws four backgrounds: tile layers and pictures share them.
+const SCREEN_LAYERS: usize = 4;
+const PALETTES: usize = 16;
+
+struct Backdrop {
+    layer: &'static BackgroundLayer,
+    /// The first of the palettes its image was given.
+    palette: u8,
+    map: InfiniteScrolledMap,
+}
+
+/// The pictures behind what a view shows: those of one room at a time.
+struct Backdrops {
+    /// Back to front.
+    layers: [Option<Backdrop>; 2],
+    /// The camera position at which the pictures' top-left corners meet the screen's.
+    origin: (i32, i32),
+}
+
+impl Backdrops {
+    const fn new() -> Self {
+        Self { layers: [const { None }; 2], origin: (0, 0) }
+    }
+
+    /// Whether these are the pictures on show, moving the same way.
+    fn shows(&self, backgrounds: &'static [BackgroundLayer]) -> bool {
+        let mut wanted = backgrounds.iter();
+        self.layers.iter().all(|shown| match (shown, wanted.next()) {
+            (Some(shown), Some(wanted)) => core::ptr::eq(shown.layer.image, wanted.image) && shown.layer.parallax == wanted.parallax,
+            (None, None) => true,
+            _ => false,
+        }) && wanted.next().is_none()
+    }
+
+    /// Changes to a room's pictures, laid down from `origin`. Their palettes go after
+    /// the `palettes` the tileset uses, and they take what the `tile_layers` leave of
+    /// the console's four backgrounds. Asking for the pictures already shown changes
+    /// nothing, so they carry on unbroken from room to room.
+    fn set(&mut self, backgrounds: &'static [BackgroundLayer], origin: (i32, i32), palettes: usize, tile_layers: usize, graphics: &Graphics) {
+        if self.shows(backgrounds) {
+            return;
+        }
+        // The old maps go first, so their tiles leave video memory before new ones come.
+        self.layers = [const { None }; 2];
+        self.origin = origin;
+        let mut next = palettes;
+        for (index, layer) in backgrounds.iter().enumerate().take(SCREEN_LAYERS.saturating_sub(tile_layers).min(2)) {
+            let own = layer.image.tiles.palettes;
+            // Two layers of one picture share its palettes.
+            let shared = self.layers[..index].iter().flatten().find(|other| core::ptr::eq(other.layer.image, layer.image)).map(|other| other.palette as usize);
+            let first = shared.unwrap_or(next);
+            if first + own.len() > PALETTES {
+                continue;
+            }
+            if shared.is_none() {
+                for (offset, palette) in own.iter().enumerate() {
+                    graphics.set_background_palette((first + offset) as u8, palette);
+                }
+                next += own.len();
+            }
+            let map = InfiniteScrolledMap::new(RegularBackground::new(Priority::P3, RegularBackgroundSize::Background32x32, TileFormat::FourBpp));
+            self.layers[index] = Some(Backdrop { layer, palette: first as u8, map });
+        }
+    }
+
+    /// Scrolls the pictures for a camera position. Returns whether they are all drawn.
+    fn set_camera(&mut self, x: i32, y: i32) -> bool {
+        let origin = self.origin;
+        let mut ready = true;
+        for backdrop in self.layers.iter_mut().flatten() {
+            let (image, palette) = (backdrop.layer.image, backdrop.palette);
+            let scroll = backdrop.layer.scroll(x - origin.0, y - origin.1);
+            ready &= backdrop.map.set_scroll_pos(vec2(scroll.0, scroll.1), |pos| image.tile(pos, palette)) == PartialUpdateStatus::Done;
+        }
+        ready
+    }
+
+    /// Shows the pictures that are fully drawn; one just changed stays hidden for the
+    /// few frames it takes. Call after showing the tile layers: at the same priority,
+    /// what is shown first is in front.
+    fn show(&self, frame: &mut GraphicsFrame) {
+        for backdrop in self.layers.iter().rev().flatten() {
+            backdrop.map.show_if_done(frame);
+        }
+    }
 }
 
 impl RoomGfx {
@@ -51,11 +178,13 @@ impl RoomGfx {
 pub struct RoomView {
     room: &'static RoomGfx,
     layers: [Option<InfiniteScrolledMap>; 3],
+    backdrops: Backdrops,
 }
 
 impl RoomView {
     /// Sets the background palettes to the room's tileset and makes a background per
     /// layer, the front layer at priority 1 so sprites at priority 0 stand before it.
+    /// The room's pictures go behind, laid down from its top-left corner.
     pub fn new(room: &'static RoomGfx, graphics: &mut Graphics) -> Self {
         graphics.set_background_palettes(room.tileset.palettes);
         let count = room.layers.len().min(3);
@@ -64,7 +193,9 @@ impl RoomView {
             let priority = [Priority::P3, Priority::P2, Priority::P1][index + 3 - count];
             *layer = Some(InfiniteScrolledMap::new(RegularBackground::new(priority, RegularBackgroundSize::Background32x32, TileFormat::FourBpp)));
         }
-        Self { room, layers }
+        let mut backdrops = Backdrops::new();
+        backdrops.set(room.backgrounds, (0, 0), room.tileset.palettes.len(), count, graphics);
+        Self { room, layers, backdrops }
     }
 
     /// Moves the camera's top-left corner to a pixel of the room. Returns whether every
@@ -77,7 +208,7 @@ impl RoomView {
                 ready &= map.set_scroll_pos(vec2(x, y), |pos| room.tile(index, pos)) == PartialUpdateStatus::Done;
             }
         }
-        ready
+        ready & self.backdrops.set_camera(x, y)
     }
 
     /// Places the camera and fills the whole view at once, for entering a room.
@@ -89,6 +220,7 @@ impl RoomView {
         for map in self.layers.iter().flatten() {
             map.show(frame);
         }
+        self.backdrops.show(frame);
     }
 }
 
@@ -98,15 +230,21 @@ impl RoomView {
 ///
 /// The GBA shows 16 background palettes at once, which is one tileset's worth. Rooms
 /// of another tileset are left blank; on entering one, make a new view for it.
+///
+/// Behind the rooms are the pictures of one room, the one the player is in: they
+/// drift with the camera rather than sit on the map, so two rooms' pictures cannot
+/// meet at a border. Say which with [`WorldView::set_backgrounds`].
 pub struct WorldView {
     rooms: &'static [RoomGfx],
     tileset: &'static Tileset,
     count: usize,
     layers: [Option<InfiniteScrolledMap>; 3],
+    backdrops: Backdrops,
 }
 
 impl WorldView {
-    /// A view of the rooms that share `room`'s tileset. Sets the background palettes.
+    /// A view of the rooms that share `room`'s tileset, with `room`'s pictures behind
+    /// them. Sets the background palettes.
     pub fn new(rooms: &'static [RoomGfx], room: usize, graphics: &mut Graphics) -> Self {
         let tileset = rooms[room].tileset;
         graphics.set_background_palettes(tileset.palettes);
@@ -116,7 +254,19 @@ impl WorldView {
             let priority = [Priority::P3, Priority::P2, Priority::P1][index + 3 - count];
             *layer = Some(InfiniteScrolledMap::new(RegularBackground::new(priority, RegularBackgroundSize::Background32x32, TileFormat::FourBpp)));
         }
-        Self { rooms, tileset, count, layers }
+        let mut view = Self { rooms, tileset, count, layers, backdrops: Backdrops::new() };
+        view.set_backgrounds(room, graphics);
+        view
+    }
+
+    /// Puts a room's pictures behind the view: call it when the player enters a room.
+    /// A room with the pictures already shown changes nothing and they scroll on
+    /// unbroken; other pictures are laid down from the new room's top-left corner and
+    /// appear a few frames later, once drawn. A room with none clears them.
+    pub fn set_backgrounds(&mut self, room: usize, graphics: &Graphics) {
+        let room = &self.rooms[room];
+        let origin = room.world.map_or((0, 0), |(x, y)| (x as i32 * 240, y as i32 * 160));
+        self.backdrops.set(room.backgrounds, origin, self.tileset.palettes.len(), self.count, graphics);
     }
 
     /// Whether a room is drawn by this view: it is on the map and shares the tileset.
@@ -152,7 +302,7 @@ impl WorldView {
                 ready &= map.set_scroll_pos(vec2(x, y), |pos| Self::tile(rooms, tileset, count, slot, pos)) == PartialUpdateStatus::Done;
             }
         }
-        ready
+        ready & self.backdrops.set_camera(x, y)
     }
 
     /// Places the camera and fills the whole view at once, for starting or after a jump.
@@ -164,6 +314,7 @@ impl WorldView {
         for map in self.layers.iter().flatten() {
             map.show(frame);
         }
+        self.backdrops.show(frame);
     }
 }
 
@@ -172,6 +323,23 @@ pub struct Animation {
     /// Frame index in the sheet, and how many 60 Hz ticks it shows for.
     pub frames: &'static [(u16, u8)],
     pub looping: bool,
+}
+
+impl Animation {
+    /// The sheet frame showing `tick` ticks after the animation began: it wraps if the
+    /// animation loops and holds the last frame if not. For many entities animated off
+    /// one clock, like a room's coins, with no [`AnimPlayer`] each.
+    pub fn frame_at(&self, tick: u32) -> usize {
+        let total: u32 = self.frames.iter().map(|&(_, ticks)| ticks as u32).sum();
+        let mut left = if self.looping && total > 0 { tick % total } else { tick };
+        for &(frame, ticks) in self.frames {
+            if left < ticks as u32 {
+                return frame as usize;
+            }
+            left -= ticks as u32;
+        }
+        self.frames.last().map_or(0, |&(frame, _)| frame as usize)
+    }
 }
 
 pub struct SpriteSheet {
@@ -188,6 +356,15 @@ pub struct SpriteSheet {
 impl SpriteSheet {
     pub fn animation(&'static self, name: &str) -> Option<&'static Animation> {
         self.animations.iter().find(|animation| animation.name == name)
+    }
+
+    /// The sheet's hitbox (the whole frame if it has none) as left, top, width and
+    /// height, for an entity placed at a point: what [`Body::overlaps`] takes.
+    ///
+    /// [`Body::overlaps`]: crate::physics::Body::overlaps
+    pub fn hitbox_at(&self, x: i32, y: i32) -> (i32, i32, i32, i32) {
+        let (left, top, w, h) = self.hitbox.unwrap_or((0, 0, self.width as u16, self.height as u16));
+        (x - self.anchor.0 as i32 + left as i32, y - self.anchor.1 as i32 + top as i32, w as i32, h as i32)
     }
 
     /// An object showing a frame with the sheet's anchor at a point of the screen.

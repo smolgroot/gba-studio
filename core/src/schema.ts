@@ -114,6 +114,19 @@ export const TileLayer = z.object({
   data: z.array(z.number().int().min(0)),
 })
 
+/** The GBA draws four background layers at once: a room's tile layers and backgrounds share them. */
+export const MAX_SCREEN_LAYERS = 4
+export const MAX_BACKGROUNDS = 2
+
+const Percent = z.number().int().min(0).max(100)
+/** A picture drawn behind a room's tile layers, repeated in both directions. */
+export const Background = z.object({
+  /** PNG whose width and height are multiples of 8. */
+  image: AssetPath,
+  /** How fast it scrolls, in percent of the camera's speed: 0 stands still, 100 moves with the room. Less for what is farther away. */
+  parallax: z.object({ x: Percent, y: Percent }),
+})
+
 export const Entity = z.object({
   type: Id,
   /** Position in pixels from the room's top-left. */
@@ -131,6 +144,8 @@ export const Room = z.object({
   tileset: Id,
   /** Back to front. */
   layers: z.array(TileLayer).min(1).max(3),
+  /** Pictures behind the tile layers, back to front. With the tile layers they make at most 4 layers. */
+  backgrounds: z.array(Background).max(MAX_BACKGROUNDS).optional(),
   /** Collision painted over what the tiles give, run-length like a layer: 0 keeps the tile's class, n is collision class n-1. */
   collision: z.array(z.number().int().min(0)).optional(),
   entities: z.array(Entity).default([]),
@@ -170,6 +185,7 @@ export type EntityType = z.infer<typeof EntityType>
 export type Project = z.infer<typeof Project>
 export type Tileset = z.infer<typeof Tileset>
 export type Sprite = z.infer<typeof Sprite>
+export type Background = z.infer<typeof Background>
 export type Room = z.infer<typeof Room>
 export type World = z.infer<typeof World>
 export type Audio = z.infer<typeof Audio>

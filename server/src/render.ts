@@ -96,7 +96,7 @@ export interface Region {
 }
 
 /** A room, or a part of it given in tiles, drawn as the studio shows it. */
-export async function renderRoom(project: ProjectFolder, docs: Documents, id: string, options: { region?: Region; collision?: boolean; entities?: boolean }): Promise<Picture> {
+export async function renderRoom(project: ProjectFolder, docs: Documents, id: string, options: { region?: Region; collision?: boolean; entities?: boolean; backgrounds?: boolean }): Promise<Picture> {
   const room = docs.rooms[id]
   if (!room) throw new HttpError(404, `no room "${id}"`)
   const tileset = docs.tilesets[room.tileset]
@@ -112,6 +112,18 @@ export async function renderRoom(project: ProjectFolder, docs: Documents, id: st
   const picture: Picture = { width: region.width * TILE, height: region.height * TILE, data: new Uint8Array(region.width * TILE * region.height * TILE * 4) }
   // Empty cells show a dark backdrop rather than transparency.
   for (let i = 0; i < picture.data.length; i += 4) picture.data.set([22, 22, 22, 255], i)
+  // Backgrounds repeat from the room's top-left corner, which is how they lie when the
+  // camera is there. In the game they scroll slower than the room.
+  for (const background of options.backgrounds === false ? [] : (room.backgrounds ?? [])) {
+    const image = await loadPng(project, background.image).catch(() => null)
+    if (!image) continue
+    for (let y = 0; y < picture.height; y++) {
+      for (let x = 0; x < picture.width; x++) {
+        const s = (((y + region.y * TILE) % image.height) * image.width + ((x + region.x * TILE) % image.width)) * 4
+        if (image.data[s + 3]! >= 128) picture.data.set(image.data.subarray(s, s + 4), (y * picture.width + x) * 4)
+      }
+    }
+  }
   for (const layer of layers) {
     for (let cy = 0; cy < region.height; cy++) {
       for (let cx = 0; cx < region.width; cx++) {

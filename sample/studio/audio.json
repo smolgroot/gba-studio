@@ -1,5 +1,26 @@
 {
   "version": 1,
   "tracks": [],
-  "sfx": []
+  "sfx": [
+    {
+      "id": "coin",
+      "name": "Coin",
+      "file": "assets/audio/coin.wav"
+    },
+    {
+      "id": "diamond",
+      "name": "Diamond",
+      "file": "assets/audio/diamond.wav"
+    },
+    {
+      "id": "damage",
+      "name": "Damage",
+      "file": "assets/audio/damage.wav"
+    },
+    {
+      "id": "jump",
+      "name": "Jump",
+      "file": "assets/audio/jump.wav"
+    }
+  ]
 }

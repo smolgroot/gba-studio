@@ -185,5 +185,52 @@
       ]
     }
   ],
-  "entities": []
+  "backgrounds": [
+    {
+      "image": "assets/backgrounds/far.png",
+      "parallax": {
+        "x": 25,
+        "y": 0
+      }
+    },
+    {
+      "image": "assets/backgrounds/near.png",
+      "parallax": {
+        "x": 50,
+        "y": 0
+      }
+    }
+  ],
+  "entities": [
+    {
+      "type": "coin",
+      "x": 44,
+      "y": 242,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 152,
+      "y": 202,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 72,
+      "y": 162,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 168,
+      "y": 114,
+      "props": {}
+    },
+    {
+      "type": "diamond",
+      "x": 88,
+      "y": 66,
+      "props": {}
+    }
+  ]
 }

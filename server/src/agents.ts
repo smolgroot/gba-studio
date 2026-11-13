@@ -62,6 +62,10 @@ Run \`validate\` after changing anything under \`studio/\`.
 - A room has 1 to 3 tile layers, back to front. A cell holds a tile number of the
   room's tileset. In the files, layers are run-length pairs \`[count, cell, ...]\`
   where cell 0 is empty and cell n is tile n-1.
+- A room can have up to 2 backgrounds behind its tile layers, back to front: a PNG
+  that repeats in both directions and a parallax in percent of the camera's speed
+  (0 stands still, 100 moves with the room). Tile layers and backgrounds together
+  are at most 4, the layers the console draws. Set them with \`room_update\`.
 - Collision comes from the tileset: each tile has a collision class. A room can
   override single cells.
 - An entity is a type, a position in pixels (its feet: the middle of its bottom
@@ -79,8 +83,10 @@ gba_studio_rt::include_audio!();  // audio::TRACKS, SFX (needs agb_tracker)
 
 \`gba_studio_rt::physics::Body\` moves a box through the collision cells of the whole
 world (\`body.step(&data::WORLD, drop_through)\`), and \`gba_studio_rt::gfx::WorldView\`
-draws the rooms around a camera. The data and physics half of the runtime has no
-dependencies and runs on the host, so rules can be unit tested with \`cargo test\`.
+draws the rooms around a camera, with the backgrounds of one room behind them: call
+\`view.set_backgrounds(room, &graphics)\` when the player enters a room. The data
+and physics half of the runtime has no dependencies and runs on the host, so rules
+can be unit tested with \`cargo test\`.
 `
 }
 

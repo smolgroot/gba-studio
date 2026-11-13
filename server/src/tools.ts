@@ -3,7 +3,7 @@
 // nothing is read or written outside the game folder.
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
-import { FORMAT_VERSION, Id, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@gba-studio/core'
+import { Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@gba-studio/core'
 import type { DocKind, Documents, Problem, Room } from '@gba-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
@@ -145,6 +145,7 @@ export const TOOLS: Tool[] = [
                 tiles: `${room.width * SCREEN.cols}x${room.height * SCREEN.rows}`,
                 tileset: room.tileset,
                 layers: room.layers.map((l) => l.name),
+                backgrounds: (room.backgrounds ?? []).map((b) => `${b.image} at ${b.parallax.x}% x, ${b.parallax.y}% y`),
                 entities: room.entities.length,
                 music: room.music ?? null,
                 worldPosition: docs.world?.rooms.find((p) => p.room === id) ?? 'not on the map',
@@ -332,7 +333,7 @@ export const TOOLS: Tool[] = [
 
   tool(
     'render_room',
-    'Draws a room, or a rectangle of it given in tiles, as an image, so you can look at what is there. Blue lines are screen boundaries; entities are small squares in their type\'s colour.',
+    'Draws a room, or a rectangle of it given in tiles, as an image, so you can look at what is there. Blue lines are screen boundaries; entities are small squares in their type\'s colour. Its backgrounds are drawn repeating from the room\'s top-left corner; in the game they scroll slower than the room.',
     z.object({
       room: Id,
       x: z.number().int().min(0).optional(),
@@ -365,12 +366,28 @@ export const TOOLS: Tool[] = [
 
   tool(
     'room_update',
-    'Renames a room, or changes its tileset or its music track.',
-    z.object({ room: Id, name: z.string().min(1).optional(), tileset: Id.optional(), music: Id.nullable().optional().describe('A track id from the audio document, or null for none') }),
-    async ({ room: id, name, tileset, music }, context) => {
+    'Renames a room, or changes its tileset, its music track or its backgrounds. Backgrounds are pictures behind the tile layers that repeat in both directions and scroll slower than the room, for parallax: up to 2, back to front, and with the tile layers at most 4 layers in all.',
+    z.object({
+      room: Id,
+      name: z.string().min(1).optional(),
+      tileset: Id.optional(),
+      music: Id.nullable().optional().describe('A track id from the audio document, or null for none'),
+      backgrounds: z
+        .array(Background)
+        .max(MAX_BACKGROUNDS)
+        .optional()
+        .describe('Replaces the room\'s backgrounds, back to front; [] removes them. Each is a PNG already in the game folder (see list_assets) whose size is a multiple of 8, and a parallax in percent of the camera\'s speed across (x) and down (y): 0 stands still, 100 moves with the room, and a farther layer gets less than a nearer one'),
+    }),
+    async ({ room: id, name, tileset, music, backgrounds }, context) => {
       const { docs } = await documents(context)
       const room = roomOf(docs, id)
-      return saveAndReport(context, 'room', id, { ...room, ...(name ? { name } : {}), ...(tileset ? { tileset } : {}), ...(music !== undefined ? { music: music ?? undefined } : {}) }, `Updated ${id}.`)
+      for (const background of backgrounds ?? []) {
+        if (!background.image.toLowerCase().endsWith('.png')) throw new HttpError(400, `${background.image} is not a PNG`)
+        const picture = await loadPng(context.project, background.image)
+        if (picture.width % TILE || picture.height % TILE) throw new HttpError(400, `${background.image} is ${picture.width}x${picture.height} px; a background's size must be a multiple of ${TILE}`)
+      }
+      const next = { ...room, ...(name ? { name } : {}), ...(tileset ? { tileset } : {}), ...(music !== undefined ? { music: music ?? undefined } : {}), ...(backgrounds ? { backgrounds: backgrounds.length ? backgrounds : undefined } : {}) }
+      return saveAndReport(context, 'room', id, next, `Updated ${id}.`)
     },
   ),
 

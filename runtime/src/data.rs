@@ -160,6 +160,22 @@ impl Cells for World {
 }
 
 impl World {
+    /// How many entities the project has, over every room.
+    pub const fn entity_count(&self) -> usize {
+        let (mut count, mut room) = (0, 0);
+        while room < self.rooms.len() {
+            count += self.rooms[room].entities.len();
+            room += 1;
+        }
+        count
+    }
+
+    /// A number for one entity of one room, unique in the project: entities counted
+    /// room by room in project order. What [`Collected`] and save data key on.
+    pub fn entity_index(&self, room: usize, entity: usize) -> usize {
+        self.rooms[..room].iter().map(|r| r.entities.len()).sum::<usize>() + entity
+    }
+
     pub fn room_cells(&self, room: usize) -> RoomCells<'_> {
         RoomCells { world: self, room: &self.rooms[room] }
     }
@@ -216,5 +232,85 @@ impl World {
         }
         let (nx, ny) = self.rooms[next].world?;
         Some((next, world_x - nx as i32 * SCREEN_W, world_y - ny as i32 * SCREEN_H))
+    }
+}
+
+/// Which entities are gone for good: coins picked up, doors opened. A bit per entity,
+/// numbered by [`World::entity_index`]; `WORDS` of 32 bits each, so size it with
+/// `WORLD.entity_count().div_ceil(32)`. The words are plain data a game can save.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Collected<const WORDS: usize> {
+    pub words: [u32; WORDS],
+}
+
+impl<const WORDS: usize> Default for Collected<WORDS> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<const WORDS: usize> Collected<WORDS> {
+    pub const fn new() -> Self {
+        Self { words: [0; WORDS] }
+    }
+
+    /// Whether an entity has been taken. An index past the end has not.
+    pub const fn has(&self, index: usize) -> bool {
+        index / 32 < WORDS && self.words[index / 32] & (1 << (index % 32)) != 0
+    }
+
+    /// Marks an entity as taken. Returns whether that is news: false if it already
+    /// was, or if the index is past the end.
+    pub const fn take(&mut self, index: usize) -> bool {
+        if index / 32 >= WORDS || self.has(index) {
+            return false;
+        }
+        self.words[index / 32] |= 1 << (index % 32);
+        true
+    }
+
+    /// How many entities have been taken.
+    pub fn count(&self) -> u32 {
+        self.words.iter().map(|word| word.count_ones()).sum()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const fn room(entities: &'static [Entity]) -> Room {
+        Room { id: "r", name: "R", cols: 30, rows: 20, collision: &[], entities, world: None, music: None }
+    }
+    const COIN: Entity = Entity { kind: 0, x: 0, y: 0, props: &[] };
+    static ROOMS: [Room; 3] = [room(&[COIN, COIN]), room(&[]), room(&[COIN, COIN, COIN])];
+    static WORLD: World = World { rooms: &ROOMS, classes: &[], start: None };
+
+    #[test]
+    fn entities_are_numbered_across_rooms() {
+        assert_eq!(WORLD.entity_count(), 5);
+        assert_eq!(WORLD.entity_index(0, 1), 1);
+        assert_eq!(WORLD.entity_index(2, 0), 2);
+        assert_eq!(WORLD.entity_index(2, 2), 4);
+    }
+
+    #[test]
+    fn an_entity_is_taken_once() {
+        let mut found = Collected::<2>::new();
+        assert!(!found.has(40));
+        assert!(found.take(40));
+        assert!(found.has(40));
+        assert!(!found.take(40));
+        assert!(!found.has(39) && !found.has(41) && !found.has(8));
+        assert!(found.take(0));
+        assert_eq!(found.count(), 2);
+    }
+
+    #[test]
+    fn an_index_past_the_end_is_never_taken() {
+        let mut found = Collected::<1>::new();
+        assert!(!found.take(32));
+        assert!(!found.has(32));
+        assert_eq!(found.count(), 0);
     }
 }

@@ -15,15 +15,17 @@ import RectangleOutlinedIcon from '@mui/icons-material/RectangleOutlined'
 import RedoIcon from '@mui/icons-material/Redo'
 import UndoIcon from '@mui/icons-material/Undo'
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined'
+import SwapVertIcon from '@mui/icons-material/SwapVert'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
+import WallpaperOutlinedIcon from '@mui/icons-material/WallpaperOutlined'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import SvgIcon from '@mui/material/SvgIcon'
 import Typography from '@mui/material/Typography'
-import { SCREEN, TILE, resizeRoom, rleDecode, rleEncode, rleLength, roomSize } from '@gba-studio/core'
-import type { CollisionClass, EntityType, Room, Sprite, Tileset } from '@gba-studio/core'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, resizeRoom, rleDecode, rleEncode, rleLength, roomSize } from '@gba-studio/core'
+import type { Background, CollisionClass, EntityType, Room, Sprite, Tileset } from '@gba-studio/core'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { fileUrl } from '../api.ts'
 import { useEditor } from '../editor.ts'
@@ -31,6 +33,7 @@ import type { Stamp, Tool } from '../editor.ts'
 import { Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
 import { useHistoryDepth, useStudio } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
+import { ImportButton } from './common.tsx'
 import { Divider, GridOverlay, Message, ToolButton, Viewport, useImage } from './views.tsx'
 
 function EraserIcon() {
@@ -93,7 +96,7 @@ export function RoomEditor({ id }: { id: string }) {
   const redo = useStudio((s) => s.redo)
   const depth = useHistoryDepth()
   const image = useImage(tileset?.image)
-  const { tool, entity, showGrid, showCollision, set } = useEditor()
+  const { tool, entity, showGrid, showCollision, showBackgrounds, set } = useEditor()
   const [hover, setHover] = useState<{ cx: number; cy: number } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
 
@@ -143,6 +146,7 @@ export function RoomEditor({ id }: { id: string }) {
       <Divider />
       <ToolButton title="Tile grid" active={showGrid} onClick={() => set({ showGrid: !showGrid })}><Grid4x4Icon /></ToolButton>
       <ToolButton title="Show collision" active={showCollision} onClick={() => set({ showCollision: !showCollision })}><BlockOutlinedIcon /></ToolButton>
+      <ToolButton title={room.backgrounds?.length ? 'Show backgrounds' : 'Show backgrounds (this room has none: add one in Properties)'} active={showBackgrounds} disabled={!room.backgrounds?.length} onClick={() => set({ showBackgrounds: !showBackgrounds })}><WallpaperOutlinedIcon /></ToolButton>
     </>
   )
   const info = hover
@@ -186,7 +190,7 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
   const sprites = useStudio((s) => s.bundle?.docs.sprites)
   const commit = useStudio((s) => s.commit)
   const editor = useEditor()
-  const { tool, stamp, hidden, showGrid, showCollision, set } = editor
+  const { tool, stamp, hidden, showGrid, showCollision, showBackgrounds, set } = editor
   const layer = editor.layer === 'collision' ? 'collision' : Math.min(editor.layer, room.layers.length - 1)
   const tileClasses = useTileClasses(tileset, classes)
 
@@ -468,6 +472,7 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
       onContextMenu={(event) => event.preventDefault()}
       sx={{ position: 'relative', width: cols * cell, height: rows * cell, cursor: tool === 'pan' ? 'grab' : tool === 'entity' ? 'copy' : 'crosshair', userSelect: 'none' }}
     >
+      {showBackgrounds && room.backgrounds?.map((background, index) => <BackgroundPicture key={index} image={background.image} zoom={zoom} />)}
       <canvas ref={tilesCanvas} className="pixelated" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       <canvas ref={collisionCanvas} className="pixelated" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: showCollision ? 'block' : 'none' }} />
       {showGrid && zoom >= 2 && <GridOverlay stepX={cell} stepY={cell} colour="rgba(255,255,255,0.07)" />}
@@ -501,6 +506,14 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
       )}
     </Box>
   )
+}
+
+/** A background behind the room's tiles, repeating from the room's top-left corner: where it lies when the camera is there. In the game it scrolls slower than the room. */
+function BackgroundPicture({ image, zoom }: { image: string; zoom: number }) {
+  const revision = useStudio((s) => s.revision)
+  const picture = useImage(image)
+  if (!picture || picture === 'error') return null
+  return <Box className="pixelated" sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: `url("${fileUrl(image, revision)}")`, backgroundSize: `${picture.width * zoom}px ${picture.height * zoom}px`, backgroundRepeat: 'repeat' }} />
 }
 
 /** An entity on the map: its sprite's first frame if its type has one, else a square in the type's colour. */
@@ -594,6 +607,7 @@ export function PalettePanel() {
     change(layers, to)
   }
   const { cols, rows } = roomSize(room)
+  const layersFull = room.layers.length + (room.backgrounds?.length ?? 0) >= MAX_SCREEN_LAYERS
   return (
     <Box sx={{ height: '100%', overflow: 'auto' }}>
       <Heading>Layers</Heading>
@@ -620,7 +634,7 @@ export function PalettePanel() {
         ))}
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 1 }}>
-        <ToolButton title={room.layers.length >= 3 ? 'A GBA room has at most 3 tile layers' : 'Add a layer in front'} disabled={room.layers.length >= 3} onClick={() => change([...room.layers, { name: `Layer ${room.layers.length + 1}`, data: [cols * rows, 0] }], room.layers.length)}><AddIcon /></ToolButton>
+        <ToolButton title={room.layers.length >= 3 ? 'A GBA room has at most 3 tile layers' : layersFull ? `Tile layers and backgrounds are at most ${MAX_SCREEN_LAYERS}, the layers the GBA draws: remove a background first` : 'Add a layer in front'} disabled={room.layers.length >= 3 || layersFull} onClick={() => change([...room.layers, { name: `Layer ${room.layers.length + 1}`, data: [cols * rows, 0] }], room.layers.length)}><AddIcon /></ToolButton>
         <ToolButton title="Bring forward" disabled={layer === 'collision' || layer >= room.layers.length - 1} onClick={() => move(1)}><ArrowUpwardIcon /></ToolButton>
         <ToolButton title="Send back" disabled={layer === 'collision' || layer <= 0} onClick={() => move(-1)}><ArrowDownwardIcon /></ToolButton>
         <ToolButton
@@ -742,8 +756,23 @@ export function RoomProperties({ id }: { id: string }) {
   const commit = useStudio((s) => s.commit)
   const selected = useEditor((s) => s.entity)
   const set = useEditor((s) => s.set)
+  const assets = useStudio((s) => s.bundle?.assets)
   if (!room || !docs) return null
   const update = (patch: Partial<Room>) => commit('room', id, { ...room, ...patch })
+  const backgrounds = room.backgrounds ?? []
+  const pictures = (assets ?? []).filter((a) => /\.png$/i.test(a.path)).map((a) => ({ value: a.path, label: a.path }))
+  const setBackgrounds = (next: Background[]) => {
+    update({ backgrounds: next.length ? next : undefined })
+    if (next.length > backgrounds.length) set({ showBackgrounds: true })
+  }
+  const setBackground = (index: number, patch: Partial<Background>) => setBackgrounds(backgrounds.map((b, i) => (i === index ? { ...b, ...patch } : b)))
+  // A new one goes in front of those there, moving faster than them: nearer things pass quicker.
+  const addBackground = (image: string) => setBackgrounds([...backgrounds, { image, parallax: { x: backgrounds.length ? 50 : 25, y: 0 } }])
+  const noRoom = backgrounds.length >= MAX_BACKGROUNDS
+    ? `A room has at most ${MAX_BACKGROUNDS} backgrounds.`
+    : room.layers.length + backgrounds.length >= MAX_SCREEN_LAYERS
+      ? `The GBA draws ${MAX_SCREEN_LAYERS} layers: this room's ${room.layers.length} tile layers leave room for ${MAX_SCREEN_LAYERS - room.layers.length === 0 ? 'no' : MAX_SCREEN_LAYERS - room.layers.length} background${MAX_SCREEN_LAYERS - room.layers.length === 1 ? '' : 's'}.`
+      : null
   const entity = selected !== null ? room.entities[selected] : undefined
   const type = entity && docs.project?.entityTypes.find((t) => t.id === entity.type)
   const updateEntity = (patch: Partial<Room['entities'][number]>) => update({ entities: room.entities.map((e, i) => (i === selected ? { ...e, ...patch } : e)) })
@@ -769,6 +798,47 @@ export function RoomProperties({ id }: { id: string }) {
           <SelectInput label="Music" value={room.music ?? ''} onChange={(music) => update({ music: music || undefined })} options={[{ value: '', label: 'None' }, ...(docs.audio?.tracks ?? []).map((t) => ({ value: t.id, label: t.name }))]} />
         </Field>
       </Fields>
+      <Heading>Backgrounds</Heading>
+      {backgrounds.length > 0 && (
+        <Fields>
+          {backgrounds.map((background, index) => (
+            <Fragment key={index}>
+          <Field label={backgrounds.length === 1 ? 'Image' : index === 0 ? 'Back' : 'Front'}>
+            <SelectInput label="Background image" value={background.image} onChange={(image) => setBackground(index, { image })} options={pictures} />
+          </Field>
+          <Field label="Speed %">
+            <NumberInput label="Scroll speed across, in percent of the camera's" value={background.parallax.x} min={0} max={100} onCommit={(x) => setBackground(index, { parallax: { ...background.parallax, x } })} />
+            <Typography color="text.secondary">↔</Typography>
+            <NumberInput label="Scroll speed down, in percent of the camera's" value={background.parallax.y} min={0} max={100} onCommit={(y) => setBackground(index, { parallax: { ...background.parallax, y } })} />
+            <Typography color="text.secondary">↕</Typography>
+            {backgrounds.length > 1 && index === 0 && (
+              <IconButton aria-label="Swap the back and front backgrounds" title="Swap back and front" onClick={() => setBackgrounds([backgrounds[1]!, backgrounds[0]!])} sx={{ p: 0.5, color: 'text.secondary' }}><SwapVertIcon /></IconButton>
+            )}
+            <IconButton aria-label="Remove this background" title="Remove this background (the image stays in the folder)" onClick={() => setBackgrounds(backgrounds.filter((_, i) => i !== index))} sx={{ p: 0.5, color: 'text.secondary' }}><DeleteOutlinedIcon /></IconButton>
+          </Field>
+            </Fragment>
+          ))}
+        </Fields>
+      )}
+      <Box sx={{ px: 2, pb: 1.5, pt: backgrounds.length ? 0 : 1.5, display: 'grid', gap: 1 }}>
+        {noRoom ? (
+          <Typography variant="body2" color="text.secondary">{noRoom}</Typography>
+        ) : (
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <ImportButton label="Import a background" accept=".png" folder="assets/backgrounds" onImported={(paths) => addBackground(paths[0]!)} />
+            {pictures.length > 0 && (
+              <Box sx={{ flex: 1, minWidth: 120 }}>
+                <SelectInput label="Add an image already in the folder as a background" value="" onChange={(image) => image && addBackground(image)} options={[{ value: '', label: 'or use an image…' }, ...pictures]} />
+              </Box>
+            )}
+          </Box>
+        )}
+        <Typography variant="body2" color="text.secondary">
+          {backgrounds.length
+            ? 'Pictures behind the tiles, repeating in both directions. Speed is how fast one scrolls compared with the room: 0 stands still, 100 moves with it. Give the back one less than the front one for depth. The map shows them as they lie at the room\'s top-left corner; Play shows them moving.'
+            : 'A PNG behind the tiles, its size a multiple of 8, that repeats in both directions and scrolls slower than the room. Two of them at different speeds give parallax.'}
+        </Typography>
+      </Box>
       {entity && (
         <>
           <Heading>Selected entity</Heading>

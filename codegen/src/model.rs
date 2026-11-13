@@ -107,10 +107,25 @@ pub struct Room {
     pub height: u32,
     pub tileset: String,
     pub layers: Vec<Layer>,
+    #[serde(default)]
+    pub backgrounds: Vec<Background>,
     pub collision: Option<Vec<u32>>,
     #[serde(default)]
     pub entities: Vec<Entity>,
     pub music: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct Background {
+    pub image: String,
+    pub parallax: Parallax,
+}
+
+/// Percent of the camera's speed, across and down.
+#[derive(Deserialize)]
+pub struct Parallax {
+    pub x: u32,
+    pub y: u32,
 }
 
 #[derive(Deserialize)]

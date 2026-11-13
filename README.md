@@ -55,9 +55,15 @@ listed under [Known limits](#known-limits) and the [roadmap](#roadmap).
 Open a room to paint it.
 
 - **Tools:** brush, eraser, rectangle, flood fill, tile picker, entities and pan.
-- **Layers:** up to three tile layers per room (the GBA has four backgrounds, and one
-  is left to the game). Add, rename, reorder, hide and delete layers. A room opens on
-  its front layer.
+- **Layers:** up to three tile layers per room. Add, rename, reorder, hide and delete
+  layers. A room opens on its front layer.
+- **Backgrounds:** up to two pictures behind a room's tiles, for parallax. Import a
+  PNG (or pick one in the folder) in the room's Properties and give it a scroll speed
+  across and down, in percent of the camera's: 0 stands still, 100 moves with the
+  room, and a far layer gets less than a near one. A picture repeats in both
+  directions. The GBA draws four layers, so tile layers and backgrounds together are
+  at most four. The map shows them as they lie at the room's top-left corner (a
+  toolbar button hides them); the Play panel shows them moving.
 - **Stamps:** click a tile in the tileset palette, or drag across several to paint
   a block. Painting a stamp over an area repeats its pattern from where the stroke
   began.
@@ -69,7 +75,7 @@ Open a room to paint it.
   (the middle of the bottom edge). An entity type with a sprite shows that sprite on
   the map.
 - **Room properties:** name, size in whole screens (shrinking asks first and undo
-  brings the cut-off part back), tileset and music track.
+  brings the cut-off part back), tileset, music track and backgrounds.
 - **Guides:** a tile grid and lines at every screen boundary (240x160 pixels).
 - Zoom with the buttons or `Ctrl` + wheel; pan with the hand tool, `Space`, or the
   middle button. The mouse position is shown as a tile and screen coordinate.
@@ -230,7 +236,7 @@ The endpoint refuses requests from other web pages, like the rest of the server.
 | `project_overview`, `validate`, `list_assets` | Summarise the project, list its problems, list asset files |
 | `read_document`, `write_document`, `delete_document` | Whole documents, checked against the schemas before writing |
 | `room_read_cells`, `room_fill`, `room_paint` | Read and change tile layers and collision by cell, without touching the run-length data |
-| `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset and music, arrange the world map |
+| `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset, music and backgrounds, arrange the world map |
 | `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
 | `entity_type_set`, `entity_type_remove` | Entity types and their typed properties |
 | `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
@@ -270,15 +276,19 @@ fn main() {
 and binary data the game includes. It checks what the GBA can hold and says what is
 wrong in terms of your project: a tile with more than 15 colours, tiles needing more
 than 16 palettes, a tileset over 1024 tiles, a sprite sheet with more than one
-palette's worth of colours, an animation using a frame the sheet does not have. It
-reports every problem in one run.
+palette's worth of colours, an animation using a frame the sheet does not have,
+backgrounds that with the rooms' tiles need more than 4 layers, 16 palettes or the
+1024 tiles video memory holds. It reports every problem in one run. A background is
+cut into 8x8 tiles like a tileset and keeps one of each tile that repeats. A sprite sheet saved with no transparency at all is
+taken to be drawn on a flat backdrop: the colour of its top-left pixel becomes
+transparent.
 
 The game brings the result in with three macros:
 
 | Macro | Gives | Needs |
 | --- | --- | --- |
 | `include_data!()` | `data::WORLD`, `ROOMS`, `CLASSES`, constants for room and collision class indices, an `EntityKind` enum, and each room's collision cells and entities | nothing |
-| `include_gfx!()` | `gfx::TILESETS`, `ROOMS` (tile layers), one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
+| `include_gfx!()` | `gfx::TILESETS`, `ROOMS` (tile layers and backgrounds), `BACKGROUNDS`, one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
 | `include_audio!()` | `audio::TRACKS`, `SFX` and index constants | `agb_tracker` in the game |
 
 **The runtime** (`runtime/`):
@@ -290,15 +300,35 @@ The game brings the result in with three macros:
   walks from a room into the next without noticing. `World::camera_target` keeps the
   camera on rooms: it follows the player into touching rooms and stops at holes and
   edges of the map.
+- Collectibles: `Body::overlaps` tests the player against a box, `Collected` keeps a
+  bit for every entity that has been taken (numbered across rooms by
+  `World::entity_index`, and plain words a game can save), and
+  `SpriteSheet::hitbox_at` gives a placed entity's box.
 - `gfx` (behind the `agb` feature) has `WorldView`, which draws every room that
   shares a tileset as one scrolling space, streaming tiles in as the camera moves;
   `RoomView` for a single room on its own; and `SpriteSheet` and `AnimPlayer`.
+  `Animation::frame_at` animates many entities off one clock.
+- Backgrounds: a view draws the pictures of one room behind everything, each scrolled
+  by its share of the camera's movement. `WorldView::new` starts with those of the
+  room it is given; call `view.set_backgrounds(room, &graphics)` when the player
+  enters another. Rooms with the same pictures at the same speeds keep one unbroken
+  backdrop; different ones are swapped in a few frames later, laid down from the new
+  room's top-left corner.
 - Rooms drawn with different tilesets cannot share the screen (the GBA shows one
   set of 16 background palettes), so the game cuts between them instead of scrolling.
 
 `sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp,
-respawns on spikes, and walks from one room into the next while the camera scrolls
-across. Its `src/main.rs` is about 170 lines. It builds from its own folder, with the nightly toolchain pinned in
+respawns on spikes, walks from one room into the next while the camera scrolls
+across in front of a sky and hills that drift at a quarter and half of its speed,
+collects coins and diamonds that add to a count in the corner, and is sent back to
+where it entered the room by a patrolling sentry bot. Its `src/main.rs` is
+about 250 lines.
+
+A collectible is an entity type with a sprite and an integer `value` property: the
+sample takes any such entity the hero touches. To add another kind (a ruby, a key),
+import its PNG as a sprite, add the entity type in Project settings, give it a `value`
+in `studio/project.json`, and place it in rooms with the entities tool; no Rust
+changes. It builds from its own folder, with the nightly toolchain pinned in
 `sample/rust-toolchain.toml` and `agb-gbafix` installed (`cargo install agb-gbafix`):
 
 ```sh
@@ -320,13 +350,16 @@ studio/world.json           where each room sits on the world grid, in screens
 studio/audio.json           music tracks (MIDI + SF2, XM, MOD) and sound effects
 studio/tilesets/<id>.json   a PNG of 8x8 tiles and each tile's collision class
 studio/sprites/<id>.json    a sprite sheet: frame size, anchor, hitbox, animations
-studio/rooms/<id>.json      size in screens, up to 3 tile layers, entities, music
+studio/rooms/<id>.json      size in screens, up to 3 tile layers, up to 2 backgrounds, entities, music
 ```
 
 - A screen is 240x160 pixels, or 30x20 tiles. Rooms are 1 to 32 screens a side.
 - The world map may have a `size` in screens, counted from screen (0, 0).
 - Tile layers are run-length pairs `[count, cell, ...]`, row by row. Cell 0 is empty
   and cell n is tile n-1 of the room's tileset.
+- A room's `backgrounds`, back to front, are each
+  `{ "image": "assets/backgrounds/sky.png", "parallax": { "x": 25, "y": 0 } }`: a PNG
+  whose size is a multiple of 8, and its scroll speed in percent of the camera's.
 - Collision classes have a kind (empty, solid, one-way, slope, hazard, custom) and,
   for slopes, the floor height at the tile's left and right edge. What `hazard` and
   `custom` mean is up to the game.
@@ -362,12 +395,18 @@ Honest list of what does not work yet:
   recoloured and given a sprite in Project settings.)
 - **Map editor:** no selection, copy and paste, flip, or autotiling yet. Resizing a
   room keeps its top-left corner.
+- **Backgrounds:** the map editor shows them still; only the built game moves them.
+  A view shows one room's backgrounds at a time, so where two rooms with different
+  ones meet, the backdrop changes as the player crosses rather than at the border on
+  screen. A background's colours share the 16 background palettes with the tileset,
+  15 colours a tile: a photo will not convert, pixel art with few colours will.
 - **Budgets:** the studio does not yet show palette, tile or sprite budgets while you
   draw; the build helper reports them when it runs.
 - **Tilesets** are one 16-colour-palette set per tile (up to 16 palettes). The
   runtime uses 4 bits a pixel throughout.
-- **One ROM at a time**, and the game logic in the sample is a skeleton: no
-  enemies, items, doors or saving. Those are the game's job, built on the runtime.
+- **One ROM at a time**, and the game logic in the sample is a skeleton:
+  coins and diamonds to collect and one kind of enemy that hurts on touch, but no
+  health, combat, doors or saving. Those are the game's job, built on the runtime.
 - **Deleting** a room, tileset or sprite removes its file and cannot be undone
   from the studio.
 - Tested with the sample project and generated test files, in Chrome. Touch input,

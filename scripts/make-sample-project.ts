@@ -68,6 +68,13 @@ shaft.fill(28, 0, 2, 17, ROCK)
 shaft.fill(28, 20, 2, 17, ROCK)
 for (const [x, y] of [[4, 31], [16, 26], [6, 21], [18, 15], [8, 9]] as const) shaft.fill(x, y, 6, 1, GIRDER)
 
+// Behind both rooms: a far sky that drifts at a quarter of the camera's speed and
+// nearer hills at half. Sharing them, the rooms keep one unbroken backdrop.
+const backgrounds: Room['backgrounds'] = [
+  { image: 'assets/backgrounds/far.png', parallax: { x: 25, y: 0 } },
+  { image: 'assets/backgrounds/near.png', parallax: { x: 50, y: 0 } },
+]
+
 const rooms: Record<string, Room> = {
   entry: {
     version: FORMAT_VERSION,
@@ -79,7 +86,16 @@ const rooms: Record<string, Room> = {
       { name: 'Back wall', data: rleEncode(entryBack.cells) },
       { name: 'Ground', data: rleEncode(entry.cells) },
     ],
-    entities: [{ type: 'player-start', x: 24, y: 136, props: {} }],
+    backgrounds,
+    entities: [
+      { type: 'player-start', x: 24, y: 136, props: {} },
+      // Coins over the girder and on the ledge, and a diamond over the spike pit.
+      ...[100, 116, 132].map((x) => ({ type: 'coin', x, y: 92, props: {} })),
+      ...[224, 248, 272].map((x) => ({ type: 'coin', x, y: 122, props: {} })),
+      { type: 'diamond', x: 368, y: 112, props: {} },
+      // A sentry patrolling the floor under the girder: jump over it, or go over the girder.
+      { type: 'sentry-bot', x: 140, y: 136, props: {} },
+    ],
   },
   shaft: {
     version: FORMAT_VERSION,
@@ -88,7 +104,12 @@ const rooms: Record<string, Room> = {
     height: 2,
     tileset: 'tiles',
     layers: [{ name: 'Ground', data: rleEncode(shaft.cells) }],
-    entities: [],
+    backgrounds,
+    // A coin over each girder on the way up, and a diamond over the top one.
+    entities: [
+      ...[[44, 242], [152, 202], [72, 162], [168, 114]].map(([x, y]) => ({ type: 'coin', x: x!, y: y!, props: {} })),
+      { type: 'diamond', x: 88, y: 66, props: {} },
+    ],
   },
 }
 
@@ -106,10 +127,56 @@ const hero: Sprite = {
     { name: 'jump', frames: [{ index: 3, duration: 60 }], loop: true },
   ],
 }
-project.entityTypes = [{ id: 'player-start', name: 'Player start', colour: '#3e63dd', sprite: 'hero', props: [] }]
+// Collectibles: 8x8 sheets from make-sample-assets.ts, placed by the middle of their
+// bottom edge. The game takes any entity whose type has a `value`.
+const pickup = (name: string, file: string, frames: Sprite['animations'][number]['frames']): Sprite => ({
+  version: FORMAT_VERSION,
+  name,
+  image: `assets/sprites/${file}.png`,
+  frame: { width: 8, height: 8 },
+  anchor: { x: 4, y: 8 },
+  hitbox: { x: 0, y: 0, width: 8, height: 8 },
+  animations: [{ name: 'idle', frames, loop: true }],
+})
+const coin = pickup('Coin', 'coin', [0, 1, 2, 3].map((index) => ({ index, duration: 8 })))
+const diamond = pickup('Diamond', 'diamond', [{ index: 0, duration: 50 }, { index: 1, duration: 6 }])
+// The digits of the count in the corner: frame n is the digit n.
+const digits: Sprite = { version: FORMAT_VERSION, name: 'Counter digits', image: 'assets/sprites/digits.png', frame: { width: 8, height: 8 }, anchor: { x: 0, y: 0 }, animations: [] }
+// The enemy: a hand-drawn sheet of 32x32 frames on a flat backdrop, which the build
+// clears. The game walks it `patrol` pixels each way and hurts the hero that touches it.
+const sentry: Sprite = {
+  version: FORMAT_VERSION,
+  name: 'Sentry bot',
+  image: 'assets/sprites/sentry.png',
+  frame: { width: 32, height: 32 },
+  anchor: { x: 16, y: 32 },
+  hitbox: { x: 6, y: 6, width: 20, height: 26 },
+  animations: [
+    { name: 'walk', frames: [0, 1, 2, 3, 4, 5].map((index) => ({ index, duration: 8 })), loop: true },
+    { name: 'shoot', frames: [{ index: 6, duration: 8 }, { index: 7, duration: 4 }, { index: 8, duration: 8 }], loop: false },
+    { name: 'die', frames: [9, 10, 11].map((index) => ({ index, duration: 8 })), loop: false },
+  ],
+}
+project.entityTypes = [
+  { id: 'player-start', name: 'Player start', colour: '#3e63dd', sprite: 'hero', props: [] },
+  { id: 'coin', name: 'Coin', colour: '#f5c41e', sprite: 'coin', props: [{ name: 'value', type: 'int', default: 1 }] },
+  { id: 'diamond', name: 'Diamond', colour: '#46c8f0', sprite: 'diamond', props: [{ name: 'value', type: 'int', default: 5 }] },
+  { id: 'sentry-bot', name: 'Sentry bot', colour: '#e5484d', sprite: 'sentry-bot', props: [{ name: 'patrol', type: 'int', default: 32 }] },
+]
+// Sound effects from make-sample-assets.ts. The game plays them by these ids.
+audio.sfx = [
+  { id: 'coin', name: 'Coin', file: 'assets/audio/coin.wav' },
+  { id: 'diamond', name: 'Diamond', file: 'assets/audio/diamond.wav' },
+  { id: 'damage', name: 'Damage', file: 'assets/audio/damage.wav' },
+  { id: 'jump', name: 'Jump', file: 'assets/audio/jump.wav' },
+]
 project.build = { dev: 'mkdir -p dist && cargo build && agb-gbafix target/thumbv4t-none-eabi/debug/sample -o dist/sample-dev.gba', devRom: 'dist/sample-dev.gba', release: 'mkdir -p dist && cargo build --release && agb-gbafix target/thumbv4t-none-eabi/release/sample -o dist/sample.gba', releaseRom: 'dist/sample.gba' }
 
 write('sprite', 'hero', hero)
+write('sprite', 'coin', coin)
+write('sprite', 'diamond', diamond)
+write('sprite', 'digits', digits)
+write('sprite', 'sentry-bot', sentry)
 write('project', undefined, project)
 write('audio', undefined, audio)
 write('tileset', 'tiles', tiles)

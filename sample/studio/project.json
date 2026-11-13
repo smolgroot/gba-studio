@@ -60,6 +60,45 @@
       "colour": "#3e63dd",
       "sprite": "hero",
       "props": []
+    },
+    {
+      "id": "coin",
+      "name": "Coin",
+      "colour": "#f5c41e",
+      "sprite": "coin",
+      "props": [
+        {
+          "name": "value",
+          "type": "int",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "id": "diamond",
+      "name": "Diamond",
+      "colour": "#46c8f0",
+      "sprite": "diamond",
+      "props": [
+        {
+          "name": "value",
+          "type": "int",
+          "default": 5
+        }
+      ]
+    },
+    {
+      "id": "sentry-bot",
+      "name": "Sentry bot",
+      "colour": "#e5484d",
+      "sprite": "sentry-bot",
+      "props": [
+        {
+          "name": "patrol",
+          "type": "int",
+          "default": 32
+        }
+      ]
     }
   ]
 }

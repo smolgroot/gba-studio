@@ -142,6 +142,22 @@
       ]
     }
   ],
+  "backgrounds": [
+    {
+      "image": "assets/sky.png",
+      "parallax": {
+        "x": 25,
+        "y": 0
+      }
+    },
+    {
+      "image": "assets/sky.png",
+      "parallax": {
+        "x": 50,
+        "y": 100
+      }
+    }
+  ],
   "entities": [
     {
       "type": "player-start",

@@ -1,6 +1,6 @@
 // Checks across documents: the references and sizes a single schema cannot see.
 import { rleLength } from './rle.ts'
-import { SCREEN, SPRITE_SIZES, docPath } from './schema.ts'
+import { MAX_SCREEN_LAYERS, SCREEN, SPRITE_SIZES, docPath } from './schema.ts'
 import type { Audio, Project, Room, Sprite, Tileset, World } from './schema.ts'
 
 export interface Problem {
@@ -74,6 +74,14 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
       const length = rleLength(layer.data)
       if (length === null) add('error', file, `layer "${layer.name}" has malformed tile data`)
       else if (length !== cells) add('error', file, `layer "${layer.name}" holds ${length} cells, the room has ${cells}`)
+    }
+    const backgrounds = room.backgrounds ?? []
+    for (const background of backgrounds) {
+      needAsset(file, background.image)
+      if (!background.image.toLowerCase().endsWith('.png')) add('error', file, `background ${background.image} is not a PNG`)
+    }
+    if (room.layers.length + backgrounds.length > MAX_SCREEN_LAYERS) {
+      add('error', file, `${room.layers.length} tile layers and ${backgrounds.length} backgrounds are ${room.layers.length + backgrounds.length} layers; the GBA draws ${MAX_SCREEN_LAYERS} at once`)
     }
     if (room.collision) {
       const length = rleLength(room.collision)

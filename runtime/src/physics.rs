@@ -42,6 +42,12 @@ impl Body {
         (self.x + self.w / 2, self.y + self.h)
     }
 
+    /// Whether the body overlaps a box given by its top-left corner and size, in the
+    /// same pixels as the body: a pickup, an enemy, a trigger.
+    pub const fn overlaps(&self, x: i32, y: i32, w: i32, h: i32) -> bool {
+        self.x < x + w && x < self.x + self.w && self.y < y + h && y < self.y + self.h
+    }
+
     /// Whether any cell the body overlaps is of this kind.
     pub fn touches(&self, cells: &impl Cells, kind: CollisionKind) -> bool {
         let mut row = self.y.div_euclid(TILE);
@@ -248,6 +254,17 @@ mod tests {
             body.vy = (body.vy + 40).min(4 * SUB);
             body.step(&world.room_cells(0), false);
         }
+    }
+
+    #[test]
+    fn overlapping_a_box_needs_shared_pixels() {
+        let body = Body::new(10, 10, 8, 12);
+        assert!(body.overlaps(17, 21, 4, 4));
+        assert!(body.overlaps(12, 12, 2, 2));
+        // Touching edges share no pixel.
+        assert!(!body.overlaps(18, 10, 4, 4));
+        assert!(!body.overlaps(10, 22, 4, 4));
+        assert!(!body.overlaps(2, 10, 8, 8));
     }
 
     #[test]

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "name": "Diamond",
+  "image": "assets/sprites/diamond.png",
+  "frame": {
+    "width": 8,
+    "height": 8
+  },
+  "anchor": {
+    "x": 4,
+    "y": 8
+  },
+  "hitbox": {
+    "x": 0,
+    "y": 0,
+    "width": 8,
+    "height": 8
+  },
+  "animations": [
+    {
+      "name": "idle",
+      "frames": [
+        {
+          "index": 0,
+          "duration": 50
+        },
+        {
+          "index": 1,
+          "duration": 6
+        }
+      ],
+      "loop": true
+    }
+  ]
+}

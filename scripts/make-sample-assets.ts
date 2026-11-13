@@ -1,5 +1,7 @@
-// Writes the sample project's placeholder tileset: flat-colour test tiles, not art.
-// Replace sample/assets/tiles.png with your own drawing; the studio reloads it.
+// Writes the sample project's placeholder images and sounds: flat-colour test tiles,
+// a hero, collectibles, counter digits, two backgrounds, and four synthesised sound
+// effects. Not art: replace any file under sample/assets/ with your own and the studio
+// reloads it.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { crc32, deflateSync } from 'node:zlib'
 
@@ -106,9 +108,170 @@ LEGS.forEach((legs, frame) => {
   })
 })
 
+/** A sheet of 8x8 frames side by side, each drawn from eight rows of text. `.` is transparent. */
+function sheet(frames: string[][], colours: Record<string, Rgb>): Buffer {
+  const w = frames.length * 8
+  const pixels = new Uint8Array(w * 8 * 4)
+  frames.forEach((rows, frame) => {
+    rows.forEach((row, y) => {
+      ;[...row].forEach((c, x) => {
+        const colour = colours[c]
+        if (colour) pixels.set([...colour, 255], (y * w + frame * 8 + x) * 4)
+      })
+    })
+  })
+  return encode(w, 8, pixels)
+}
+
+// A coin turning: face on, three-quarters, edge on, three-quarters.
+const COIN_COLOURS: Record<string, Rgb> = { o: [120, 72, 8], g: [245, 196, 30], l: [255, 240, 150], d: [196, 138, 14] }
+const COIN_TURNED = ['...oo...', '..olgo..', '..olgo..', '..oggo..', '..oggo..', '..ogdo..', '..ogdo..', '...oo...']
+const COIN = [
+  ['..oooo..', '.olgggo.', 'olgggggo', 'olggdggo', 'olggdggo', 'oggggddo', '.ogdddo.', '..oooo..'],
+  COIN_TURNED,
+  ['...oo...', '...ogo..', '...ogo..', '...ogo..', '...ogo..', '...ogo..', '...ogo..', '...oo...'],
+  COIN_TURNED,
+]
+// A diamond, and the same with a glint crossing it.
+const DIAMOND_COLOURS: Record<string, Rgb> = { o: [16, 52, 96], c: [70, 200, 240], l: [190, 245, 255], d: [30, 130, 200], w: [255, 255, 255] }
+const DIAMOND = [
+  ['........', '.oooooo.', 'olllccdo', 'olccccdo', '.occcdo.', '..ocdo..', '...oo...', '........'],
+  ['........', '.oooooo.', 'olwlccdo', 'owwwccdo', '.owccdo.', '..ocdo..', '...oo...', '........'],
+]
+// Digits 0 to 9 for the counter, one a frame.
+const DIGIT_COLOURS: Record<string, Rgb> = { o: [24, 20, 37], w: [240, 240, 240] }
+const SEGMENTS: Record<string, string[]> = {
+  '0': ['www', 'w.w', 'w.w', 'w.w', 'www'],
+  '1': ['.w.', 'ww.', '.w.', '.w.', 'www'],
+  '2': ['www', '..w', 'www', 'w..', 'www'],
+  '3': ['www', '..w', 'www', '..w', 'www'],
+  '4': ['w.w', 'w.w', 'www', '..w', '..w'],
+  '5': ['www', 'w..', 'www', '..w', 'www'],
+  '6': ['www', 'w..', 'www', 'w.w', 'www'],
+  '7': ['www', '..w', '..w', '.w.', '.w.'],
+  '8': ['www', 'w.w', 'www', 'w.w', 'www'],
+  '9': ['www', 'w.w', 'www', '..w', 'www'],
+}
+/** A 3x5 glyph centred in a frame with a dark outline, so it reads over any tile. */
+function digit(glyph: string[]): string[] {
+  const lit = (x: number, y: number) => glyph[y - 1]?.[x - 2] === 'w'
+  return Array.from({ length: 8 }, (_, y) =>
+    Array.from({ length: 8 }, (_, x) => {
+      if (lit(x, y)) return 'w'
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (lit(x + dx, y + dy)) return 'o'
+      return '.'
+    }).join(''),
+  )
+}
+
+// Two pictures for behind the rooms, each 128 pixels wide and one screen tall, made to
+// repeat sideways: a night sky over far mountains, and nearer hills with nothing above
+// them, so the sky shows through. A few flat colours each: one GBA palette apiece.
+const BACKDROP = { width: 128, height: 160 }
+/** A zigzag between 0 and 1 that repeats every `period` pixels. */
+const zigzag = (x: number, period: number) => Math.abs(((x / period) % 1) * 2 - 1)
+function backdrop(colour: (x: number, y: number) => Rgb | null): Buffer {
+  const pixels = new Uint8Array(BACKDROP.width * BACKDROP.height * 4)
+  for (let y = 0; y < BACKDROP.height; y++) for (let x = 0; x < BACKDROP.width; x++) {
+    const c = colour(x, y)
+    if (c) pixels.set([...c, 255], (y * BACKDROP.width + x) * 4)
+  }
+  return encode(BACKDROP.width, BACKDROP.height, pixels)
+}
+const SKY: Rgb[] = [[14, 16, 36], [20, 24, 52], [28, 34, 70], [38, 46, 90]]
+const STAR: Rgb = [206, 206, 232]
+const far = backdrop((x, y) => {
+  const top = BACKDROP.height - Math.round(26 + 30 * zigzag(x + 20, 64) + 10 * zigzag(x, 16))
+  if (y > top) return [50, 44, 84]
+  if (y === top) return [76, 66, 116]
+  // A star wherever a scramble of the position says so, thinning out towards the mountains.
+  if (y < 96 && (x * 37 + y * 101 + ((x * y) % 13) * 7) % 211 === 0) return STAR
+  return SKY[Math.min(3, Math.floor(y / 36))]!
+})
+const near = backdrop((x, y) => {
+  const top = BACKDROP.height - Math.round(34 + 34 * zigzag(x, 128) ** 2 + 6 * zigzag(x + 5, 32))
+  return y > top + 1 ? [30, 26, 50] : y >= top ? [46, 40, 72] : null
+})
+
 const dir = new URL('../sample/assets/', import.meta.url)
 mkdirSync(dir, { recursive: true })
+const backgrounds = new URL('backgrounds/', dir)
+mkdirSync(backgrounds, { recursive: true })
+writeFileSync(new URL('far.png', backgrounds), far)
+writeFileSync(new URL('near.png', backgrounds), near)
+console.log(`wrote sample/assets/backgrounds/far.png and near.png (${BACKDROP.width}x${BACKDROP.height}, repeating sideways)`)
 writeFileSync(new URL('tiles.png', dir), png)
 writeFileSync(new URL('hero.png', dir), encode(64, 16, hero))
+const sprites = new URL('sprites/', dir)
+mkdirSync(sprites, { recursive: true })
+writeFileSync(new URL('coin.png', sprites), sheet(COIN, COIN_COLOURS))
+writeFileSync(new URL('diamond.png', sprites), sheet(DIAMOND, DIAMOND_COLOURS))
+writeFileSync(new URL('digits.png', sprites), sheet('0123456789'.split('').map((d) => digit(SEGMENTS[d]!)), DIGIT_COLOURS))
+console.log('wrote sample/assets/sprites/coin.png (32x8), diamond.png (16x8) and digits.png (80x8), frames of 8x8')
 console.log('wrote sample/assets/hero.png (64x16, 4 frames of 16x16)')
 console.log(`wrote sample/assets/tiles.png (${width}x${height}, ${COLS * ROWS} tiles)`)
+
+// Sound effects: 8-bit mono WAV at the rate the game's mixer runs at (agb's
+// Frequency::Hz10512). A file at any other rate plays at the wrong speed.
+const RATE = 10512
+
+/** A note or a glide: `from` to `to` in Hz over `seconds`, fading out from `volume`. */
+type Tone = { from: number; to?: number; seconds: number; volume?: number; noise?: number }
+
+/** Square-wave tones one after another. Only the harmonics the rate can carry are summed, so high notes stay clean. */
+function synth(tones: Tone[]): Float32Array {
+  const out = new Float32Array(Math.ceil(tones.reduce((sum, t) => sum + t.seconds, 0) * RATE))
+  let at = 0
+  let seed = 1
+  for (const { from, to = from, seconds, volume = 1, noise = 0 } of tones) {
+    const length = Math.round(seconds * RATE)
+    let phase = 0
+    for (let i = 0; i < length && at < out.length; i++, at++) {
+      const t = i / length
+      const hz = from + (to - from) * t
+      phase += (2 * Math.PI * hz) / RATE
+      let square = 0
+      for (let k = 1; k * hz < RATE * 0.45; k += 2) square += Math.sin(k * phase) / k
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      const hiss = (seed / 0x40000000 - 1) * noise
+      // A few milliseconds of attack so a note does not start with a click.
+      const envelope = Math.min(1, i / (RATE * 0.003)) * (1 - t) ** 1.5
+      out[at] = (square * (4 / Math.PI) * (1 - noise) + hiss) * envelope * volume * 0.7
+    }
+  }
+  return out
+}
+
+function wav(samples: Float32Array): Buffer {
+  // A chunk of odd length is followed by a padding byte.
+  const out = Buffer.alloc(44 + samples.length + (samples.length & 1))
+  out.write('RIFF', 0, 'latin1')
+  out.writeUInt32LE(out.length - 8, 4)
+  out.write('WAVEfmt ', 8, 'latin1')
+  out.writeUInt32LE(16, 16)
+  out.writeUInt16LE(1, 20) // PCM
+  out.writeUInt16LE(1, 22) // mono
+  out.writeUInt32LE(RATE, 24)
+  out.writeUInt32LE(RATE, 28) // bytes a second
+  out.writeUInt16LE(1, 32) // bytes a sample
+  out.writeUInt16LE(8, 34) // bits a sample
+  out.write('data', 36, 'latin1')
+  out.writeUInt32LE(samples.length, 40)
+  samples.forEach((sample, i) => out.writeUInt8(Math.round(128 + Math.max(-1, Math.min(1, sample)) * 127), 44 + i))
+  return out
+}
+
+const SOUNDS: Record<string, Tone[]> = {
+  // Two rising notes.
+  coin: [{ from: 988, seconds: 0.06 }, { from: 1319, seconds: 0.3 }],
+  // A quick arpeggio up an octave that rings out.
+  diamond: [{ from: 1319, seconds: 0.06 }, { from: 1661, seconds: 0.06 }, { from: 1976, seconds: 0.06 }, { from: 2637, seconds: 0.45 }],
+  // A harsh falling buzz.
+  damage: [{ from: 420, to: 180, seconds: 0.1, noise: 0.5 }, { from: 240, to: 70, seconds: 0.28, noise: 0.35 }],
+  // A short glide up.
+  jump: [{ from: 280, to: 760, seconds: 0.14, volume: 0.8 }],
+}
+const audio = new URL('audio/', dir)
+mkdirSync(audio, { recursive: true })
+for (const [name, tones] of Object.entries(SOUNDS)) writeFileSync(new URL(`${name}.wav`, audio), wav(synth(tones)))
+console.log(`wrote sample/assets/audio/${Object.keys(SOUNDS).join('.wav, ')}.wav (8-bit mono, ${RATE} Hz)`)

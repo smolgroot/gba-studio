@@ -1,5 +1,9 @@
 //! PNG to the GBA's formats: 4-bit tiles, 16-colour palettes of 15-bit colour.
-use std::{collections::BTreeSet, fs::File, path::Path};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fs::File,
+    path::Path,
+};
 
 pub const TILE: u32 = 8;
 /// Bytes of one 8x8 tile at 4 bits a pixel.
@@ -45,6 +49,18 @@ impl Image {
         (a >= 128).then(|| (r as u16 >> 3) | ((g as u16 >> 3) << 5) | ((b as u16 >> 3) << 10))
     }
 
+    /// For a sprite sheet saved with no transparency at all: clears its background, the
+    /// colour of its top-left pixel, as sheets drawn on a flat backdrop mean it.
+    fn keyed(&self) -> Option<Self> {
+        if self.pixels.iter().any(|p| p[3] < 128) {
+            return None;
+        }
+        let key = self.colour(0, 0);
+        let pixels = (0..self.height).flat_map(|y| (0..self.width).map(move |x| (x, y)));
+        let pixels = pixels.map(|(x, y)| if self.colour(x, y) == key { [0; 4] } else { self.pixels[(y * self.width + x) as usize] }).collect();
+        Some(Self { width: self.width, height: self.height, pixels })
+    }
+
     fn colours_in(&self, left: u32, top: u32, width: u32, height: u32) -> BTreeSet<u16> {
         (0..height).flat_map(|y| (0..width).map(move |x| (x, y))).filter_map(|(x, y)| self.colour(left + x, top + y)).collect()
     }
@@ -84,7 +100,7 @@ impl Tiles {
 /// Cuts an image into 8x8 tiles and sorts their colours into at most 16 palettes of 15.
 pub fn tileset(image: &Image) -> Result<Tiles, String> {
     if image.width % TILE != 0 || image.height % TILE != 0 {
-        return Err(format!("is {}x{} pixels; a tileset's size must be a multiple of 8", image.width, image.height));
+        return Err(format!("is {}x{} pixels; an image of tiles must be a multiple of 8 each way", image.width, image.height));
     }
     let (cols, rows) = (image.width / TILE, image.height / TILE);
     let mut palettes: Vec<Vec<u16>> = Vec::new();
@@ -126,6 +142,34 @@ pub fn tileset(image: &Image) -> Result<Tiles, String> {
     Ok(Tiles { data, tile_palettes, palettes: palettes.iter().map(|p| hardware_palette(p)).collect() })
 }
 
+pub struct Picture {
+    /// The distinct tiles of the picture.
+    pub tiles: Tiles,
+    /// Size in tiles.
+    pub cols: u32,
+    pub rows: u32,
+    /// Which of `tiles` each cell shows, row by row.
+    pub cells: Vec<u16>,
+}
+
+/// Cuts a background picture into tiles like a tileset, keeping one of each tile that
+/// repeats: video memory holds few tiles, and skies and walls are mostly repetition.
+pub fn background(image: &Image) -> Result<Picture, String> {
+    let all = tileset(image)?;
+    let mut tiles = Tiles { data: Vec::new(), tile_palettes: Vec::new(), palettes: all.palettes };
+    let mut seen: HashMap<(u8, &[u8]), u16> = HashMap::new();
+    let mut cells = Vec::with_capacity(all.tile_palettes.len());
+    for (pixels, &palette) in all.data.chunks_exact(TILE_BYTES).zip(&all.tile_palettes) {
+        let next = tiles.tile_palettes.len() as u16;
+        cells.push(*seen.entry((palette, pixels)).or_insert_with(|| {
+            tiles.data.extend_from_slice(pixels);
+            tiles.tile_palettes.push(palette);
+            next
+        }));
+    }
+    Ok(Picture { tiles, cols: image.width / TILE, rows: image.height / TILE, cells })
+}
+
 pub struct Sheet {
     /// Each frame's 8x8 tiles row by row, [`TILE_BYTES`] each, frame after frame.
     pub data: Vec<u8>,
@@ -134,7 +178,10 @@ pub struct Sheet {
 }
 
 /// Cuts a sprite sheet into frames of one size, all drawn with one 15-colour palette.
+/// A sheet with no transparent pixel has its background colour (its top-left pixel) cleared.
 pub fn sheet(image: &Image, width: u32, height: u32) -> Result<Sheet, String> {
+    let keyed = image.keyed();
+    let image = keyed.as_ref().unwrap_or(image);
     if image.width < width || image.height < height {
         return Err(format!("is {}x{} pixels, smaller than one {width}x{height} frame", image.width, image.height));
     }
@@ -208,6 +255,21 @@ mod tests {
     }
 
     #[test]
+    fn a_background_keeps_one_of_each_tile() {
+        // Three tiles across and two down: all one colour, but for the last, which has a pixel of another.
+        let mut pixels = vec![rgb(1); 24 * 16];
+        pixels[15 * 24 + 23] = rgb(2);
+        let picture = background(&Image::from_pixels(24, 16, pixels)).unwrap();
+        assert_eq!((picture.cols, picture.rows), (3, 2));
+        assert_eq!(picture.cells, [0, 0, 0, 0, 0, 1]);
+        assert_eq!(picture.tiles.count(), 2);
+        assert_eq!(picture.tiles.data.len(), 2 * TILE_BYTES);
+        assert_eq!(picture.tiles.data[TILE_BYTES - 1], 0x11);
+        assert_eq!(picture.tiles.data[2 * TILE_BYTES - 1], 0x21);
+        assert!(background(&Image::from_pixels(24, 12, vec![CLEAR; 24 * 12])).is_err());
+    }
+
+    #[test]
     fn cuts_sheets_into_frames_of_tiles() {
         // Two 16x16 frames; the second has one pixel set in its bottom-right tile.
         let mut pixels = vec![CLEAR; 32 * 16];
@@ -220,5 +282,21 @@ mod tests {
         assert_eq!(sheet.data[4 * TILE_BYTES + 3 * TILE_BYTES + 31], 0x10);
         assert_eq!(sheet.palette[0], 0);
         assert_ne!(sheet.palette[1], 0);
+    }
+
+    #[test]
+    fn a_sheet_with_no_transparency_loses_its_background_colour() {
+        // One 8x8 frame on a flat backdrop, with one pixel drawn at the end of its first row.
+        let mut pixels = vec![rgb(1); 8 * 8];
+        pixels[7] = rgb(2);
+        let keyed = sheet(&Image::from_pixels(8, 8, pixels.clone()), 8, 8).unwrap();
+        assert_eq!(keyed.data[3], 0x10);
+        assert!(keyed.data[4..].iter().all(|&b| b == 0));
+        assert_eq!(keyed.palette[2], 0, "the backdrop takes no palette entry");
+        // With a transparent pixel anywhere, every colour is kept as drawn.
+        pixels[63] = CLEAR;
+        let kept = sheet(&Image::from_pixels(8, 8, pixels), 8, 8).unwrap();
+        assert_ne!(kept.data[0], 0);
+        assert_ne!(kept.palette[2], 0);
     }
 }

@@ -97,7 +97,11 @@
         0,
         1,
         2,
-        11,
+        3,
+        0,
+        3,
+        4,
+        5,
         0,
         6,
         4,
@@ -109,15 +113,27 @@
         0,
         1,
         2,
-        59,
+        8,
+        0,
+        2,
+        3,
+        49,
         0,
         1,
         2,
-        59,
+        7,
+        0,
+        3,
+        3,
+        49,
         0,
         1,
         2,
-        23,
+        6,
+        0,
+        4,
+        3,
+        13,
         0,
         1,
         5,
@@ -142,10 +158,74 @@
       ]
     }
   ],
+  "backgrounds": [
+    {
+      "image": "assets/backgrounds/far.png",
+      "parallax": {
+        "x": 25,
+        "y": 0
+      }
+    },
+    {
+      "image": "assets/backgrounds/near.png",
+      "parallax": {
+        "x": 50,
+        "y": 0
+      }
+    }
+  ],
   "entities": [
     {
       "type": "player-start",
       "x": 24,
+      "y": 136,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 100,
+      "y": 92,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 116,
+      "y": 92,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 132,
+      "y": 92,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 224,
+      "y": 122,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 248,
+      "y": 122,
+      "props": {}
+    },
+    {
+      "type": "coin",
+      "x": 272,
+      "y": 122,
+      "props": {}
+    },
+    {
+      "type": "diamond",
+      "x": 368,
+      "y": 112,
+      "props": {}
+    },
+    {
+      "type": "sentry-bot",
+      "x": 140,
       "y": 136,
       "props": {}
     }

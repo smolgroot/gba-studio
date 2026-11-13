@@ -75,6 +75,14 @@ describe('schemas', () => {
     expect(Room.safeParse({ ...room, layers: [layer, layer, layer] }).success).toBe(true)
     expect(Room.safeParse({ ...room, layers: [layer, layer, layer, layer] }).success).toBe(false)
   })
+  it('limits a room to two backgrounds with a scroll speed of 0 to 100 percent', () => {
+    const room = { version: 1, name: 'R', width: 1, height: 1, tileset: 't', layers: [{ name: 'L', data: [CELLS, 0] }] }
+    const sky = { image: 'assets/sky.png', parallax: { x: 25, y: 0 } }
+    expect(Room.safeParse({ ...room, backgrounds: [sky, sky] }).success).toBe(true)
+    expect(Room.safeParse({ ...room, backgrounds: [sky, sky, sky] }).success).toBe(false)
+    expect(Room.safeParse({ ...room, backgrounds: [{ ...sky, parallax: { x: 150, y: 0 } }] }).success).toBe(false)
+    expect(Room.safeParse({ ...room, backgrounds: [{ image: '../sky.png', parallax: { x: 0, y: 0 } }] }).success).toBe(false)
+  })
   it('builds document paths and refuses bad ids', () => {
     expect(docPath('project')).toBe('studio/project.json')
     expect(docPath('room', 'cave-1')).toBe('studio/rooms/cave-1.json')
@@ -122,6 +130,18 @@ describe('validateProject', () => {
     expect(validateProject(d, () => true)).toEqual([])
     d.world!.rooms[0]!.x = 2
     expect(messages(d)).toContain('room "cave" is outside the 2×1 map')
+  })
+  it('counts backgrounds and tile layers against the four the console draws', () => {
+    const d = docs()
+    const layer = { name: 'L', data: [CELLS, 0] }
+    const sky = { image: 'assets/sky.png', parallax: { x: 25, y: 0 } }
+    d.rooms.cave = { ...d.rooms.cave!, layers: [layer, layer], backgrounds: [sky, sky] }
+    expect(messages(d)).toEqual([])
+    expect(messages(d, () => false)).toContain('file not found: assets/sky.png')
+    d.rooms.cave = { ...d.rooms.cave!, layers: [layer, layer, layer] }
+    expect(messages(d)).toContain('3 tile layers and 2 backgrounds are 5 layers; the GBA draws 4 at once')
+    d.rooms.cave = { ...d.rooms.cave!, layers: [layer], backgrounds: [{ ...sky, image: 'assets/sky.aseprite' }] }
+    expect(messages(d)).toContain('background assets/sky.aseprite is not a PNG')
   })
   it('rejects sprite frames the hardware has no size for', () => {
     const d = docs()

@@ -25,6 +25,8 @@ interface EditorState {
   hidden: number[]
   showGrid: boolean
   showCollision: boolean
+  /** Whether the room's background pictures are drawn behind its tiles. */
+  showBackgrounds: boolean
   set: (patch: Partial<Omit<EditorState, 'set'>>) => void
 }
 
@@ -38,5 +40,6 @@ export const useEditor = create<EditorState>((set) => ({
   hidden: [],
   showGrid: true,
   showCollision: false,
+  showBackgrounds: true,
   set: (patch) => set(patch),
 }))
