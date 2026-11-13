@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "name": "Sentry bot",
+  "image": "assets/sprites/sentry.png",
+  "frame": {
+    "width": 32,
+    "height": 32
+  },
+  "anchor": {
+    "x": 16,
+    "y": 32
+  },
+  "animations": [
+    {
+      "name": "walk",
+      "frames": [
+        {
+          "index": 0,
+          "duration": 8
+        },
+        {
+          "index": 0,
+          "duration": 16
+        }
+      ],
+      "loop": true
+    }
+  ]
+}

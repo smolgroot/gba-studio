@@ -1,139 +1,356 @@
 # GBA-Studio
 
-A browser tool for building Game Boy Advance Metroidvanias from assets you make
-yourself: PNG pixel art, MIDI or tracker music, and rooms painted on a grid of GBA
-screens. It targets Rust games built on [agb](https://agbrs.dev) and knows nothing
-about any particular game.
+A browser-based studio for making Game Boy Advance Metroidvanias from assets you
+create yourself: pixel art in PNG, music in MIDI or tracker files, and rooms painted
+on a grid of GBA screens. It edits a project of plain JSON files, converts it to
+GBA-ready data for Rust games built on [agb](https://agbrs.dev), and runs the
+resulting ROM in the browser.
 
-Status: **the editors work and a ROM can be built and played from them.** A sample
-game in `sample/` is made entirely from a studio project; the Build panel runs its
-build and the Play panel runs the result in the browser.
+It knows nothing about any particular game. It knows tiles, collision classes,
+entities with typed properties, sprites and animations, and music. What an entity
+*does* is written in each game's Rust code.
 
-## What it does today
+**Status: early but working end to end.** You can draw a project's content in the
+editors, build a ROM from it, and play that ROM in the studio. A sample game in
+`sample/` is made entirely from a studio project. Things that are not done yet are
+listed under [Known limits](#known-limits) and the [roadmap](#roadmap).
 
-- **Map editor:** brush, eraser, rectangle, fill and tile picker on up to three
-  tile layers; multi-tile stamps picked by dragging across the tileset; a collision
-  layer for cells that should differ from their tile; entities placed, dragged and
-  given properties; guides at every screen boundary.
-- **World:** drag rooms on a grid of screens, choose the start room. Overlapping
-  rooms are reported as problems.
-- **Tilesets:** import a PNG, paint a collision class onto each tile.
-- **Sprites:** import a sheet, choose a GBA frame size, build animations by clicking
-  frames, set per-frame timing in 60 Hz ticks, anchor and hitbox, and watch the
-  result play. Entity types can show their sprite on the map.
-- **Audio:** import WAV as sound effects, and XM, MOD and MIDI (with an SF2
-  soundfont) as music tracks; assign a track to a room. WAV plays in the studio;
-  music formats are only converted at build time, so they cannot be heard here yet.
-- **Build and Play:** run the project's dev or release build (commands set in
-  Project settings), read the streamed log, stop it, and play the ROM in the browser
-  on the Pecten emulator core, with sound and on-screen buttons on touch devices. The
-  ROM restarts by itself when rebuilt.
-- **Everywhere:** every edit saves by itself, undo and redo per document, and files
-  changed on disk by other tools (your pixel editor, git, a coding agent) reload live.
+## Contents
 
-Keys in the map editor: B brush, E eraser, R rectangle, G fill, I pick (or Alt +
-click), N entities, H pan (or hold Space, or the middle button), Delete removes the
-selected entity, right button erases, Ctrl + wheel zooms, Ctrl+Z and Ctrl+Shift+Z
-undo and redo.
+- [Features](#features)
+- [Running it](#running-it)
+- [Making a game with it](#making-a-game-with-it)
+- [Project format](#project-format)
+- [Repository layout](#repository-layout)
+- [Known limits](#known-limits)
+- [Roadmap](#roadmap)
 
-## Run it
+## Features
 
-Needs Node 24 or later and pnpm.
+### Interface
+
+- Dark, compact interface in the style of an image editor, drawn at 1.25x.
+- **Wide screens:** dockable panels that can be dragged, tabbed and split: Project,
+  one tab per open item, Properties, Tiles & Layers, and Problems and Build below.
+- **Narrow screens and phones:** one panel at a time, switched with tabs along the
+  bottom, with larger touch targets.
+- The open item is kept in the address bar (`#room:entry`), so a reload or a pasted
+  link comes back to it.
+
+### Saving, undo and live reload
+
+- Every edit saves by itself a moment after you make it. If a save fails, the top bar
+  says so and the edit stays on screen.
+- Undo and redo work per document (`Ctrl+Z`, `Ctrl+Shift+Z`), up to 200 steps.
+- Files changed on disk by something else (your pixel editor, git, a coding agent)
+  show up in the studio straight away. Edits you have not saved yet are kept.
+- Problems are collected across the whole project and listed in the Problems panel;
+  click one to open the item it belongs to. They cover missing files, unknown
+  references, rooms with the wrong amount of tile data, overlapping rooms on the
+  world map, sprite frames that are not a GBA size, and more.
+
+### Map editor
+
+Open a room to paint it.
+
+- **Tools:** brush, eraser, rectangle, flood fill, tile picker, entities and pan.
+- **Layers:** up to three tile layers per room (the GBA has four backgrounds, and one
+  is left to the game). Add, rename, reorder, hide and delete layers. A room opens on
+  its front layer.
+- **Stamps:** click a tile in the tileset palette, or drag across several to paint
+  a block. Painting a stamp over an area repeats its pattern from where the stroke
+  began.
+- **Collision layer:** tiles carry the collision class given to them in their
+  tileset. Paint on the collision layer only where a cell should differ; the eraser
+  gives a cell back to its tile. A toggle shows the result over the map.
+- **Entities:** place them with a click, drag them, edit their position and typed
+  properties in Properties, delete them with `Delete`. They are placed by their feet
+  (the middle of the bottom edge). An entity type with a sprite shows that sprite on
+  the map.
+- **Room properties:** name, size in whole screens (shrinking asks first and undo
+  brings the cut-off part back), tileset and music track.
+- **Guides:** a tile grid and lines at every screen boundary (240x160 pixels).
+- Zoom with the buttons or `Ctrl` + wheel; pan with the hand tool, `Space`, or the
+  middle button. The mouse position is shown as a tile and screen coordinate.
+
+| Key | Action |
+| --- | --- |
+| `B` / `E` | Brush / eraser |
+| `R` / `G` | Rectangle / fill |
+| `I`, or `Alt` + click | Pick a tile from the map |
+| `N` | Entities |
+| `H`, or hold `Space` | Pan |
+| `Delete` | Remove the selected entity |
+| Right mouse button | Erase while using the brush or rectangle |
+
+### World map
+
+Rooms are whole numbers of screens placed on a grid. Drag rooms to arrange them,
+choose the start room, take a room off the map or put an unplaced one back. A
+new room is placed beside the others. Rooms that touch on this grid are the
+connections the runtime uses to carry the player from one to the next.
+
+### Tilesets
+
+Import a PNG whose size is a multiple of 8, and paint a collision class on each tile.
+The editor shows the image size, tile count and the number of distinct GBA colours
+(colours are reduced to 5 bits a channel, as the hardware does).
+
+### Sprites
+
+Import a PNG sheet (or an Aseprite file, which is converted at build time but cannot
+be previewed here yet), choose one of the twelve GBA sprite sizes, then:
+
+- build **animations** by clicking frames in the sheet, in the order they play;
+- set the duration of each step in ticks (1 tick is one GBA frame, 1/60 s), reorder
+  or remove steps, and choose whether it loops;
+- set the **anchor** (the point placed at an entity's position) and a **hitbox**;
+- watch the result in a live preview that plays at the console's real speed, with the
+  anchor and hitbox drawn over it.
+
+### Audio
+
+- Import **WAV** (sound effects), **XM** and **MOD** (tracker music), and **MIDI**
+  with an **SF2** soundfont (agb needs one to turn notes into sound).
+- Name tracks and effects, remove them from the project (the file stays on disk),
+  pick which soundfont a MIDI file uses, and give a room a music track.
+- Sound effects play in the studio. Music formats are converted when the ROM is
+  built, so you hear them in the Play panel, not in the Audio list.
+
+### Build and Play
+
+- **Build panel:** run the project's dev or release build (commands are set in
+  Project settings), with the output streamed live; stop a running build. Failed
+  builds are marked and the exit code shown.
+- **Play panel:** runs the built ROM on the
+  [Pecten](https://github.com/smolgroot/pecten) emulator core in the browser at the
+  console's frame rate, with sound (enable it with a click, as browsers require) and
+  on-screen buttons on touch devices. It restarts the game by itself when the ROM is
+  rebuilt, if you leave that on. Keyboard: arrows, `X` is A, `Z` is B, `Enter` is
+  Start, `Shift` is Select, `A` and `S` are L and R.
+
+### Importing files
+
+Images, music and sounds are chosen on your device and stored in the game folder
+(`assets/sprites/`, `assets/audio/`, and so on). A file is never replaced without
+asking. Your source files stay the source of truth: the studio reads and watches them
+and never rewrites them.
+
+## Running it
+
+Needs Node 24 or later and [pnpm](https://pnpm.io).
 
 ```sh
 pnpm install
-pnpm build                       # build the web app once
-pnpm start ../my-game            # serve that game folder at http://127.0.0.1:4517
-pnpm start sample                # or the bundled sample project
+pnpm build                  # build the web app once
+pnpm start sample           # serve the sample project at http://127.0.0.1:4517
+pnpm start ../my-game       # or any game folder
 ```
 
-`--port N` changes the port. `--lan` listens on every network interface so a tablet
-can open the studio; anyone on that network can then edit the game folder, so use it
-on networks you trust.
+- `--port N` changes the port.
+- `--lan` listens on every network interface, so a tablet on the same network can
+  open the studio. Anyone on that network can then edit the game folder and run its
+  build command, so use it only on networks you trust.
+- Opening a folder with no project offers to create one. That adds a `studio/` folder
+  with three small JSON files and touches nothing else.
+- The server can only read and write inside the folder it was given (symlinks that
+  point out of it are refused), and refuses writes from other web pages.
 
-Opening a folder with no project offers to create one. That adds a `studio/` folder
-with three JSON files and touches nothing else.
-
-For work on the studio itself, `pnpm dev` runs the server against `sample/` and the
-app under Vite with hot reload at http://localhost:5173.
+For work on the studio itself, `pnpm dev` runs the server on `sample/` and the app
+under Vite with hot reload at http://localhost:5173.
 
 ```sh
-pnpm test        # unit tests
+pnpm test        # TypeScript tests (schemas, validation, helpers)
 pnpm typecheck
+cargo test       # Rust tests (build helper, collision and physics)
 ```
-
-## Layout
-
-| Folder | What it is |
-| --- | --- |
-| `core/` | The project format (zod schemas), cross-file validation, GBA colour and run-length helpers. Shared by server and app. |
-| `server/` | Local Node server: JSON API over one game folder, file previews, file watcher over a websocket. Never reads or writes outside the folder it was given. |
-| `app/` | React + Vite + MUI interface, with dockable panels on wide screens and one panel at a time on narrow ones. |
-| `sample/` | A two-room sample project with a placeholder tileset. Regenerate with `node scripts/make-sample-assets.ts` and `node scripts/make-sample-project.ts`. |
 
 ## Making a game with it
 
-A game is a Rust crate on agb that depends on the two crates here:
+A game is a Rust crate on agb that depends on two crates from this repository:
 
 ```toml
 [dependencies]
 gba_studio_rt = { path = "../runtime", features = ["agb"] }
+
 [build-dependencies]
 gba_studio_build = { path = "../codegen" }
 ```
 
-`build.rs` is one line, `gba_studio_build::build();`. It reads `studio/`, converts the
-PNGs to GBA tiles and palettes (a tileset's tiles must fit 16 palettes of 15 colours,
-a sprite sheet one palette of 15), and fails the build with every problem it found.
-The game brings the result in with `include_data!()` (rooms, collision, entities,
-the world), `include_gfx!()` (tiles, sprites, animations) and `include_audio!()`.
-`gba_studio_rt` also has a `Body` that moves through the collision cells, with walls,
-one-way platforms and slopes, and `RoomView`, which scrolls a room larger than the
-GBA's backgrounds. `sample/src/main.rs` is a complete example in about 150 lines.
+`build.rs` is one line:
 
-The sample builds from its own folder (it needs the nightly toolchain pinned in
-`sample/rust-toolchain.toml` and `cargo install agb-gbafix`):
-
-```sh
-cd sample && cargo build        # or use Build dev in the studio
+```rust
+fn main() {
+    gba_studio_build::build();
+}
 ```
 
-`pnpm test` runs the TypeScript tests and `cargo test` the Rust ones. After rebuilding
-the Pecten emulator core, `scripts/sync-pecten.sh` copies it into the app.
+**The build helper** (`codegen/`) reads `studio/` next to the game's `Cargo.toml`
+(or the folder named by `GBA_STUDIO_PROJECT`), converts the PNGs, and writes Rust
+and binary data the game includes. It checks what the GBA can hold and says what is
+wrong in terms of your project: a tile with more than 15 colours, tiles needing more
+than 16 palettes, a tileset over 1024 tiles, a sprite sheet with more than one
+palette's worth of colours, an animation using a frame the sheet does not have. It
+reports every problem in one run.
+
+The game brings the result in with three macros:
+
+| Macro | Gives | Needs |
+| --- | --- | --- |
+| `include_data!()` | `data::WORLD`, `ROOMS`, `CLASSES`, constants for room and collision class indices, an `EntityKind` enum, and each room's collision cells and entities | nothing |
+| `include_gfx!()` | `gfx::TILESETS`, `ROOMS` (tile layers), one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
+| `include_audio!()` | `audio::TRACKS`, `SFX` and index constants | `agb_tracker` in the game |
+
+**The runtime** (`runtime/`):
+
+- `data` and `physics` have no dependencies and also compile for the host, so game
+  rules can be unit tested without a console. `Body` moves a box through a room's
+  collision cells: walls, ceilings, one-way platforms (with drop-through) and 45 and
+  gentler slopes, in sub-pixel steps. `World::cross` carries a point that left a room
+  into the room that touches it on the world map.
+- `gfx` (behind the `agb` feature) has `RoomView`, which scrolls a room far bigger
+  than the GBA's backgrounds by streaming tiles in as the camera moves, and
+  `SpriteSheet` and `AnimPlayer` for drawing and animating sprites.
+
+`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp,
+respawns on spikes, and walks from one room to the next. Its `src/main.rs` is about
+150 lines. It builds from its own folder, with the nightly toolchain pinned in
+`sample/rust-toolchain.toml` and `agb-gbafix` installed (`cargo install agb-gbafix`):
+
+```sh
+cd sample && cargo build        # or press Build dev in the studio
+```
+
+Its art is flat-colour placeholders. Regenerate the sample project with
+`node scripts/make-sample-assets.ts` and `node scripts/make-sample-project.ts`
+(the second refuses to overwrite an existing project unless given `--force`).
 
 ## Project format
 
-Plain JSON in the game's repository, made to diff well in git. The schemas in
-`core/src/schema.ts` are the reference.
+Plain JSON files in the game's repository, laid out to diff well in git. The schemas
+in [`core/src/schema.ts`](core/src/schema.ts) are the reference.
 
 ```
-studio/project.json      name, build commands, collision classes, entity types
-studio/world.json        where each room sits on the world grid, in screens
-studio/audio.json        music tracks (MIDI + SF2, XM, MOD) and sound effects
-studio/tilesets/<id>.json  a PNG of 8x8 tiles and each tile's collision class
-studio/sprites/<id>.json   a sprite sheet: frame size, anchor, hitbox, animations
-studio/rooms/<id>.json     size in screens, up to 3 tile layers, entities, music
+studio/project.json         name, build commands, collision classes, entity types
+studio/world.json           where each room sits on the world grid, in screens
+studio/audio.json           music tracks (MIDI + SF2, XM, MOD) and sound effects
+studio/tilesets/<id>.json   a PNG of 8x8 tiles and each tile's collision class
+studio/sprites/<id>.json    a sprite sheet: frame size, anchor, hitbox, animations
+studio/rooms/<id>.json      size in screens, up to 3 tile layers, entities, music
 ```
 
-A screen is 240x160 pixels, 30x20 tiles. Rooms are whole numbers of screens. Tile
-layers are run-length pairs `[count, cell, ...]`, row by row, where cell 0 is empty
-and cell n is tile n-1 of the room's tileset.
+- A screen is 240x160 pixels, or 30x20 tiles. Rooms are 1 to 32 screens a side.
+- Tile layers are run-length pairs `[count, cell, ...]`, row by row. Cell 0 is empty
+  and cell n is tile n-1 of the room's tileset.
+- Collision classes have a kind (empty, solid, one-way, slope, hazard, custom) and,
+  for slopes, the floor height at the tile's left and right edge. What `hazard` and
+  `custom` mean is up to the game.
+- An entity is a type, a position in pixels from the room's top-left, and the
+  properties its type defines (integer, boolean, text or one of a list).
+- Ids are lowercase letters, digits, `-` and `_`, and are also the file names.
 
-Your PNG, MIDI and other source files stay the source of truth: the studio reads and
-watches them and never rewrites them.
+## Repository layout
+
+| Folder | What it is |
+| --- | --- |
+| `core/` | The project format (zod schemas), cross-file validation, run-length and GBA colour helpers, room helpers. Shared by the server and the app. |
+| `server/` | The local Node server: JSON API over one game folder, uploads, file previews, a file watcher and build output over a websocket, and the build runner. |
+| `app/` | The React, Vite and MUI interface. |
+| `codegen/` | `gba_studio_build`: the build-script helper that turns a project into Rust data. |
+| `runtime/` | `gba_studio_rt`: data types, physics and agb drawing for games. |
+| `sample/` | A small game made from a studio project. |
+| `scripts/` | Generates the sample project; copies the Pecten core into the app. |
+
+The Play panel uses a build of the Pecten emulator core kept in `app/public/wasm`.
+After rebuilding Pecten, `scripts/sync-pecten.sh` copies the new build in.
+
+## Known limits
+
+Honest list of what does not work yet:
+
+- **Music in the studio:** MIDI, XM and MOD cannot be heard in the Audio list, only
+  in the built game. There is no waveform or ROM-size estimate for audio.
+- **Aseprite files:** accepted as sprite images, but not previewed, and the build
+  helper only converts PNG sheets for now.
+- **Collision classes and entity property definitions** are edited in
+  `studio/project.json`, not in the interface. (Entity types can be added, renamed,
+  recoloured and given a sprite in Project settings.)
+- **Map editor:** no selection, copy and paste, flip, or autotiling yet. Resizing a
+  room keeps its top-left corner.
+- **Budgets:** the studio does not yet show palette, tile or sprite budgets while you
+  draw; the build helper reports them when it runs.
+- **Tilesets** are one 16-colour-palette set per tile (up to 16 palettes). The
+  runtime uses 4 bits a pixel throughout.
+- **One ROM at a time**, and the game logic in the sample is a skeleton: no
+  enemies, items, doors or saving. Those are the game's job, built on the runtime.
+- **Deleting** a room, tileset or sprite removes its file and cannot be undone
+  from the studio.
+- Tested with the sample project and generated test files, in Chrome. Touch input,
+  other browsers and larger real projects have not been tried.
 
 ## Roadmap
 
-- **Editors, still to do:** hear MIDI, XM and MOD in the studio; edit collision
-  classes and entity property definitions (today in `studio/project.json`); palette
-  and tile budget checks; selection with copy and paste in the map editor.
-- **M4:** adopt it in Diamond Hands, one piece at a time.
-- **M5:** touch polish, autotile brushes, optional desktop wrapper.
-- **M6 AI-ready:** `validate` and `build` commands with JSON output, an MCP server
-  over the same project code as the UI (read and write documents, paint tiles, place
-  entities, render a room to PNG, build and run the ROM headless), and an `AGENTS.md`
-  written into each game folder, so coding agents can work on a project without
-  overwriting hand-made art and levels.
+Roughly in order. Each item is useful on its own.
 
-Left out on purpose: a pixel editor and a music sequencer. Draw and compose in the
-tools made for that; the studio picks the files up as they change.
+### Next: AI-ready
+
+The studio should be as easy for an agent to drive as for a person, so you can
+write game code with an AI assistant and keep your hand-made art, music and levels.
+
+1. `gba-studio validate <folder>` and `gba-studio build <folder>` as plain commands
+   with JSON output, for agents and CI.
+2. An **MCP server** (`gba-studio mcp <folder>`, and over HTTP from the running
+   studio) built on the same project code as the interface. Tools to read and write
+   documents (always checked against the schemas), list assets, validate, make room
+   edits at a useful level (fill a rectangle, place and move entities, resize, place
+   on the world map), render a room or tileset to an image so the agent can look at
+   it, build the ROM, and run it headless for some frames with chosen key presses,
+   returning a screenshot.
+3. Edits made through MCP use the same save path as the interface, so an open
+   studio shows them live.
+4. Schemas published as JSON Schema, and an `AGENTS.md` written into each game
+   folder that explains the format, the tools, and which files are hand-made and
+   must not be regenerated.
+5. A Claude Code skill wrapping the server for games built with the studio.
+
+### Editors
+
+- Hear MIDI, XM and MOD in the studio, and show an audio size estimate.
+- Edit collision classes and entity property definitions in the interface.
+- Palette, tile and sprite budget readouts while editing, with the build helper's
+  messages shown next to the item they are about.
+- Map editor: rectangular selection with copy, paste and flip; room templates;
+  autotile brushes.
+- Aseprite preview and conversion, including its tags as animations.
+- Tilemap import from Tiled, for people who already have levels there.
+
+### Runtime
+
+- Camera helpers (room bounds, screen transitions between rooms, shake).
+- Entity helpers: spawning from room data, activation near the camera, simple
+  patrol and projectile behaviours.
+- Save data for what the player has found and opened, keyed by room and entity.
+- Door and ability-gate patterns for the Metroidvania loop.
+- Headless test helpers on the Pecten core, so a game can test "the player can
+  reach this room" from its studio project.
+
+### Adopting it in Diamond Hands
+
+The first real game to use the studio, moved over one piece at a time while the ROM
+keeps working: import the existing ASCII levels as rooms, read levels from
+generated data, replace the generated music with your own, and swap code-drawn art
+for PNGs as it is redrawn.
+
+### Later
+
+- Touch and tablet polish for the map editor (pinch to zoom, finger painting).
+- A desktop wrapper (for example Tauri) so no terminal is needed.
+- Publishing the build helper and runtime as crates, and the studio as an `npx`
+  command.
+
+### Left out on purpose
+
+- A pixel editor. Draw in Aseprite, LibreSprite or anything else; the studio picks
+  the files up as they change.
+- A music sequencer. Compose in a DAW or tracker.
+- Visual scripting of game logic. Behaviour is Rust in your game.

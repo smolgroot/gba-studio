@@ -23,6 +23,10 @@
         {
           "index": 0,
           "duration": 60
+        },
+        {
+          "index": 0,
+          "duration": 60
         }
       ],
       "loop": true
@@ -47,6 +51,16 @@
         {
           "index": 3,
           "duration": 60
+        }
+      ],
+      "loop": true
+    },
+    {
+      "name": "anim",
+      "frames": [
+        {
+          "index": 0,
+          "duration": 8
         }
       ],
       "loop": true
