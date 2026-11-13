@@ -99,6 +99,12 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
       if (!room) add('error', file, `unknown room "${r.room}"`)
       return room ? [{ id: r.room, x: r.x, y: r.y, w: room.width, h: room.height }] : []
     })
+    const size = world.size
+    if (size) {
+      for (const p of placed) {
+        if (p.x < 0 || p.y < 0 || p.x + p.w > size.width || p.y + p.h > size.height) add('error', file, `room "${p.id}" is outside the ${size.width}×${size.height} map`)
+      }
+    }
     for (const [i, a] of placed.entries()) {
       for (const b of placed.slice(i + 1)) {
         if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) add('error', file, `rooms "${a.id}" and "${b.id}" overlap`)

@@ -113,6 +113,26 @@ export class Builder {
     child.on('close', (code) => void finish(code))
   }
 
+  /** Runs a build to its end. `onLine` gets the output as it comes. */
+  async run(mode: BuildMode, onLine?: (line: string) => void): Promise<BuildStatus> {
+    const previous = this.broadcast
+    return new Promise<BuildStatus>((resolve, reject) => {
+      this.broadcast = (message) => {
+        previous(message)
+        const m = message as { type: string; lines?: string[]; status?: BuildStatus }
+        if (m.type === 'build-log') m.lines?.forEach((line) => onLine?.(line))
+        if (m.type === 'build-finished') {
+          this.broadcast = previous
+          resolve(m.status!)
+        }
+      }
+      this.start(mode).catch((error: unknown) => {
+        this.broadcast = previous
+        reject(error as Error)
+      })
+    })
+  }
+
   stop(): void {
     const child = this.child
     if (!child?.pid) return

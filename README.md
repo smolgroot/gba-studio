@@ -19,6 +19,7 @@ listed under [Known limits](#known-limits) and the [roadmap](#roadmap).
 
 - [Features](#features)
 - [Running it](#running-it)
+- [Working with coding agents](#working-with-coding-agents)
 - [Making a game with it](#making-a-game-with-it)
 - [Project format](#project-format)
 - [Repository layout](#repository-layout)
@@ -87,8 +88,14 @@ Open a room to paint it.
 
 Rooms are whole numbers of screens placed on a grid. Drag rooms to arrange them,
 choose the start room, take a room off the map or put an unplaced one back. A
-new room is placed beside the others. Rooms that touch on this grid are the
-connections the runtime uses to carry the player from one to the next.
+new room is placed beside the others. Select a room to change its size in screens
+right there. In Properties the map can be given a size in screens (and so in tiles);
+rooms are then kept inside it, and a room outside is reported as a problem. Without
+a size the map grows with its rooms.
+
+Rooms that touch on this grid are connected in the game: the player walks from one
+into the other and the camera scrolls across with no cut or loading, the next room's
+tiles being written to video memory just ahead of it.
 
 ### Tilesets
 
@@ -165,6 +172,52 @@ pnpm typecheck
 cargo test       # Rust tests (build helper, collision and physics)
 ```
 
+## Working with coding agents
+
+The studio's project code is also a command line and an MCP server, so an agent
+(Claude Code or any MCP client) can work on a game without overwriting hand-made
+art, music and levels.
+
+```sh
+gba-studio validate <folder> [--json]            # every problem; exit 1 on errors
+gba-studio build <folder> [--release] [--json]   # run the project's build command
+gba-studio schema                                # JSON Schema of every document kind
+gba-studio agents <folder>                       # write AGENTS.md into the game folder
+gba-studio mcp <folder>                          # MCP server over stdio
+```
+
+From a checkout, `gba-studio` is `node <this repo>/server/src/cli.ts`. To give Claude
+Code the tools for a game, put this in the game folder's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "gba-studio": { "command": "node", "args": ["/path/to/gba-studio/server/src/cli.ts", "mcp", "."] }
+  }
+}
+```
+
+The MCP server has 19 tools:
+
+| Tools | What they do |
+| --- | --- |
+| `project_overview`, `validate`, `list_assets` | Summarise the project, list its problems, list asset files |
+| `read_document`, `write_document`, `delete_document` | Whole documents, checked against the schemas before writing |
+| `room_read_cells`, `room_fill`, `room_paint` | Read and change tile layers and collision by cell, without touching the run-length data |
+| `room_create`, `room_resize`, `world_place` | Make and size rooms, arrange the world map, set the start room |
+| `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
+| `render_room`, `render_tileset` | Pictures of a room (optionally tinted by collision) and of a tileset with its grid, so the agent can look |
+| `build`, `run_rom` | Build the ROM; run it headless for given frames and held buttons and get a picture after each step |
+
+Every write is validated and answered with the problems it left in that file. Writes
+are plain file saves, so a studio open on the same folder shows them as they happen.
+Errors inside a tool come back as text the agent can act on ("no layer "nope"; layers
+are: 0 "Back wall", 1 "Ground", or "collision"").
+
+Creating a project writes an `AGENTS.md` into the game folder. It tells agents which
+files are hand-made and must not be regenerated, how the format works, and which
+tools to use.
+
 ## Making a game with it
 
 A game is a Rust crate on agb that depends on two crates from this repository:
@@ -204,17 +257,21 @@ The game brings the result in with three macros:
 **The runtime** (`runtime/`):
 
 - `data` and `physics` have no dependencies and also compile for the host, so game
-  rules can be unit tested without a console. `Body` moves a box through a room's
-  collision cells: walls, ceilings, one-way platforms (with drop-through) and 45 and
-  gentler slopes, in sub-pixel steps. `World::cross` carries a point that left a room
-  into the room that touches it on the world map.
-- `gfx` (behind the `agb` feature) has `RoomView`, which scrolls a room far bigger
-  than the GBA's backgrounds by streaming tiles in as the camera moves, and
-  `SpriteSheet` and `AnimPlayer` for drawing and animating sprites.
+  rules can be unit tested without a console. `Body` moves a box through collision
+  cells: walls, ceilings, one-way platforms (with drop-through) and 45 degree and
+  gentler slopes, in sub-pixel steps. Given the `World`, it moves in world pixels and
+  walks from a room into the next without noticing. `World::camera_target` keeps the
+  camera on rooms: it follows the player into touching rooms and stops at holes and
+  edges of the map.
+- `gfx` (behind the `agb` feature) has `WorldView`, which draws every room that
+  shares a tileset as one scrolling space, streaming tiles in as the camera moves;
+  `RoomView` for a single room on its own; and `SpriteSheet` and `AnimPlayer`.
+- Rooms drawn with different tilesets cannot share the screen (the GBA shows one
+  set of 16 background palettes), so the game cuts between them instead of scrolling.
 
 `sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp,
-respawns on spikes, and walks from one room to the next. Its `src/main.rs` is about
-150 lines. It builds from its own folder, with the nightly toolchain pinned in
+respawns on spikes, and walks from one room into the next while the camera scrolls
+across. Its `src/main.rs` is about 170 lines. It builds from its own folder, with the nightly toolchain pinned in
 `sample/rust-toolchain.toml` and `agb-gbafix` installed (`cargo install agb-gbafix`):
 
 ```sh
@@ -240,6 +297,7 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, entities, musi
 ```
 
 - A screen is 240x160 pixels, or 30x20 tiles. Rooms are 1 to 32 screens a side.
+- The world map may have a `size` in screens, counted from screen (0, 0).
 - Tile layers are run-length pairs `[count, cell, ...]`, row by row. Cell 0 is empty
   and cell n is tile n-1 of the room's tileset.
 - Collision classes have a kind (empty, solid, one-way, slope, hazard, custom) and,
@@ -254,7 +312,7 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, entities, musi
 | Folder | What it is |
 | --- | --- |
 | `core/` | The project format (zod schemas), cross-file validation, run-length and GBA colour helpers, room helpers. Shared by the server and the app. |
-| `server/` | The local Node server: JSON API over one game folder, uploads, file previews, a file watcher and build output over a websocket, and the build runner. |
+| `server/` | The local Node server and the `gba-studio` command: JSON API over one game folder, uploads, file watcher, build runner, and the MCP server with its tools, renderer and headless emulator. |
 | `app/` | The React, Vite and MUI interface. |
 | `codegen/` | `gba_studio_build`: the build-script helper that turns a project into Rust data. |
 | `runtime/` | `gba_studio_rt`: data types, physics and agb drawing for games. |
@@ -292,26 +350,13 @@ Honest list of what does not work yet:
 
 Roughly in order. Each item is useful on its own.
 
-### Next: AI-ready
+### Agents, still to do
 
-The studio should be as easy for an agent to drive as for a person, so you can
-write game code with an AI assistant and keep your hand-made art, music and levels.
-
-1. `gba-studio validate <folder>` and `gba-studio build <folder>` as plain commands
-   with JSON output, for agents and CI.
-2. An **MCP server** (`gba-studio mcp <folder>`, and over HTTP from the running
-   studio) built on the same project code as the interface. Tools to read and write
-   documents (always checked against the schemas), list assets, validate, make room
-   edits at a useful level (fill a rectangle, place and move entities, resize, place
-   on the world map), render a room or tileset to an image so the agent can look at
-   it, build the ROM, and run it headless for some frames with chosen key presses,
-   returning a screenshot.
-3. Edits made through MCP use the same save path as the interface, so an open
-   studio shows them live.
-4. Schemas published as JSON Schema, and an `AGENTS.md` written into each game
-   folder that explains the format, the tools, and which files are hand-made and
-   must not be regenerated.
-5. A Claude Code skill wrapping the server for games built with the studio.
+- MCP over HTTP from the running studio, so an agent's edits land in the studio's
+  undo history and the agent can see what you have selected.
+- A Claude Code skill that wraps the server for games built with the studio.
+- Tools for tilesets and sprites at the same level as the room tools (set a tile's
+  collision class, define an animation), which today go through `write_document`.
 
 ### Editors
 

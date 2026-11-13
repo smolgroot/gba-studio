@@ -116,6 +116,13 @@ describe('validateProject', () => {
     d.world!.rooms[1]!.x = 1
     expect(validateProject(d, () => true)).toEqual([])
   })
+  it('keeps rooms inside a map of a set size', () => {
+    const d = docs()
+    d.world!.size = { width: 2, height: 1 }
+    expect(validateProject(d, () => true)).toEqual([])
+    d.world!.rooms[0]!.x = 2
+    expect(messages(d)).toContain('room "cave" is outside the 2×1 map')
+  })
   it('rejects sprite frames the hardware has no size for', () => {
     const d = docs()
     d.sprites.hero = { version: 1, name: 'Hero', image: 'assets/hero.png', frame: { width: 24, height: 24 }, anchor: { x: 0, y: 0 }, animations: [] }

@@ -1,8 +1,9 @@
-//! A box that moves through a room's collision cells: walls, floors, one-way
-//! platforms and slopes. Enough for a platformer's player or a walking enemy; a game
+//! A box that moves through collision cells: walls, floors, one-way platforms and
+//! slopes. It moves in whatever [`Cells`] it is given: one room's, or the whole world's
+//! so that it walks from a room into the next without noticing. Enough for a platformer's player or a walking enemy; a game
 //! with other needs reads [`Room::class_index`] and writes its own.
 
-use crate::data::{CollisionKind, Room, TILE, World};
+use crate::data::{Cells, CollisionKind, TILE};
 
 /// Velocities are in 1/256 of a pixel per frame.
 pub const SUB: i32 = 256;
@@ -42,12 +43,12 @@ impl Body {
     }
 
     /// Whether any cell the body overlaps is of this kind.
-    pub fn touches(&self, world: &World, room: &Room, kind: CollisionKind) -> bool {
+    pub fn touches(&self, cells: &impl Cells, kind: CollisionKind) -> bool {
         let mut row = self.y.div_euclid(TILE);
         while row <= (self.y + self.h - 1).div_euclid(TILE) {
             let mut col = self.x.div_euclid(TILE);
             while col <= (self.x + self.w - 1).div_euclid(TILE) {
-                if world.classes[room.class_index(col, row) as usize].kind == kind {
+                if cells.class(col, row).kind == kind {
                     return true;
                 }
                 col += 1;
@@ -58,18 +59,18 @@ impl Body {
     }
 
     /// Moves by the velocity for one frame. `drop_through` lets it fall through one-way platforms.
-    pub fn step(&mut self, world: &World, room: &Room, drop_through: bool) {
+    pub fn step(&mut self, cells: &impl Cells, drop_through: bool) {
         self.hit_wall = false;
         self.hit_ceiling = false;
         let was_grounded = self.on_ground;
-        let on_slope = was_grounded && self.slope_under(world, room);
+        let on_slope = was_grounded && self.slope_under(cells);
 
         self.sub_x += self.vx;
         let dx = self.sub_x / SUB;
         self.sub_x -= dx * SUB;
         for _ in 0..dx.abs() {
             let next = self.x + dx.signum();
-            if self.wall_at(world, room, next, on_slope) {
+            if self.wall_at(cells, next, on_slope) {
                 self.hit_wall = true;
                 self.sub_x = 0;
                 break;
@@ -77,7 +78,7 @@ impl Body {
             self.x = next;
             // Keep the feet on the floor while walking, so slopes are followed both ways.
             if was_grounded && self.vy >= 0 {
-                self.follow_floor(world, room, on_slope);
+                self.follow_floor(cells, on_slope);
             }
         }
 
@@ -86,12 +87,12 @@ impl Body {
         self.sub_y -= dy * SUB;
         for _ in 0..dy.abs() {
             if dy > 0 {
-                if self.floor_under(world, room, drop_through) {
+                if self.floor_under(cells, drop_through) {
                     break;
                 }
                 self.y += 1;
             } else {
-                if self.ceiling_over(world, room) {
+                if self.ceiling_over(cells) {
                     self.hit_ceiling = true;
                     self.vy = 0;
                     self.sub_y = 0;
@@ -100,22 +101,22 @@ impl Body {
                 self.y -= 1;
             }
         }
-        self.on_ground = self.vy >= 0 && self.floor_under(world, room, drop_through);
+        self.on_ground = self.vy >= 0 && self.floor_under(cells, drop_through);
         if self.on_ground {
             self.vy = 0;
             self.sub_y = 0;
         }
     }
 
-    fn slope_under(&self, world: &World, room: &Room) -> bool {
+    fn slope_under(&self, cells: &impl Cells) -> bool {
         let (cx, feet) = self.feet();
-        world.class_at(room, cx, feet).kind == CollisionKind::Slope || world.class_at(room, cx, feet - 1).kind == CollisionKind::Slope
+        cells.class_at(cx, feet).kind == CollisionKind::Slope || cells.class_at(cx, feet - 1).kind == CollisionKind::Slope
     }
 
     /// Whether solid cells stand where the body would be with its left edge at `x`.
     /// On a slope the feet are inside a row of tiles, whose solid neighbours are the
     /// ground the slope leads onto and not a wall.
-    fn wall_at(&self, world: &World, room: &Room, x: i32, on_slope: bool) -> bool {
+    fn wall_at(&self, cells: &impl Cells, x: i32, on_slope: bool) -> bool {
         let feet = self.y + self.h;
         let mut bottom = (feet - 1).div_euclid(TILE);
         if on_slope && feet.rem_euclid(TILE) != 0 {
@@ -124,7 +125,7 @@ impl Body {
         let col = if x > self.x { x + self.w - 1 } else { x }.div_euclid(TILE);
         let mut row = self.y.div_euclid(TILE);
         while row <= bottom {
-            if world.classes[room.class_index(col, row) as usize].kind == CollisionKind::Solid {
+            if cells.class(col, row).kind == CollisionKind::Solid {
                 return true;
             }
             row += 1;
@@ -133,8 +134,8 @@ impl Body {
     }
 
     /// Whether pixel `(x, y)` is floor seen from above.
-    fn is_floor(world: &World, room: &Room, x: i32, y: i32, one_way: bool) -> bool {
-        let class = world.class_at(room, x, y);
+    fn is_floor(cells: &impl Cells, x: i32, y: i32, one_way: bool) -> bool {
+        let class = cells.class_at(x, y);
         match class.kind {
             CollisionKind::Solid => true,
             CollisionKind::OneWay => one_way && y.rem_euclid(TILE) == 0,
@@ -144,12 +145,12 @@ impl Body {
     }
 
     /// Whether the body stands on something: the row of pixels just under its feet.
-    fn floor_under(&self, world: &World, room: &Room, drop_through: bool) -> bool {
+    fn floor_under(&self, cells: &impl Cells, drop_through: bool) -> bool {
         let (cx, feet) = self.feet();
         // A slope carries the body by its middle.
-        let middle = world.class_at(room, cx, feet);
+        let middle = cells.class_at(cx, feet);
         if middle.kind == CollisionKind::Slope {
-            return Self::is_floor(world, room, cx, feet, false);
+            return Self::is_floor(cells, cx, feet, false);
         }
         // Flat ground carries it by any part of its bottom edge, and only from the top
         // of a tile: walls keep a body from being inside one any other way.
@@ -159,7 +160,7 @@ impl Body {
         let row = feet.div_euclid(TILE);
         let mut col = self.x.div_euclid(TILE);
         while col <= (self.x + self.w - 1).div_euclid(TILE) {
-            match world.classes[room.class_index(col, row) as usize].kind {
+            match cells.class(col, row).kind {
                 CollisionKind::Solid => return true,
                 CollisionKind::OneWay if !drop_through => return true,
                 _ => {}
@@ -169,11 +170,11 @@ impl Body {
         false
     }
 
-    fn ceiling_over(&self, world: &World, room: &Room) -> bool {
+    fn ceiling_over(&self, cells: &impl Cells) -> bool {
         let row = (self.y - 1).div_euclid(TILE);
         let mut col = self.x.div_euclid(TILE);
         while col <= (self.x + self.w - 1).div_euclid(TILE) {
-            if world.classes[room.class_index(col, row) as usize].kind == CollisionKind::Solid {
+            if cells.class(col, row).kind == CollisionKind::Solid {
                 return true;
             }
             col += 1;
@@ -183,12 +184,12 @@ impl Body {
 
     /// After a sideways step on the ground: puts the feet back on the floor under the
     /// body's middle if a slope moved it, up or down.
-    fn follow_floor(&mut self, world: &World, room: &Room, on_slope: bool) {
+    fn follow_floor(&mut self, cells: &impl Cells, on_slope: bool) {
         let (cx, feet) = self.feet();
         let mut y = feet - SNAP;
         while y <= feet + SNAP {
-            if Self::is_floor(world, room, cx, y, y >= feet) && !Self::is_floor(world, room, cx, y - 1, false) {
-                let onto_slope = world.class_at(room, cx, y).kind == CollisionKind::Slope;
+            if Self::is_floor(cells, cx, y, y >= feet) && !Self::is_floor(cells, cx, y - 1, false) {
+                let onto_slope = cells.class_at(cx, y).kind == CollisionKind::Slope;
                 // Ledges are fallen off and steps are walls: only slopes are followed.
                 if y != feet && (on_slope || onto_slope) {
                     self.y = y - self.h;
@@ -204,7 +205,7 @@ impl Body {
 mod tests {
     extern crate std;
     use super::*;
-    use crate::data::CollisionClass;
+    use crate::data::{CollisionClass, Room, World};
     use std::{boxed::Box, vec::Vec};
 
     static CLASSES: [CollisionClass; 5] = [
@@ -245,7 +246,7 @@ mod tests {
         for _ in 0..frames {
             body.vx = vx;
             body.vy = (body.vy + 40).min(4 * SUB);
-            body.step(world, &world.rooms[0], false);
+            body.step(&world.room_cells(0), false);
         }
     }
 
@@ -289,7 +290,7 @@ mod tests {
         assert_eq!(body.y + body.h, 16);
         // Dropping through lets go of it.
         body.vy = SUB;
-        body.step(&w, &w.rooms[0], true);
+        body.step(&w.room_cells(0), true);
         run(&w, &mut body, 60, 0);
         assert_eq!(body.y + body.h, 40);
     }
@@ -332,12 +333,53 @@ mod tests {
         let mut body = Body::standing_at(16, 32, 10, 14);
         body.on_ground = true;
         body.vy = -4 * SUB;
-        body.step(&w, &w.rooms[0], false);
-        body.step(&w, &w.rooms[0], false);
-        body.step(&w, &w.rooms[0], false);
+        body.step(&w.room_cells(0), false);
+        body.step(&w.room_cells(0), false);
+        body.step(&w.room_cells(0), false);
         assert!(body.y >= 8);
         run(&w, &mut body, 60, 0);
         assert_eq!(body.y + body.h, 32);
+    }
+
+    #[test]
+    fn walks_from_one_room_into_the_next_in_world_coordinates() {
+        // Two one-screen rooms side by side, floor along the bottom row of both.
+        let mut rows = [".............................."; 20];
+        rows[19] = "##############################";
+        let mut w = world(&rows);
+        let mut rooms = w.rooms.to_vec();
+        rooms.push(Room { world: Some((1, 0)), ..rooms[0] });
+        w.rooms = Box::leak(rooms.into_boxed_slice());
+        let mut body = Body::standing_at(200, 152, 10, 14);
+        for _ in 0..80 {
+            body.vx = SUB;
+            body.vy = (body.vy + 40).min(4 * SUB);
+            body.step(&w, false);
+            assert!(body.on_ground, "lost the floor at x {}", body.x);
+        }
+        assert_eq!(w.room_at(body.feet().0, body.feet().1 - 1), Some(1));
+        // Past the last room there is no floor.
+        assert_eq!(w.class(70, 19).kind, CollisionKind::Empty);
+    }
+
+    #[test]
+    fn the_camera_stays_on_rooms() {
+        // A 2x1 room at (0,1) and a 1x2 room at (2,0), as in the sample.
+        let wide: [&str; 20] = ["............................................................"; 20];
+        let mut w = world(&wide);
+        let mut rooms = w.rooms.to_vec();
+        rooms[0].world = Some((0, 1));
+        rooms.push(Room { cols: 30, rows: 40, world: Some((2, 0)), ..rooms[0] });
+        w.rooms = Box::leak(rooms.into_boxed_slice());
+        let all = |_: usize| true;
+        // In the wide room the camera cannot rise into the empty screens above it.
+        assert_eq!(w.camera_target(0, 100, 200, all), (0, 160));
+        // Nearing its right end it scrolls on into the tall room beside it.
+        assert_eq!(w.camera_target(0, 470, 240, all), (350, 160));
+        // High in the tall room, the screens to its left are empty: it stays on the room.
+        assert_eq!(w.camera_target(1, 500, 60, all), (480, 0));
+        // A neighbour that cannot be shown together (another tileset) is a hard edge.
+        assert_eq!(w.camera_target(0, 470, 240, |_| false), (240, 160));
     }
 
     #[test]

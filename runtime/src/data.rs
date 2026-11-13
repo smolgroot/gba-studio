@@ -120,10 +120,78 @@ pub struct World {
     pub start: Option<u16>,
 }
 
+/// A grid of collision cells a body can move through.
+pub trait Cells {
+    /// The class of a cell. Where there is nothing, the project's first class.
+    fn class(&self, col: i32, row: i32) -> &CollisionClass;
+
+    /// The class of the cell holding a pixel.
+    fn class_at(&self, x: i32, y: i32) -> &CollisionClass {
+        self.class(x.div_euclid(TILE), y.div_euclid(TILE))
+    }
+}
+
+/// One room on its own, in pixels from its top-left corner.
+#[derive(Clone, Copy)]
+pub struct RoomCells<'a> {
+    pub world: &'a World,
+    pub room: &'a Room,
+}
+
+impl Cells for RoomCells<'_> {
+    fn class(&self, col: i32, row: i32) -> &CollisionClass {
+        &self.world.classes[self.room.class_index(col, row) as usize]
+    }
+}
+
+/// Every room on the map as one space, in world pixels: screen `(sx, sy)` of the map
+/// starts at pixel `(sx * 240, sy * 160)`.
+impl Cells for World {
+    fn class(&self, col: i32, row: i32) -> &CollisionClass {
+        const COLS: i32 = SCREEN_W / TILE;
+        const ROWS: i32 = SCREEN_H / TILE;
+        let index = self.room_at_screen(col.div_euclid(COLS), row.div_euclid(ROWS)).map_or(0, |room| {
+            let room = &self.rooms[room];
+            let (wx, wy) = room.world.unwrap_or((0, 0));
+            room.class_index(col - wx as i32 * COLS, row - wy as i32 * ROWS)
+        });
+        &self.classes[index as usize]
+    }
+}
+
 impl World {
-    /// The collision class of the cell holding pixel `(x, y)` of a room.
-    pub fn class_at(&self, room: &Room, x: i32, y: i32) -> &CollisionClass {
-        &self.classes[room.class_index(x.div_euclid(TILE), y.div_euclid(TILE)) as usize]
+    pub fn room_cells(&self, room: usize) -> RoomCells<'_> {
+        RoomCells { world: self, room: &self.rooms[room] }
+    }
+
+    /// The room holding a world pixel.
+    pub fn room_at(&self, x: i32, y: i32) -> Option<usize> {
+        self.room_at_screen(x.div_euclid(SCREEN_W), y.div_euclid(SCREEN_H))
+    }
+
+    /// A room's top-left corner in world pixels, if it is on the map.
+    pub fn origin(&self, room: usize) -> Option<(i32, i32)> {
+        self.rooms[room].world.map(|(x, y)| (x as i32 * SCREEN_W, y as i32 * SCREEN_H))
+    }
+
+    /// Where the camera's top-left corner should be, in world pixels, to centre on a
+    /// point of `room`. The view never shows a screen of the map that has no room, so
+    /// it scrolls on into touching rooms and stops at the map's holes and edges.
+    /// `joined` says whether another room may be on screen together with this one (a
+    /// game refuses rooms whose tileset differs, as their palettes cannot be shown at once).
+    pub fn camera_target(&self, room: usize, x: i32, y: i32, joined: impl Fn(usize) -> bool) -> (i32, i32) {
+        let Some((left, top)) = self.origin(room) else {
+            return (x - SCREEN_W / 2, y - SCREEN_H / 2);
+        };
+        let here = &self.rooms[room];
+        let shown = |cx: i32, cy: i32| {
+            let screens = |from: i32, size: i32| from.div_euclid(size)..=(from + size - 1).div_euclid(size);
+            screens(cy, SCREEN_H).all(|sy| screens(cx, SCREEN_W).all(|sx| self.room_at_screen(sx, sy).is_some_and(|r| r == room || joined(r))))
+        };
+        let free = (x - SCREEN_W / 2, y - SCREEN_H / 2);
+        let held = (free.0.clamp(left, left + here.width() - SCREEN_W), free.1.clamp(top, top + here.height() - SCREEN_H));
+        // Follow freely if that shows rooms only; else hold one axis inside this room, then both.
+        [free, (free.0, held.1), (held.0, free.1)].into_iter().find(|&(cx, cy)| shown(cx, cy)).unwrap_or(held)
     }
 
     /// The room covering a screen of the world grid.

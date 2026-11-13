@@ -25,6 +25,8 @@ pub struct RoomGfx {
     pub rows: u16,
     /// Each layer's cells row by row as little-endian `u16`: 0 is empty, n is tile n-1.
     pub layers: &'static [&'static [u8]],
+    /// Where its top-left screen sits on the world grid, if it is on the map.
+    pub world: Option<(i16, i16)>,
 }
 
 impl RoomGfx {
@@ -79,6 +81,81 @@ impl RoomView {
     }
 
     /// Places the camera and fills the whole view at once, for entering a room.
+    pub fn load(&mut self, x: i32, y: i32) {
+        while !self.set_camera(x, y) {}
+    }
+
+    pub fn show(&self, frame: &mut GraphicsFrame) {
+        for map in self.layers.iter().flatten() {
+            map.show(frame);
+        }
+    }
+}
+
+/// The whole map on screen: every room that shares a tileset drawn as one space, so
+/// the camera scrolls from a room into the next with no cut. Tiles are written into
+/// video memory a row or column at a time, just ahead of the camera.
+///
+/// The GBA shows 16 background palettes at once, which is one tileset's worth. Rooms
+/// of another tileset are left blank; on entering one, make a new view for it.
+pub struct WorldView {
+    rooms: &'static [RoomGfx],
+    tileset: &'static Tileset,
+    count: usize,
+    layers: [Option<InfiniteScrolledMap>; 3],
+}
+
+impl WorldView {
+    /// A view of the rooms that share `room`'s tileset. Sets the background palettes.
+    pub fn new(rooms: &'static [RoomGfx], room: usize, graphics: &mut Graphics) -> Self {
+        let tileset = rooms[room].tileset;
+        graphics.set_background_palettes(tileset.palettes);
+        let count = rooms.iter().filter(|r| core::ptr::eq(r.tileset, tileset)).map(|r| r.layers.len()).max().unwrap_or(1).min(3);
+        let mut layers = [const { None }; 3];
+        for (index, layer) in layers.iter_mut().enumerate().take(count) {
+            let priority = [Priority::P3, Priority::P2, Priority::P1][index + 3 - count];
+            *layer = Some(InfiniteScrolledMap::new(RegularBackground::new(priority, RegularBackgroundSize::Background32x32, TileFormat::FourBpp)));
+        }
+        Self { rooms, tileset, count, layers }
+    }
+
+    /// Whether a room is drawn by this view: it is on the map and shares the tileset.
+    pub fn shows(&self, room: usize) -> bool {
+        self.rooms[room].world.is_some() && core::ptr::eq(self.rooms[room].tileset, self.tileset)
+    }
+
+    /// What slot `slot` of the view shows at a world tile. Rooms with fewer layers
+    /// than the view fill its front slots, so every room's front layer lines up.
+    fn tile(rooms: &'static [RoomGfx], tileset: &'static Tileset, count: usize, slot: usize, pos: Vector2D<i32>) -> (&'static TileSet, TileSetting) {
+        for room in rooms {
+            let Some((wx, wy)) = room.world else { continue };
+            let local = vec2(pos.x - wx as i32 * 30, pos.y - wy as i32 * 20);
+            if local.x < 0 || local.y < 0 || local.x >= room.cols as i32 || local.y >= room.rows as i32 {
+                continue;
+            }
+            let behind = count - room.layers.len().min(count);
+            if !core::ptr::eq(room.tileset, tileset) || slot < behind {
+                break;
+            }
+            return room.tile(slot - behind, local);
+        }
+        (&tileset.tiles, TileSetting::BLANK)
+    }
+
+    /// Moves the camera's top-left corner to a world pixel. Returns whether every tile
+    /// in view is in place; it always is while the camera moves less than a screen a frame.
+    pub fn set_camera(&mut self, x: i32, y: i32) -> bool {
+        let (rooms, tileset, count) = (self.rooms, self.tileset, self.count);
+        let mut ready = true;
+        for (slot, layer) in self.layers.iter_mut().enumerate() {
+            if let Some(map) = layer {
+                ready &= map.set_scroll_pos(vec2(x, y), |pos| Self::tile(rooms, tileset, count, slot, pos)) == PartialUpdateStatus::Done;
+            }
+        }
+        ready
+    }
+
+    /// Places the camera and fills the whole view at once, for starting or after a jump.
     pub fn load(&mut self, x: i32, y: i32) {
         while !self.set_camera(x, y) {}
     }

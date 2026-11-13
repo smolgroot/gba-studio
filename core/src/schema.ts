@@ -144,6 +144,8 @@ export const World = z.object({
   rooms: z.array(z.object({ room: Id, x: z.number().int(), y: z.number().int() })).default([]),
   /** The room a new game starts in. */
   start: Id.optional(),
+  /** The map's size in screens, from screen (0, 0). Left out, the map is as big as its rooms make it. */
+  size: z.object({ width: z.number().int().min(1).max(256), height: z.number().int().min(1).max(256) }).optional(),
 })
 
 export const Track = z

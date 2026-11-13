@@ -27,7 +27,7 @@ import { FORMAT_VERSION, SCREEN, SPRITE_SIZES, emptyRoom, slugify, uniqueId } fr
 import type { MultiKind, Project } from '@gba-studio/core'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
+import { Checkbox, Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
 import { selectionKey, useStudio } from '../store.ts'
 import type { Selection } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
@@ -352,6 +352,31 @@ export function PropertiesPanel() {
         <Field label="Start room">
           <SelectInput label="Start room" value={world.start ?? ''} onChange={(start) => commit('world', undefined, { ...world, start: start || undefined })} options={[{ value: '', label: 'None' }, ...world.rooms.filter((p) => docs.rooms[p.room]).map((p) => ({ value: p.room, label: docs.rooms[p.room]!.name }))]} />
         </Field>
+        <Field label="Map size">
+          <Checkbox
+            checked={!!world.size}
+            onChange={(on) => {
+              if (!on) return commit('world', undefined, { ...world, size: undefined })
+              // Start from what the rooms cover now, moved so the map begins at screen 0, 0.
+              const placed = world.rooms.filter((p) => docs.rooms[p.room])
+              const minX = Math.min(0, ...placed.map((p) => p.x))
+              const minY = Math.min(0, ...placed.map((p) => p.y))
+              const width = Math.max(1, ...placed.map((p) => p.x - minX + docs.rooms[p.room]!.width))
+              const height = Math.max(1, ...placed.map((p) => p.y - minY + docs.rooms[p.room]!.height))
+              commit('world', undefined, { ...world, rooms: world.rooms.map((p) => ({ ...p, x: p.x - minX, y: p.y - minY })), size: { width, height } })
+            }}
+          >
+            Set a size
+          </Checkbox>
+        </Field>
+        {world.size && (
+          <Field label="Screens">
+            <NumberInput label="Map width in screens" value={world.size.width} min={1} max={256} onCommit={(width) => commit('world', undefined, { ...world, size: { ...world.size!, width } })} />
+            <Typography color="text.secondary">×</Typography>
+            <NumberInput label="Map height in screens" value={world.size.height} min={1} max={256} onCommit={(height) => commit('world', undefined, { ...world, size: { ...world.size!, height } })} />
+          </Field>
+        )}
+        {world.size && <Field label="In tiles"><Typography>{world.size.width * SCREEN.cols} × {world.size.height * SCREEN.rows}</Typography></Field>}
         <Field label="One screen"><Typography>{SCREEN.width} × {SCREEN.height} px, {SCREEN.cols} × {SCREEN.rows} tiles</Typography></Field>
       </Fields>
     )

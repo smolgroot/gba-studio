@@ -4,10 +4,13 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
+import { resizeRoom } from '@gba-studio/core'
 import type { World } from '@gba-studio/core'
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import { NumberInput } from '../fields.tsx'
 import { useStudio } from '../store.ts'
+import { ui } from '../theme.ts'
 import { UndoButtons } from './common.tsx'
 import { Divider, GridOverlay, Message, Viewport } from './views.tsx'
 
@@ -37,10 +40,19 @@ export function WorldEditor() {
   const placed = world.rooms.flatMap((p) => (rooms[p.room] ? [{ ...p, doc: rooms[p.room]! }] : []))
   const unplaced = Object.entries(rooms).filter(([id]) => !world.rooms.some((p) => p.room === id))
   const place = (id: string) => commit('world', undefined, { ...world, rooms: [...world.rooms, { room: id, ...freeSpot(world, (r) => rooms[r]) }], start: world.start ?? id })
-  const left = Math.min(0, ...placed.map((p) => p.x)) - MARGIN
-  const top = Math.min(0, ...placed.map((p) => p.y)) - MARGIN
-  const right = Math.max(1, ...placed.map((p) => p.x + p.doc.width)) + MARGIN
-  const bottom = Math.max(1, ...placed.map((p) => p.y + p.doc.height)) + MARGIN
+  // A map of a set size shows exactly its screens; otherwise it grows with its rooms.
+  const size = world.size
+  const left = size ? 0 : Math.min(0, ...placed.map((p) => p.x)) - MARGIN
+  const top = size ? 0 : Math.min(0, ...placed.map((p) => p.y)) - MARGIN
+  const right = size ? size.width : Math.max(1, ...placed.map((p) => p.x + p.doc.width)) + MARGIN
+  const bottom = size ? size.height : Math.max(1, ...placed.map((p) => p.y + p.doc.height)) + MARGIN
+  const chosenRoom = chosen ? rooms[chosen] : undefined
+  const resize = (width: number, height: number) => {
+    if (!chosen || !chosenRoom) return
+    const smaller = width < chosenRoom.width || height < chosenRoom.height
+    if (smaller && !window.confirm('Making the room smaller cuts off the tiles and entities outside the new size. Undo in the room brings them back. Continue?')) return
+    commit('room', chosen, resizeRoom(chosenRoom, width, height))
+  }
 
   const tools = (
     <>
@@ -59,6 +71,15 @@ export function WorldEditor() {
       >
         Take off the map
       </Button>
+      {chosenRoom && (
+        <>
+          <Divider />
+          <Typography variant="body2" color="text.secondary" noWrap>{chosenRoom.name}, screens:</Typography>
+          <Box sx={{ width: ui(40) }}><NumberInput label="Room width in screens" value={chosenRoom.width} min={1} max={32} onCommit={(w) => resize(w, chosenRoom.height)} /></Box>
+          <Typography color="text.secondary">×</Typography>
+          <Box sx={{ width: ui(40) }}><NumberInput label="Room height in screens" value={chosenRoom.height} min={1} max={32} onCommit={(h) => resize(chosenRoom.width, h)} /></Box>
+        </>
+      )}
     </>
   )
 
@@ -73,7 +94,7 @@ export function WorldEditor() {
         </Box>
       )}
       <Box sx={{ flex: 1, minHeight: 0 }}>
-        <Viewport initialZoom={3} tools={tools} touchAction="none" info={placed.length ? `${placed.length} rooms · drag to arrange, double-click to open` : 'No rooms on the map yet. Create one in the Project panel.'}>
+        <Viewport initialZoom={3} tools={tools} touchAction="none" info={placed.length ? `${placed.length} rooms${size ? ` · map of ${size.width}×${size.height} screens` : ''} · drag to arrange, double-click to open` : 'No rooms on the map yet. Create one in the Project panel.'}>
           {(zoom) => {
             const onDown = (event: ReactPointerEvent<HTMLElement>, room: string, x: number, y: number) => {
               event.currentTarget.setPointerCapture(event.pointerId)
@@ -83,8 +104,10 @@ export function WorldEditor() {
             const onMove = (event: ReactPointerEvent<HTMLElement>) => {
               const g = grab.current
               if (!g) return
-              const x = g.x + Math.round((event.clientX - g.pointerX) / (CELL_W * zoom))
-              const y = g.y + Math.round((event.clientY - g.pointerY) / (CELL_H * zoom))
+              const moved = rooms[g.room]!
+              const fit = (value: number, span: number, limit: number | undefined) => (limit === undefined ? value : Math.max(0, Math.min(limit - span, value)))
+              const x = fit(g.x + Math.round((event.clientX - g.pointerX) / (CELL_W * zoom)), moved.width, size?.width)
+              const y = fit(g.y + Math.round((event.clientY - g.pointerY) / (CELL_H * zoom)), moved.height, size?.height)
               if (x !== (drag?.x ?? g.x) || y !== (drag?.y ?? g.y)) {
                 g.moved = true
                 setDrag({ room: g.room, x, y })

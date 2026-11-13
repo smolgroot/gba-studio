@@ -311,7 +311,7 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
             let _ = writeln!(gfx, "    static ROOM_{}_LAYER_{n}: &Aligned<[u8]> = &Aligned(*include_bytes!({}));", constant(id), out_file(&format!("room_{id}.layer{n}")));
             layer_refs.push(format!("&ROOM_{}_LAYER_{n}.0", constant(id)));
         }
-        room_gfx_rows.push(format!("        RoomGfx {{ tileset: &TILESETS[{tileset}], cols: {cols}, rows: {rows}, layers: &[{}] }},", layer_refs.join(", ")));
+        room_gfx_rows.push(format!("        RoomGfx {{ tileset: &TILESETS[{tileset}], cols: {cols}, rows: {rows}, layers: &[{}], world: {world} }},", layer_refs.join(", ")));
         summary.push(format!("room {id}: {cols}x{rows} tiles, {} layers, {} entities", layers.len(), entities.len()));
     }
 
@@ -577,10 +577,11 @@ mod tests {
         assert_eq!(decode(&[0, 1, 3, 0], 3), None);
     }
 
-    /// The sample project generates, and what comes out matches what was painted.
+    /// The fixture project generates, and what comes out matches what was painted.
     #[test]
-    fn generates_the_sample_project() {
-        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("../sample");
+    fn generates_the_fixture_project() {
+        // A small fixed project kept beside the crate: two rooms on the placeholder tileset.
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixture");
         let out = std::env::temp_dir().join(format!("gba-studio-build-test-{}", std::process::id()));
         let report = generate(&Options { project, out: out.clone() }).unwrap_or_else(|error| panic!("{error}"));
         assert!(report.summary.iter().any(|line| line.starts_with("room entry: 60x20 tiles")), "{:?}", report.summary);

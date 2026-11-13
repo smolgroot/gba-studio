@@ -2,6 +2,7 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { AGENTS_FILE, agentsGuide } from './agents.ts'
 import { AssetPath, Id, MULTI_DOCS, SINGLE_DOCS, STUDIO_DIR, docPath, newProject, schemaFor, validateProject } from '@gba-studio/core'
 import type { DocKind, Documents, MultiKind, Problem, SingleKind } from '@gba-studio/core'
 
@@ -154,6 +155,15 @@ export class ProjectFolder {
     await this.writeJson(docPath('project'), project)
     await this.writeJson(docPath('world'), world)
     await this.writeJson(docPath('audio'), audio)
+    await this.writeAgentsGuide(name, false)
+  }
+
+  /** Writes the note for coding agents into the folder. An existing one is kept unless `replace` is set. */
+  async writeAgentsGuide(name: string, replace: boolean): Promise<boolean> {
+    const abs = this.resolve(AGENTS_FILE)
+    if (existsSync(abs) && !replace) return false
+    await writeFile(abs, agentsGuide(name))
+    return true
   }
 
   /** Deletes a room, tileset or sprite document. What refers to it shows up in Problems. */

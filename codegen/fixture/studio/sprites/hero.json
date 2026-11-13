@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "name": "Hero",
+  "image": "assets/hero.png",
+  "frame": {
+    "width": 16,
+    "height": 16
+  },
+  "anchor": {
+    "x": 6,
+    "y": 16
+  },
+  "hitbox": {
+    "x": 2,
+    "y": 2,
+    "width": 9,
+    "height": 14
+  },
+  "animations": [
+    {
+      "name": "idle",
+      "frames": [
+        {
+          "index": 0,
+          "duration": 60
+        },
+        {
+          "index": 0,
+          "duration": 60
+        }
+      ],
+      "loop": true
+    },
+    {
+      "name": "run",
+      "frames": [
+        {
+          "index": 1,
+          "duration": 6
+        },
+        {
+          "index": 2,
+          "duration": 6
+        }
+      ],
+      "loop": true
+    },
+    {
+      "name": "jump",
+      "frames": [
+        {
+          "index": 3,
+          "duration": 60
+        }
+      ],
+      "loop": true
+    },
+    {
+      "name": "anim",
+      "frames": [
+        {
+          "index": 0,
+          "duration": 8
+        }
+      ],
+      "loop": true
+    }
+  ]
+}
