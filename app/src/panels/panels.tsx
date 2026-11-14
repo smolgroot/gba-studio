@@ -19,6 +19,7 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import ButtonBase from '@mui/material/ButtonBase'
 import IconButton from '@mui/material/IconButton'
 import List from '@mui/material/List'
 import ListItemButton from '@mui/material/ListItemButton'
@@ -26,7 +27,7 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { SCREEN, uniqueId } from '@gba-studio/core'
 import type { MultiKind, Project } from '@gba-studio/core'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Checkbox, Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
 import { selectionKey, useStudio } from '../store.ts'
@@ -53,16 +54,116 @@ const imageFileSx = tint('#fdd835')
 const AUDIO_EXT = /\.(wav|mid|midi|sf2|xm|mod|mp3|ogg)$/i
 const IMAGE_EXT = /\.(png|aseprite|ase|gif|jpe?g|bmp)$/i
 
+const COLLAPSED_KEY = 'gba-studio:collapsed-sections'
+function loadCollapsed(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}') } catch { return {} }
+}
+
+const HEIGHTS_KEY = 'gba-studio:section-heights'
+/** Sizes the user dragged each section to, in px by title. A section with none grows with its list up to [`DEFAULT_MAX`]. */
+function loadHeights(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(HEIGHTS_KEY) ?? '{}') } catch { return {} }
+}
+function saveHeight(title: string, height: number | null) {
+  const heights = loadHeights()
+  if (height === null) delete heights[title]
+  else heights[title] = height
+  try { localStorage.setItem(HEIGHTS_KEY, JSON.stringify(heights)) } catch { /* storage unavailable */ }
+}
+const DEFAULT_MAX = 280
+const MIN_HEIGHT = 56
+const MAX_HEIGHT = 1200
+const KEY_STEP = 24
+
+/** A collapsible group of the sidebar. Its list scrolls inside the section, and the bar under it drags (or, focused, arrow-keys) to resize it; double-click puts it back. */
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  const [collapsed, setCollapsed] = useState(() => !!loadCollapsed()[title])
+  const [height, setHeight] = useState<number | null>(() => loadHeights()[title] ?? null)
+  const body = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ y: number; height: number } | null>(null)
+  const toggle = () => {
+    const next = !collapsed
+    setCollapsed(next)
+    try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify({ ...loadCollapsed(), [title]: next })) } catch { /* storage unavailable */ }
+  }
+  const resize = (next: number | null, keep = true) => {
+    const clamped = next === null ? null : Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.round(next)))
+    setHeight(clamped)
+    if (keep) saveHeight(title, clamped)
+  }
+  const current = () => body.current?.offsetHeight ?? DEFAULT_MAX
   return (
     <Box component="section">
       <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'background.default', pr: 1 }}>
-        <Typography variant="caption" component="h2" sx={{ flex: 1, px: 2, py: 1, m: 0, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-          {title}
-        </Typography>
+        <ButtonBase
+          onClick={toggle}
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${title}`}
+          sx={{ flex: 1, justifyContent: 'flex-start', px: 1, py: 1, minWidth: 0 }}
+        >
+          {collapsed ? <ChevronRightIcon fontSize="small" sx={{ color: 'text.secondary' }} /> : <ExpandMoreIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
+          <Typography variant="caption" component="h2" sx={{ pl: 0.5, m: 0, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+            {title}
+          </Typography>
+        </ButtonBase>
         {action}
       </Box>
-      {children}
+      {!collapsed && (
+        <>
+          <Box
+            ref={body}
+            tabIndex={-1}
+            sx={{ overflowY: 'auto', overflowX: 'hidden', ...(height === null ? { maxHeight: DEFAULT_MAX } : { height }) }}
+          >
+            {children}
+          </Box>
+          <Tooltip title="Drag to resize, double-click to reset" placement="left" enterDelay={600}>
+            <Box
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label={`Resize ${title}`}
+              aria-valuenow={height ?? undefined}
+              aria-valuemin={MIN_HEIGHT}
+              aria-valuemax={MAX_HEIGHT}
+              tabIndex={0}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId)
+                drag.current = { y: e.clientY, height: current() }
+              }}
+              onPointerMove={(e) => {
+                if (drag.current) resize(drag.current.height + e.clientY - drag.current.y, false)
+              }}
+              onPointerUp={(e) => {
+                if (!drag.current) return
+                e.currentTarget.releasePointerCapture(e.pointerId)
+                drag.current = null
+                saveHeight(title, height)
+              }}
+              onPointerCancel={() => { drag.current = null }}
+              onDoubleClick={() => resize(null)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  resize(current() + (e.key === 'ArrowDown' ? KEY_STEP : -KEY_STEP))
+                } else if (e.key === 'Home' || e.key === 'Escape') {
+                  resize(null)
+                }
+              }}
+              sx={{
+                height: 8,
+                cursor: 'row-resize',
+                touchAction: 'none',
+                borderBottom: 1,
+                borderColor: 'divider',
+                position: 'relative',
+                '&::after': { content: '""', position: 'absolute', left: '50%', top: 3, width: 28, height: 2, ml: '-14px', borderRadius: 1, bgcolor: 'text.disabled' },
+                '&:hover, &:focus-visible': { bgcolor: 'action.hover', outline: 'none' },
+                '&:hover::after, &:focus-visible::after': { bgcolor: 'primary.main' },
+              }}
+            />
+          </Tooltip>
+        </>
+      )}
     </Box>
   )
 }
