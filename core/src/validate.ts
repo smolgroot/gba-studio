@@ -59,6 +59,7 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
   for (const [id, sprite] of Object.entries(docs.sprites)) {
     const file = docPath('sprite', id)
     needAsset(file, sprite.image)
+    if (sprite.palette) needAsset(file, sprite.palette)
     const { width, height } = sprite.frame
     if (!SPRITE_SIZES.some(([w, h]) => w === width && h === height)) {
       add('error', file, `frame ${width}x${height} is not a GBA sprite size (${SPRITE_SIZES.map(([w, h]) => `${w}x${h}`).join(', ')})`)

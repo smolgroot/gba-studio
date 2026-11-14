@@ -202,6 +202,52 @@ pub fn sheet(image: &Image, width: u32, height: u32) -> Result<Sheet, String> {
     Ok(Sheet { data, frames: (cols * rows) as usize, palette: hardware_palette(&colours) })
 }
 
+/// A palette file: a small PNG whose pixels, in reading order, are the palette's
+/// slots. The first is transparency (its colour is not used); there are at most 16.
+pub fn palette_file(image: &Image) -> Result<[u16; 16], String> {
+    let count = (image.width * image.height) as usize;
+    if count > 16 {
+        return Err(format!("has {count} pixels; a palette file holds 16 at most, one per colour"));
+    }
+    let mut palette = [0; 16];
+    for (slot, colour) in palette.iter_mut().enumerate().take(count).skip(1) {
+        let (x, y) = (slot as u32 % image.width, slot as u32 / image.width);
+        *colour = image.colour(x, y).unwrap_or(0);
+    }
+    Ok(palette)
+}
+
+/// Like [`sheet`], drawn in a palette file's colours rather than its own: every pixel's
+/// colour must be one of them. A sheet with a palette file says what it means, so a frame
+/// with no transparent pixel stays opaque: only a pixel's alpha makes it transparent, and
+/// no backdrop colour is guessed from the top-left corner as [`sheet`] does.
+pub fn sheet_in(image: &Image, width: u32, height: u32, palette: &[u16; 16]) -> Result<Sheet, String> {
+    if image.width < width || image.height < height {
+        return Err(format!("is {}x{} pixels, smaller than one {width}x{height} frame", image.width, image.height));
+    }
+    let (cols, rows) = (image.width / width, image.height / height);
+    for y in 0..rows * height {
+        for x in 0..cols * width {
+            if let Some(c) = image.colour(x, y)
+                && !palette[1..].contains(&c)
+            {
+                let (r, g, b) = ((c & 31) << 3, (c >> 5 & 31) << 3, (c >> 10 & 31) << 3);
+                return Err(format!("pixel ({x}, {y}) is #{r:02x}{g:02x}{b:02x}, which its palette file does not have"));
+            }
+        }
+    }
+    let mut data = Vec::new();
+    for frame in 0..cols * rows {
+        let (left, top) = (frame % cols * width, frame / cols * height);
+        for ty in 0..height / TILE {
+            for tx in 0..width / TILE {
+                image.tile(left + tx * TILE, top + ty * TILE, &palette[1..], &mut data);
+            }
+        }
+    }
+    Ok(Sheet { data, frames: (cols * rows) as usize, palette: *palette })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,6 +255,31 @@ mod tests {
     const CLEAR: [u8; 4] = [0, 0, 0, 0];
     fn rgb(n: u8) -> [u8; 4] {
         [n.wrapping_mul(8), n.wrapping_mul(16), 255 - n, 255]
+    }
+
+    #[test]
+    fn a_palette_file_fixes_the_slots_two_sheets_share() {
+        // A 4x1 palette file: slot 0 is transparency, then three colours.
+        let file = Image::from_pixels(4, 1, vec![CLEAR, rgb(3), rgb(1), rgb(2)]);
+        let palette = palette_file(&file).unwrap();
+        let colour = |n: u8| (rgb(n)[0] as u16 >> 3) | ((rgb(n)[1] as u16 >> 3) << 5) | ((rgb(n)[2] as u16 >> 3) << 10);
+        assert_eq!(&palette[..4], [0, colour(3), colour(1), colour(2)], "slots keep the file's order");
+        // A sheet that only uses colour 2 still indexes it as slot 3, as every sheet sharing the file does.
+        // (One transparent pixel, so it isn't taken for a sheet drawn on a flat backdrop.)
+        let mut pixels = vec![rgb(2); 64];
+        pixels[63] = CLEAR;
+        let sheet = sheet_in(&Image::from_pixels(8, 8, pixels), 8, 8, &palette).unwrap();
+        assert_eq!(&sheet.data[..4], [0x33; 4]);
+        assert_eq!(sheet.palette, palette);
+        // A fully opaque sheet keeps every pixel, its top-left corner included.
+        let opaque = sheet_in(&Image::from_pixels(8, 8, vec![rgb(2); 64]), 8, 8, &palette).unwrap();
+        assert_eq!(&opaque.data[..4], [0x33; 4], "no backdrop is keyed out of a sheet with a palette file");
+        // A colour the file lacks is named, not folded into another.
+        let mut odd = vec![rgb(9); 64];
+        odd[63] = CLEAR;
+        let err = sheet_in(&Image::from_pixels(8, 8, odd), 8, 8, &palette).err().unwrap();
+        assert!(err.contains("does not have"), "{err}");
+        assert!(palette_file(&Image::from_pixels(17, 1, vec![rgb(1); 17])).is_err());
     }
 
     #[test]

@@ -60,6 +60,9 @@ pub struct Sprite {
     pub hitbox: Option<Hitbox>,
     #[serde(default)]
     pub animations: Vec<Animation>,
+    /// A palette file shared with other sprites: one palette on the GBA for all of them.
+    #[serde(default)]
+    pub palette: Option<String>,
 }
 
 #[derive(Deserialize)]

@@ -106,6 +106,12 @@ export const Sprite = z.object({
   anchor: z.object({ x: z.number().int(), y: z.number().int() }),
   hitbox: z.object({ x: z.number().int(), y: z.number().int(), width: z.number().int().positive(), height: z.number().int().positive() }).optional(),
   animations: z.array(Animation).default([]),
+  /**
+   * A palette file (a PNG whose pixels, in reading order, are the 16 slots; the first is
+   * transparency) to draw the sheet in. Sprites naming the same file share one palette
+   * on the GBA, which shows only 16 at once. Without it, a sheet's own colours are its palette.
+   */
+  palette: AssetPath.optional(),
 })
 
 export const TileLayer = z.object({

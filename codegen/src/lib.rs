@@ -430,8 +430,10 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
         }
     }
 
-    // Sprites: every frame of each sheet, and its animations.
+    // Sprites: every frame of each sheet, and its animations. Sheets naming one palette
+    // file share one palette: its file and its colours, numbered in order of first use.
     let mut sprite_items = String::new();
+    let mut shared_palettes: Vec<(String, [u16; 16])> = Vec::new();
     for (index, (id, sprite)) in docs.sprites.iter().enumerate() {
         let file = format!("studio/sprites/{id}.json");
         let (width, height) = (sprite.frame.width, sprite.frame.height);
@@ -443,13 +445,35 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
             problems.push(format!("{file}: {} is not a PNG; export the sheet as PNG", sprite.image));
             continue;
         }
-        let sheet = match image::Image::load(&asset(&sprite.image, &mut inputs)).and_then(|image| image::sheet(&image, width, height)) {
+        let shared = match &sprite.palette {
+            None => None,
+            Some(path) => match shared_palettes.iter().position(|(p, _)| p == path) {
+                Some(n) => Some(n),
+                None => match image::Image::load(&asset(path, &mut inputs)).and_then(|image| image::palette_file(&image)) {
+                    Ok(colours) => {
+                        let _ = writeln!(sprite_items, "    static SHARED_PALETTE_{}: Palette16 = {};", shared_palettes.len(), palettes_source(&[colours]));
+                        shared_palettes.push((path.clone(), colours));
+                        Some(shared_palettes.len() - 1)
+                    }
+                    Err(problem) => {
+                        problems.push(format!("{file}: {path}: {problem}"));
+                        continue;
+                    }
+                },
+            },
+        };
+        let cut = |image: &image::Image| match shared {
+            Some(n) => image::sheet_in(image, width, height, &shared_palettes[n].1),
+            None => image::sheet(image, width, height),
+        };
+        let sheet = match image::Image::load(&asset(&sprite.image, &mut inputs)).and_then(|image| cut(&image)) {
             Ok(sheet) => sheet,
             Err(problem) => {
                 problems.push(format!("{file}: {}: {problem}", sprite.image));
                 continue;
             }
         };
+        let palette_name = shared.map_or(format!("SPRITE_{index}_PALETTE"), |n| format!("SHARED_PALETTE_{n}"));
         write(&format!("sprite_{id}.4bpp"), &sheet.data, &mut problems);
         let frame_bytes = (width / image::TILE * (height / image::TILE)) as usize * image::TILE_BYTES;
         let mut animations = Vec::new();
@@ -461,14 +485,14 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
             animations.push(format!("Animation {{ name: {:?}, frames: &[{}], looping: {} }}", animation.name, frames.join(", "), animation.looping));
         }
         let frames: Vec<String> = (0..sheet.frames)
-            .map(|frame| format!("unsafe {{ Sprite::new(&SPRITE_{index}_PALETTE, frame_bytes(&SPRITE_{index}_DATA.0, {frame}, {frame_bytes}), Size::S{width}x{height}) }}"))
+            .map(|frame| format!("unsafe {{ Sprite::new(&{palette_name}, frame_bytes(&SPRITE_{index}_DATA.0, {frame}, {frame_bytes}), Size::S{width}x{height}) }}"))
             .collect();
         let hitbox = sprite.hitbox.as_ref().map_or("None".to_string(), |h| format!("Some(({}, {}, {}, {}))", h.x, h.y, h.width, h.height));
         let _ = write!(
             sprite_items,
-            "    static SPRITE_{index}_DATA: &Aligned<[u8]> = &Aligned(*include_bytes!({}));\n    static SPRITE_{index}_PALETTE: Palette16 = {};\n    // SAFETY: each frame is whole 4-bit tiles inside 4-byte aligned data.\n    static SPRITE_{index}_FRAMES: [Sprite; {}] = [\n        {},\n    ];\n",
+            "    static SPRITE_{index}_DATA: &Aligned<[u8]> = &Aligned(*include_bytes!({}));\n    {}\n    // SAFETY: each frame is whole 4-bit tiles inside 4-byte aligned data.\n    static SPRITE_{index}_FRAMES: [Sprite; {}] = [\n        {},\n    ];\n",
             out_file(&format!("sprite_{id}.4bpp")),
-            palettes_source(&[sheet.palette]),
+            if shared.is_some() { String::new() } else { format!("static SPRITE_{index}_PALETTE: Palette16 = {};", palettes_source(&[sheet.palette])) },
             sheet.frames,
             frames.join(",\n        "),
         );
