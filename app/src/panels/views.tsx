@@ -69,9 +69,11 @@ const MAX_ZOOM = 12
 /**
  * A scrollable area with a toolbar and zoom. `children` gets the zoom factor.
  * Ctrl + wheel zooms; `scroller` gives the editors the scrolling element, to pan it.
+ * Past 8x, zoom moves in steps of 4 so a high `maxZoom` is a few clicks away.
  */
-export function Viewport({ initialZoom, tools, info, scroller, touchAction = 'pan-x pan-y', children }: {
+export function Viewport({ initialZoom, maxZoom = MAX_ZOOM, tools, info, scroller, touchAction = 'pan-x pan-y', children }: {
   initialZoom: number
+  maxZoom?: number
   tools?: ReactNode
   info?: ReactNode
   scroller?: RefObject<HTMLDivElement | null>
@@ -79,6 +81,8 @@ export function Viewport({ initialZoom, tools, info, scroller, touchAction = 'pa
   children: (zoom: number) => ReactNode
 }) {
   const [zoom, setZoom] = useState(initialZoom)
+  const zoomIn = (z: number) => Math.min(maxZoom, z >= 8 && maxZoom > MAX_ZOOM ? z + 4 : z + 1)
+  const zoomOut = (z: number) => Math.max(1, z > 8 && maxZoom > MAX_ZOOM ? z - 4 : z - 1)
   const own = useRef<HTMLDivElement>(null)
   const area = scroller ?? own
   useEffect(() => {
@@ -87,19 +91,19 @@ export function Viewport({ initialZoom, tools, info, scroller, touchAction = 'pa
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) return
       event.preventDefault()
-      setZoom((z) => Math.min(MAX_ZOOM, Math.max(1, z + (event.deltaY < 0 ? 1 : -1))))
+      setZoom((z) => (event.deltaY < 0 ? zoomIn(z) : zoomOut(z)))
     }
     element.addEventListener('wheel', onWheel, { passive: false })
     return () => element.removeEventListener('wheel', onWheel)
-  }, [area])
+  }, [area, maxZoom]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, minHeight: BAR.tool, flexShrink: 0, flexWrap: 'wrap', borderBottom: 1, borderColor: 'divider', bgcolor: 'background.default' }}>
         {tools}
         {tools && <Divider />}
-        <ToolButton title="Zoom out (Ctrl + wheel)" disabled={zoom <= 1} onClick={() => setZoom(zoom - 1)}><RemoveIcon /></ToolButton>
+        <ToolButton title="Zoom out (Ctrl + wheel)" disabled={zoom <= 1} onClick={() => setZoom(zoomOut(zoom))}><RemoveIcon /></ToolButton>
         <Typography variant="body2" sx={{ width: '3.2em', textAlign: 'center' }}>{zoom * 100}%</Typography>
-        <ToolButton title="Zoom in (Ctrl + wheel)" disabled={zoom >= MAX_ZOOM} onClick={() => setZoom(zoom + 1)}><AddIcon /></ToolButton>
+        <ToolButton title="Zoom in (Ctrl + wheel)" disabled={zoom >= maxZoom} onClick={() => setZoom(zoomIn(zoom))}><AddIcon /></ToolButton>
         <Typography variant="body2" color="text.secondary" noWrap sx={{ ml: 2, flex: 1, minWidth: 0 }}>{info}</Typography>
       </Box>
       <Box ref={area} sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 4, bgcolor: '#161616', touchAction }}>{children(zoom)}</Box>

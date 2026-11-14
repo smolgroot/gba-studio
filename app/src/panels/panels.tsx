@@ -14,16 +14,12 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Dialog from '@mui/material/Dialog'
-import DialogActions from '@mui/material/DialogActions'
-import DialogContent from '@mui/material/DialogContent'
-import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
 import List from '@mui/material/List'
 import ListItemButton from '@mui/material/ListItemButton'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { FORMAT_VERSION, SCREEN, SPRITE_SIZES, emptyRoom, slugify, uniqueId } from '@gba-studio/core'
+import { SCREEN, uniqueId } from '@gba-studio/core'
 import type { MultiKind, Project } from '@gba-studio/core'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -32,15 +28,25 @@ import { selectionKey, useStudio } from '../store.ts'
 import type { Selection } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
+import { PixelEditor } from './pixel.tsx'
 import { PlayView } from './play.tsx'
-import { ImportButton, UndoButtons, nameFromPath } from './common.tsx'
+import { UndoButtons } from './common.tsx'
+import { CreateDialog, NewImageDialog } from './create.tsx'
 import { Heading, RoomEditor, RoomProperties } from './room.tsx'
 import { SpriteEditor, SpriteProperties } from './sprite.tsx'
 import { TilesetEditor, TilesetProperties } from './tileset.tsx'
-import { AssetView, Message } from './views.tsx'
-import { WorldEditor, freeSpot } from './world.tsx'
+import { AssetView, Message, useImage } from './views.tsx'
+import { WorldEditor } from './world.tsx'
 
 const iconSx = { mr: 1.5, color: 'text.secondary', flexShrink: 0 } as const
+const tint = (color: string) => ({ ...iconSx, color }) as const
+const roomSx = tint('#4caf50')
+const tilesetSx = tint('#00bcd4')
+const spriteSx = tint('#2196f3')
+const audioFileSx = tint('#f44336')
+const imageFileSx = tint('#fdd835')
+const AUDIO_EXT = /\.(wav|mid|midi|sf2|xm|mod|mp3|ogg)$/i
+const IMAGE_EXT = /\.(png|aseprite|ase|gif|jpe?g|bmp)$/i
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -86,87 +92,9 @@ function AddButton({ title, onClick, disabled }: { title: string; onClick: () =>
   )
 }
 
-/** Asks for what a new room, tileset or sprite needs, then creates and opens it. */
-function CreateDialog({ kind, onClose }: { kind: MultiKind; onClose: () => void }) {
-  const docs = useStudio((s) => s.bundle!.docs)
-  const assets = useStudio((s) => s.bundle!.assets)
-  const commit = useStudio((s) => s.commit)
-  const select = useStudio((s) => s.select)
-  const images = assets.filter((a) => (kind === 'sprite' ? /\.(png|aseprite|ase)$/i : /\.png$/i).test(a.path))
-  const tilesets = Object.entries(docs.tilesets)
-  const [name, setName] = useState('')
-  const [width, setWidth] = useState(1)
-  const [height, setHeight] = useState(1)
-  const [tileset, setTileset] = useState(tilesets[0]?.[0] ?? '')
-  const [image, setImage] = useState(images[0]?.path ?? '')
-  const [size, setSize] = useState('32x32')
-  const title = name.trim() || (kind !== 'room' && image ? nameFromPath(image) : '')
-  const ready = !!title && (kind === 'room' ? !!tileset : !!image)
-
-  const create = () => {
-    const id = uniqueId(slugify(title), Object.keys(docs[`${kind}s`]))
-    if (kind === 'room') {
-      commit('room', id, emptyRoom(title, width, height, tileset))
-      // A new room goes on the map, beside what is there.
-      const world = docs.world
-      if (world) commit('world', undefined, { ...world, rooms: [...world.rooms, { room: id, ...freeSpot(world, (r) => docs.rooms[r]) }], start: world.start ?? id })
-    } else if (kind === 'tileset') {
-      commit('tileset', id, { version: FORMAT_VERSION, name: title, image, collision: {} })
-    } else {
-      const [w, h] = size.split('x').map(Number) as [number, number]
-      // The anchor starts at the feet: the middle of the frame's bottom edge.
-      commit('sprite', id, { version: FORMAT_VERSION, name: title, image, frame: { width: w, height: h }, anchor: { x: w / 2, y: h }, animations: [] })
-    }
-    select({ kind, id })
-    onClose()
-  }
-
-  return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
-      <Box component="form" onSubmit={(event) => { event.preventDefault(); if (ready) create() }}>
-        <DialogTitle>New {kind}</DialogTitle>
-        <DialogContent sx={{ px: 2, py: 0 }}>
-          <Fields>
-            <Field label="Name"><TextInput label="Name" value={name} placeholder={title || 'Name'} onCommit={setName} /></Field>
-            {kind === 'room' ? (
-              <>
-                <Field label="Screens">
-                  <NumberInput label="Width in screens" value={width} min={1} max={32} onCommit={setWidth} />
-                  <Typography color="text.secondary">×</Typography>
-                  <NumberInput label="Height in screens" value={height} min={1} max={32} onCommit={setHeight} />
-                </Field>
-                <Field label="Size"><Typography color="text.secondary">{width * SCREEN.width} × {height * SCREEN.height} px</Typography></Field>
-                <Field label="Tileset">
-                  {tilesets.length ? <SelectInput label="Tileset" value={tileset} onChange={setTileset} options={tilesets.map(([value, t]) => ({ value, label: t.name }))} /> : <Typography color="warning.main">Create a tileset first.</Typography>}
-                </Field>
-              </>
-            ) : (
-              <>
-                <Field label="Image">
-                  {images.length ? <SelectInput label="Image" value={image} onChange={setImage} options={images.map((a) => ({ value: a.path, label: a.path }))} /> : <Typography color="text.secondary">No images in the folder yet.</Typography>}
-                </Field>
-                <Field label="">
-                  <ImportButton label="Import an image" accept={kind === 'sprite' ? '.png,.aseprite,.ase' : '.png'} folder={`assets/${kind}s`} onImported={(paths) => setImage(paths[0]!)} />
-                </Field>
-                {kind === 'sprite' && (
-                  <Field label="Frame size"><SelectInput label="Frame size" value={size} onChange={setSize} options={SPRITE_SIZES.map(([w, h]) => ({ value: `${w}x${h}`, label: `${w} × ${h}` }))} /></Field>
-                )}
-              </>
-            )}
-          </Fields>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="contained" disabled={!ready}>Create</Button>
-        </DialogActions>
-      </Box>
-    </Dialog>
-  )
-}
-
 export function ProjectPanel() {
   const bundle = useStudio((s) => s.bundle)
-  const [creating, setCreating] = useState<MultiKind | null>(null)
+  const [creating, setCreating] = useState<MultiKind | 'image' | null>(null)
   if (!bundle) return null
   const { docs, assets } = bundle
   const rooms = Object.entries(docs.rooms)
@@ -183,7 +111,7 @@ export function ProjectPanel() {
       <Section title="Rooms" action={<AddButton title={tilesets.length ? 'New room' : 'A room needs a tileset: create one first'} disabled={!tilesets.length} onClick={() => setCreating('room')} />}>
         <List>
           {rooms.map(([id, room]) => (
-            <Row key={id} selection={{ kind: 'room', id }} icon={<MapOutlinedIcon sx={iconSx} />} label={room.name} detail={`${room.width}×${room.height}`} />
+            <Row key={id} selection={{ kind: 'room', id }} icon={<MapOutlinedIcon sx={roomSx} />} label={room.name} detail={`${room.width}×${room.height}`} />
           ))}
         </List>
         {rooms.length === 0 && <Empty>No rooms yet.</Empty>}
@@ -191,7 +119,7 @@ export function ProjectPanel() {
       <Section title="Tilesets" action={<AddButton title="New tileset from a PNG" onClick={() => setCreating('tileset')} />}>
         <List>
           {tilesets.map(([id, tileset]) => (
-            <Row key={id} selection={{ kind: 'tileset', id }} icon={<GridOnIcon sx={iconSx} />} label={tileset.name} />
+            <Row key={id} selection={{ kind: 'tileset', id }} icon={<GridOnIcon sx={tilesetSx} />} label={tileset.name} />
           ))}
         </List>
         {tilesets.length === 0 && <Empty>No tilesets yet.</Empty>}
@@ -199,18 +127,18 @@ export function ProjectPanel() {
       <Section title="Sprites" action={<AddButton title="New sprite from a sheet" onClick={() => setCreating('sprite')} />}>
         <List>
           {sprites.map(([id, sprite]) => (
-            <Row key={id} selection={{ kind: 'sprite', id }} icon={<DirectionsRunIcon sx={iconSx} />} label={sprite.name} detail={`${sprite.frame.width}×${sprite.frame.height} · ${sprite.animations.length} anim`} />
+            <Row key={id} selection={{ kind: 'sprite', id }} icon={<DirectionsRunIcon sx={spriteSx} />} label={sprite.name} detail={`${sprite.frame.width}×${sprite.frame.height} · ${sprite.animations.length} anim`} />
           ))}
         </List>
         {sprites.length === 0 && <Empty>No sprites yet.</Empty>}
       </Section>
-      <Section title="Asset files">
+      <Section title="Asset files" action={<AddButton title="New blank image to draw" onClick={() => setCreating('image')} />}>
         <List>
           {assets.map((asset) => (
             <Row
               key={asset.path}
               selection={{ kind: 'asset', id: asset.path }}
-              icon={asset.path.endsWith('.png') ? <ImageOutlinedIcon sx={iconSx} /> : <InsertDriveFileOutlinedIcon sx={iconSx} />}
+              icon={AUDIO_EXT.test(asset.path) ? <AudiotrackIcon sx={audioFileSx} /> : IMAGE_EXT.test(asset.path) ? <ImageOutlinedIcon sx={imageFileSx} /> : <InsertDriveFileOutlinedIcon sx={iconSx} />}
               label={asset.path}
               detail={formatSize(asset.size)}
             />
@@ -218,7 +146,8 @@ export function ProjectPanel() {
         </List>
         {assets.length === 0 && <Empty>No PNG, Aseprite, MIDI, SF2, XM, MOD or WAV files in this folder.</Empty>}
       </Section>
-      {creating && <CreateDialog kind={creating} onClose={() => setCreating(null)} />}
+      {creating === 'image' && <NewImageDialog onClose={() => setCreating(null)} />}
+      {creating && creating !== 'image' && <CreateDialog kind={creating} onClose={() => setCreating(null)} />}
     </Box>
   )
 }
@@ -230,7 +159,7 @@ export function DocumentPanel({ selection }: { selection: Selection }) {
     case 'room': return <RoomEditor id={id!} />
     case 'tileset': return <TilesetEditor id={id!} />
     case 'sprite': return <SpriteEditor id={id!} />
-    case 'asset': return <AssetView path={id!} />
+    case 'asset': return /\.png$/i.test(id!) ? <PixelEditor path={id!} /> : <AssetView path={id!} />
     case 'project': return <ProjectSettings />
     case 'audio': return <AudioEditor />
     case 'play': return <PlayView />
@@ -381,13 +310,7 @@ export function PropertiesPanel() {
       </Fields>
     )
   } else if (kind === 'asset') {
-    const asset = bundle.assets.find((a) => a.path === id)
-    body = (
-      <Fields>
-        <Field label="Path"><Typography sx={{ overflowWrap: 'anywhere' }}>{id}</Typography></Field>
-        <Field label="Size"><Typography>{asset ? formatSize(asset.size) : 'file is gone'}</Typography></Field>
-      </Fields>
-    )
+    body = <AssetProperties path={id!} />
   } else if (kind === 'project' && docs.project) {
     body = (
       <Fields>
@@ -407,6 +330,37 @@ export function PropertiesPanel() {
   }
   if (!body) return <Empty>Nothing to show for this item.</Empty>
   return <Box sx={{ height: '100%', overflow: 'auto' }}>{body}</Box>
+}
+
+/** A file's path and size, its pixel size if it is a picture, and the items that use it. */
+function AssetProperties({ path }: { path: string }) {
+  const bundle = useStudio((s) => s.bundle!)
+  const select = useStudio((s) => s.select)
+  const png = /\.png$/i.test(path)
+  const image = useImage(png ? path : undefined)
+  const asset = bundle.assets.find((a) => a.path === path)
+  const { docs } = bundle
+  const users: Array<{ selection: Selection; label: string }> = [
+    ...Object.entries(docs.tilesets).filter(([, t]) => t.image === path).map(([id, t]) => ({ selection: { kind: 'tileset', id } as Selection, label: `Tileset ${t.name}` })),
+    ...Object.entries(docs.sprites).filter(([, s]) => s.image === path).map(([id, s]) => ({ selection: { kind: 'sprite', id } as Selection, label: `Sprite ${s.name}` })),
+    ...Object.entries(docs.rooms).filter(([, r]) => r.backgrounds?.some((b) => b.image === path)).map(([id, r]) => ({ selection: { kind: 'room', id } as Selection, label: `Background of ${r.name}` })),
+    ...(docs.audio?.tracks ?? []).filter((t) => t.file === path || t.soundfont === path).map((t) => ({ selection: { kind: 'audio' } as Selection, label: `Track ${t.name}` })),
+    ...(docs.audio?.sfx ?? []).filter((s) => s.file === path).map((s) => ({ selection: { kind: 'audio' } as Selection, label: `Sound ${s.name}` })),
+  ]
+  return (
+    <Fields>
+      <Field label="Path"><Typography sx={{ overflowWrap: 'anywhere' }}>{path}</Typography></Field>
+      <Field label="Size"><Typography>{asset ? formatSize(asset.size) : 'file is gone'}</Typography></Field>
+      {image && image !== 'error' && <Field label="Pixels"><Typography>{image.width} × {image.height}{image.width % 8 || image.height % 8 ? ' (not a multiple of 8)' : ` · ${image.width / 8} × ${image.height / 8} tiles`}</Typography></Field>}
+      <Field label="Used by">
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          {users.length === 0 && <Typography color="text.secondary">Nothing yet</Typography>}
+          {users.map((u, i) => <Button key={i} variant="text" size="small" sx={{ px: 0.5, minWidth: 0 }} onClick={() => select(u.selection)}>{u.label}</Button>)}
+        </Box>
+      </Field>
+      {png && <Field label=""><Typography color="text.secondary">Draw on this file in the pixel editor. It saves by itself.</Typography></Field>}
+    </Fields>
+  )
 }
 
 /** The item a problem's file belongs to, if it is one that opens. */

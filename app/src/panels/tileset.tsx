@@ -1,5 +1,7 @@
 // The tileset editor: says which collision class each tile carries into a room.
+import BrushIcon from '@mui/icons-material/Brush'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { TILE, countColours } from '@gba-studio/core'
 import type { Tileset } from '@gba-studio/core'
@@ -27,6 +29,7 @@ export function TilesetEditor({ id }: { id: string }) {
   const tileset = useStudio((s) => s.bundle?.docs.tilesets[id])
   const classes = useStudio((s) => s.bundle?.docs.project?.collisionClasses)
   const commit = useStudio((s) => s.commit)
+  const select = useStudio((s) => s.select)
   const image = useImage(tileset?.image)
   const colours = useColourCount(image)
   const [classId, setClassId] = useState<string | null>(null)
@@ -71,6 +74,8 @@ export function TilesetEditor({ id }: { id: string }) {
       <Box sx={{ width: ui(12), height: ui(12), ml: 1, bgcolor: chosen.colour, border: '1px solid rgba(255,255,255,0.4)' }} />
       <Divider />
       <UndoButtons />
+      <Divider />
+      <Button variant="text" startIcon={<BrushIcon />} onClick={() => select({ kind: 'asset', id: tileset.image })}>Edit pixels</Button>
     </>
   )
   return (

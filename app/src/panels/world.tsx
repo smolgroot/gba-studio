@@ -5,13 +5,13 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { resizeRoom } from '@gba-studio/core'
-import type { World } from '@gba-studio/core'
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { NumberInput } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { ui } from '../theme.ts'
 import { UndoButtons } from './common.tsx'
+import { CreateDialog, freeSpot } from './create.tsx'
 import { Divider, GridOverlay, Message, Viewport } from './views.tsx'
 
 // A screen on the map keeps the GBA's 3:2 shape.
@@ -20,19 +20,14 @@ const CELL_H = 16
 /** Empty screens shown around the rooms, to drag into. */
 const MARGIN = 2
 
-/** A spot right of everything placed, level with the top. */
-export function freeSpot(world: World, sizes: (room: string) => { width: number; height: number } | undefined): { x: number; y: number } {
-  const placed = world.rooms.flatMap((p) => (sizes(p.room) ? [{ ...p, ...sizes(p.room)! }] : []))
-  if (placed.length === 0) return { x: 0, y: 0 }
-  return { x: Math.max(...placed.map((p) => p.x + p.width)), y: Math.min(...placed.map((p) => p.y)) }
-}
-
 export function WorldEditor() {
   const world = useStudio((s) => s.bundle?.docs.world)
   const rooms = useStudio((s) => s.bundle?.docs.rooms)
   const select = useStudio((s) => s.select)
   const commit = useStudio((s) => s.commit)
   const [chosen, setChosen] = useState<string | null>(null)
+  /** The new-room dialog, and the screen it was asked for by a double-click on the map. */
+  const [creating, setCreating] = useState<{ at?: { x: number; y: number } } | null>(null)
   const [drag, setDrag] = useState<{ room: string; x: number; y: number } | null>(null)
   const grab = useRef<{ room: string; pointerX: number; pointerY: number; x: number; y: number; moved: boolean } | null>(null)
   if (!world || !rooms) return <Message>The world file is missing or has errors. See Problems.</Message>
@@ -57,6 +52,8 @@ export function WorldEditor() {
   const tools = (
     <>
       <UndoButtons />
+      <Divider />
+      <Button variant="text" startIcon={<AddIcon />} onClick={() => setCreating({})}>New room</Button>
       <Divider />
       <Button variant="text" startIcon={<HomeOutlinedIcon />} disabled={!chosen || world.start === chosen} onClick={() => chosen && commit('world', undefined, { ...world, start: chosen })}>Start here</Button>
       <Button variant="text" disabled={!chosen} onClick={() => chosen && select({ kind: 'room', id: chosen })}>Open room</Button>
@@ -94,7 +91,7 @@ export function WorldEditor() {
         </Box>
       )}
       <Box sx={{ flex: 1, minHeight: 0 }}>
-        <Viewport initialZoom={3} tools={tools} touchAction="none" info={placed.length ? `${placed.length} rooms${size ? ` · map of ${size.width}×${size.height} screens` : ''} · drag to arrange, double-click to open` : 'No rooms on the map yet. Create one in the Project panel.'}>
+        <Viewport initialZoom={3} tools={tools} touchAction="none" info={placed.length ? `${placed.length} rooms${size ? ` · map of ${size.width}×${size.height} screens` : ''} · drag to arrange, double-click a room to open it or an empty screen to add one` : 'No rooms yet. Press New room, or double-click a screen on the map.'}>
           {(zoom) => {
             const onDown = (event: ReactPointerEvent<HTMLElement>, room: string, x: number, y: number) => {
               event.currentTarget.setPointerCapture(event.pointerId)
@@ -122,7 +119,18 @@ export function WorldEditor() {
               setDrag(null)
             }
             return (
-              <Box sx={{ position: 'relative', width: (right - left) * CELL_W * zoom, height: (bottom - top) * CELL_H * zoom, bgcolor: '#1c1c1c' }} onPointerDown={(event) => event.target === event.currentTarget && setChosen(null)}>
+              <Box
+                sx={{ position: 'relative', width: (right - left) * CELL_W * zoom, height: (bottom - top) * CELL_H * zoom, bgcolor: '#1c1c1c' }}
+                onPointerDown={(event) => event.target === event.currentTarget && setChosen(null)}
+                onDoubleClick={(event) => {
+                  // An empty screen asks for a new room there.
+                  if (event.target !== event.currentTarget) return
+                  const box = event.currentTarget.getBoundingClientRect()
+                  const x = Math.floor((event.clientX - box.left) / (CELL_W * zoom)) + left
+                  const y = Math.floor((event.clientY - box.top) / (CELL_H * zoom)) + top
+                  setCreating({ at: { x, y } })
+                }}
+              >
                 <GridOverlay stepX={CELL_W * zoom} stepY={CELL_H * zoom} colour="rgba(255,255,255,0.08)" />
                 {placed.map((p) => {
                   const at = drag?.room === p.room ? drag : p
@@ -167,6 +175,7 @@ export function WorldEditor() {
           }}
         </Viewport>
       </Box>
+      {creating && <CreateDialog kind="room" at={creating.at} onClose={() => setCreating(null)} />}
     </Box>
   )
 }

@@ -1,6 +1,7 @@
 // The sprite editor: cuts a sheet into frames, builds animations from them, and
 // plays them back at the GBA's 60 frames a second.
 import AddIcon from '@mui/icons-material/Add'
+import BrushIcon from '@mui/icons-material/Brush'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import CloseIcon from '@mui/icons-material/Close'
@@ -19,7 +20,7 @@ import { useStudio } from '../store.ts'
 import { ui } from '../theme.ts'
 import { UndoButtons } from './common.tsx'
 import { Heading, rowSx } from './room.tsx'
-import { GridOverlay, Message, ToolButton, Viewport, useImage } from './views.tsx'
+import { Divider, GridOverlay, Message, ToolButton, Viewport, useImage } from './views.tsx'
 
 type Animation = Sprite['animations'][number]
 
@@ -130,6 +131,7 @@ function Preview({ sprite, image, animation, still, playing, showGuides }: { spr
 export function SpriteEditor({ id }: { id: string }) {
   const sprite = useStudio((s) => s.bundle?.docs.sprites[id])
   const commit = useStudio((s) => s.commit)
+  const select = useStudio((s) => s.select)
   const image = useImage(sprite?.image)
   const [current, setCurrent] = useState(0)
   const [still, setStill] = useState(0)
@@ -160,7 +162,17 @@ export function SpriteEditor({ id }: { id: string }) {
       <Box sx={{ flex: 1, minWidth: 0, minHeight: { xs: 200, md: 0 } }}>
         <Viewport
           initialZoom={3}
-          tools={<UndoButtons />}
+          tools={
+            <>
+              <UndoButtons />
+              {/\.png$/i.test(sprite.image) && (
+                <>
+                  <Divider />
+                  <Button variant="text" startIcon={<BrushIcon />} onClick={() => select({ kind: 'asset', id: sprite.image })}>Edit pixels</Button>
+                </>
+              )}
+            </>
+          }
           info={`${total} frames of ${width}×${height}${misfit ? ' · the sheet is not a whole number of frames' : ''}${animation ? ' · click a frame to add it to the animation' : ' · click a frame to look at it'}`}
         >
           {(zoom) => (

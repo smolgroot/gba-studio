@@ -93,9 +93,10 @@ Open a room to paint it.
 ### World map
 
 Rooms are whole numbers of screens placed on a grid. Drag rooms to arrange them,
-choose the start room, take a room off the map or put an unplaced one back. A
-new room is placed beside the others. Select a room to change its size in screens
-right there. In Properties the map can be given a size in screens (and so in tiles);
+choose the start room, take a room off the map or put an unplaced one back. Press
+**New room** to make one beside the others, or **double-click an empty screen** to
+make a room right there. A project with no tileset yet can import one from a PNG in
+the same dialog. Select a room to change its size in screens right there. In Properties the map can be given a size in screens (and so in tiles);
 rooms are then kept inside it, and a room outside is reported as a problem. Without
 a size the map grows with its rooms.
 
@@ -120,6 +121,36 @@ be previewed here yet), choose one of the twelve GBA sprite sizes, then:
 - set the **anchor** (the point placed at an entity's position) and a **hitbox**;
 - watch the result in a live preview that plays at the console's real speed, with the
   anchor and hitbox drawn over it.
+
+### Pixel editor
+
+Open any PNG in the Asset files list, or press **Edit pixels** in a tileset or sprite,
+to draw on it in the studio. The **+** beside Asset files makes a new blank image of
+any size in `assets/sprites/`, `assets/tilesets/` or `assets/backgrounds/`.
+
+- **Tools:** pencil, eraser, line, rectangle, filled rectangle, ellipse, fill, colour
+  picker and pan, with a brush size of 1 to 16 pixels.
+- **Colours:** a colour picker and hex field, the colours already in the image, your
+  recent colours, and a 16-colour starter palette. Colours are snapped to the GBA's
+  15-bit palette by default (5 bits a channel), so what you paint is what the console
+  shows; the number of distinct colours is shown as you draw.
+- A pixel grid and an 8x8 tile grid; the mouse position is shown in pixels and tiles.
+- Resize the image, keeping its top-left corner.
+- Undo and redo (`Ctrl+Z`, `Ctrl+Shift+Z`), up to 100 steps.
+- The PNG is **written back a moment after each stroke**, so tilesets, sprites and
+  rooms that use it update at once. A file changed by another program while nothing
+  is unsaved here is reloaded, and the old picture becomes an undo step.
+
+| Key | Action |
+| --- | --- |
+| `B` / `E` | Pencil / eraser |
+| `L`, `R`, `U`, `O` | Line, rectangle, filled rectangle, ellipse |
+| `G` | Fill |
+| `I`, or `Alt` + click | Pick a colour from the image |
+| `H`, or hold `Space` | Pan |
+| `[` / `]` | Smaller / bigger brush |
+| `X` | Back to the previous colour |
+| Right mouse button | Erase with any drawing tool |
 
 ### Audio
 
@@ -147,7 +178,7 @@ be previewed here yet), choose one of the twelve GBA sprite sizes, then:
 Images, music and sounds are chosen on your device and stored in the game folder
 (`assets/sprites/`, `assets/audio/`, and so on). A file is never replaced without
 asking. Your source files stay the source of truth: the studio reads and watches them
-and never rewrites them.
+and rewrites a PNG only when you draw on it in the pixel editor.
 
 ## Running it
 
