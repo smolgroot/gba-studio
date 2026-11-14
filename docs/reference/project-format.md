@@ -1,6 +1,6 @@
 # Project format
 
-Plain JSON files in the game's repository, laid out to diff well in git. The schemas in [`core/src/schema.ts`](https://github.com/smolgroot/gba-studio/blob/main/core/src/schema.ts) are the reference, and `gba-studio schema` prints them as JSON Schema.
+Plain JSON files in the game's repository, laid out to diff well in git. The schemas in [`core/src/schema.ts`](https://github.com/smolgroot/pecten-studio/blob/main/core/src/schema.ts) are the reference, and `pecten-studio schema` prints them as JSON Schema.
 
 ```
 studio/project.json         name, build commands, collision classes, entity types

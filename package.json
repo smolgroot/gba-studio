@@ -1,5 +1,5 @@
 {
-  "name": "gba-studio-workspace",
+  "name": "pecten-studio-workspace",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,8 +7,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter @gba-studio/server --filter @gba-studio/app dev",
-    "build": "pnpm --filter @gba-studio/app build",
+    "dev": "pnpm --parallel --filter @pecten-studio/server --filter @pecten-studio/app dev",
+    "build": "pnpm --filter @pecten-studio/app build",
     "start": "node server/src/cli.ts",
     "test": "vitest run",
     "typecheck": "tsc -b core server app",

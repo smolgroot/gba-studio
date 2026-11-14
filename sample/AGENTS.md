@@ -1,8 +1,8 @@
 # Working on Sample Metroidvania with a coding agent
 
-This game's rooms, world map, tilesets, sprites and audio are edited in GBA-Studio and
+This game's rooms, world map, tilesets, sprites and audio are edited in Pecten-Studio and
 kept as JSON under `studio/`. The game's behaviour is Rust code in this crate, built
-on [agb](https://agbrs.dev) with the `gba_studio_rt` runtime.
+on [agb](https://agbrs.dev) with the `pecten_studio_rt` runtime.
 
 ## Who owns what
 
@@ -22,13 +22,13 @@ missing, say what is needed and use a placeholder the author can see is one.
 The studio has an MCP server for this folder. Start it with:
 
 ```sh
-gba-studio mcp .
+pecten-studio mcp .
 ```
 
-(`node <path to gba-studio>/server/src/cli.ts mcp .` from a checkout.) When the studio
+(`node <path to pecten-studio>/server/src/cli.ts mcp .` from a checkout.) When the studio
 is open on this folder it serves the same tools at `http://127.0.0.1:4517/mcp`;
 through that endpoint `studio_view` tells you what the author has on screen and
-`studio_open` shows them an item. `gba-studio agents . --claude` sets Claude Code
+`studio_open` shows them an item. `pecten-studio agents . --claude` sets Claude Code
 up with a skill and the server entry. Begin with
 `project_overview`. `render_room` and `render_tileset` return pictures, and
 `room_read_cells` returns cells as text. Change rooms with `room_fill`,
@@ -42,9 +42,9 @@ make them.
 Without MCP, these commands print JSON:
 
 ```sh
-gba-studio validate . --json     # every problem in the project
-gba-studio build . --json        # run the dev build; add --release for the release one
-gba-studio schema                # JSON Schema of every document kind
+pecten-studio validate . --json     # every problem in the project
+pecten-studio build . --json        # run the dev build; add --release for the release one
+pecten-studio schema                # JSON Schema of every document kind
 ```
 
 Run `validate` after changing anything under `studio/`.
@@ -71,13 +71,13 @@ Run `validate` after changing anything under `studio/`.
 ## In the game code
 
 ```rust
-gba_studio_rt::include_data!();   // data::WORLD, ROOMS, CLASSES, EntityKind, room and class constants
-gba_studio_rt::include_gfx!();    // gfx::ROOMS, TILESETS, SPRITE_<NAME>, ENTITY_SPRITES
-gba_studio_rt::include_audio!();  // audio::TRACKS, SFX (needs agb_tracker)
+pecten_studio_rt::include_data!();   // data::WORLD, ROOMS, CLASSES, EntityKind, room and class constants
+pecten_studio_rt::include_gfx!();    // gfx::ROOMS, TILESETS, SPRITE_<NAME>, ENTITY_SPRITES
+pecten_studio_rt::include_audio!();  // audio::TRACKS, SFX (needs agb_tracker)
 ```
 
-`gba_studio_rt::physics::Body` moves a box through the collision cells of the whole
-world (`body.step(&data::WORLD, drop_through)`), and `gba_studio_rt::gfx::WorldView`
+`pecten_studio_rt::physics::Body` moves a box through the collision cells of the whole
+world (`body.step(&data::WORLD, drop_through)`), and `pecten_studio_rt::gfx::WorldView`
 draws the rooms around a camera, with the backgrounds of one room behind them: call
 `view.set_backgrounds(room, &graphics)` when the player enters a room. The data
 and physics half of the runtime has no dependencies and runs on the host, so rules

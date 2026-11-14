@@ -3,8 +3,8 @@ import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AGENTS_FILE, SKILL_FILE, agentsGuide, claudeSkill, mcpServerEntry } from './agents.ts'
-import { AssetPath, Id, MULTI_DOCS, SINGLE_DOCS, STUDIO_DIR, docPath, newProject, schemaFor, validateProject } from '@gba-studio/core'
-import type { DocKind, Documents, MultiKind, Problem, SingleKind } from '@gba-studio/core'
+import { AssetPath, Id, MULTI_DOCS, SINGLE_DOCS, STUDIO_DIR, docPath, newProject, schemaFor, validateProject } from '@pecten-studio/core'
+import type { DocKind, Documents, MultiKind, Problem, SingleKind } from '@pecten-studio/core'
 
 export class HttpError extends Error {
   status: number
@@ -169,7 +169,7 @@ export class ProjectFolder {
   /**
    * Sets a game folder up for Claude Code: a skill under .claude/skills, and the
    * studio's MCP server in .mcp.json. Other servers in .mcp.json are kept, and an
-   * existing gba-studio entry or skill is left alone unless `replace` is set.
+   * existing pecten-studio entry or skill is left alone unless `replace` is set.
    * Returns what it wrote.
    */
   async writeClaudeSetup(name: string, cliPath: string, replace: boolean): Promise<string[]> {
@@ -189,8 +189,8 @@ export class ProjectFolder {
         throw new HttpError(409, '.mcp.json is not valid JSON; fix or remove it first')
       }
     }
-    if (!config.mcpServers?.['gba-studio'] || replace) {
-      config.mcpServers = { ...config.mcpServers, 'gba-studio': mcpServerEntry(cliPath) }
+    if (!config.mcpServers?.['pecten-studio'] || replace) {
+      config.mcpServers = { ...config.mcpServers, 'pecten-studio': mcpServerEntry(cliPath) }
       await writeFile(file, JSON.stringify(config, null, 2) + '\n')
       written.push('.mcp.json')
     }

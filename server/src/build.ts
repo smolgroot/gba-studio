@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
-import { Project, docPath } from '@gba-studio/core'
+import { Project, docPath } from '@pecten-studio/core'
 import { HttpError } from './project.ts'
 import type { ProjectFolder } from './project.ts'
 

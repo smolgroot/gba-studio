@@ -1,9 +1,9 @@
 [package]
-name = "gba_studio_rt"
+name = "pecten_studio_rt"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "Runtime for games built with GBA-Studio: room data, tile collision, and agb helpers"
+description = "Runtime for games built with Pecten-Studio: room data, tile collision, and agb helpers"
 publish = false
 
 [features]

@@ -1,9 +1,9 @@
 [package]
-name = "gba_studio_build"
+name = "pecten_studio_build"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "Build-script helper that turns a GBA-Studio project into data for agb games"
+description = "Build-script helper that turns a Pecten-Studio project into data for agb games"
 publish = false
 
 [dependencies]

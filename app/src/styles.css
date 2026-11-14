@@ -20,6 +20,19 @@ body { overflow: hidden; overscroll-behavior: none; }
   --dv-drag-over-background-color: rgba(76, 159, 254, 0.25);
 }
 
+/* Rounded tabs, as in recent VS Code: the top corners curve and tabs sit slightly apart. */
+.dockview-theme-dark .dv-tabs-container { padding: 4px 4px 0; gap: 2px; }
+.dockview-theme-dark .dv-tab {
+  border-radius: 6px 6px 0 0;
+  margin-right: 2px;
+  overflow: hidden;
+  border: 1px solid #3a3a3a;
+  border-bottom: none;
+}
+.dockview-theme-dark .dv-tab.dv-active-tab { border-color: #4a4a4a; }
+/* Panels and groups get softly rounded corners too. */
+.dockview-theme-dark .dv-groupview { border-radius: 6px; overflow: hidden; border: 1px solid #3a3a3a; }
+
 .pixelated { image-rendering: pixelated; }
 /* Transparent pixels show over a checkerboard, as in any image editor. */
 .checker {

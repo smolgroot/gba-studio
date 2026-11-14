@@ -26,7 +26,7 @@ importers:
       '@emotion/styled':
         specifier: ^11.14.1
         version: 11.14.1(@emotion/react@11.14.0(@types/react@19.3.0)(react@19.3.1))(@types/react@19.3.0)(react@19.3.1)
-      '@gba-studio/core':
+      '@pecten-studio/core':
         specifier: workspace:*
         version: link:../core
       '@mui/icons-material':
@@ -78,7 +78,7 @@ importers:
       '@fastify/static':
         specifier: ^10.1.10
         version: 10.1.10
-      '@gba-studio/core':
+      '@pecten-studio/core':
         specifier: workspace:*
         version: link:../core
       chokidar:

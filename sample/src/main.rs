@@ -1,4 +1,4 @@
-//! A Metroidvania skeleton made of a GBA-Studio project: walk and jump through the
+//! A Metroidvania skeleton made of a Pecten-Studio project: walk and jump through the
 //! rooms painted in the studio. The rooms on the world map are one continuous space:
 //! the hero walks from a room into the one touching it and the camera scrolls along,
 //! with the next room's tiles loaded just ahead of it. Behind the rooms are their two
@@ -23,15 +23,15 @@
 
 use agb::input::{Button, ButtonController};
 use agb::sound::mixer::{Frequency, Mixer, SoundChannel};
-use gba_studio_rt::{
+use pecten_studio_rt::{
     data::{Collected, CollisionKind, SCREEN_H, SCREEN_W},
     gfx::{AnimPlayer, WorldView},
     physics::{Body, SUB},
 };
 
-gba_studio_rt::include_data!();
-gba_studio_rt::include_gfx!();
-gba_studio_rt::include_audio!();
+pecten_studio_rt::include_data!();
+pecten_studio_rt::include_gfx!();
+pecten_studio_rt::include_audio!();
 
 use data::{EntityKind, WORLD};
 

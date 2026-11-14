@@ -2,8 +2,8 @@
 // painted, a tileset with its grid, a frame of the running game.
 import { readFile } from 'node:fs/promises'
 import { PNG } from 'pngjs'
-import { SCREEN, TILE, rleDecode, rleLength, roomSize } from '@gba-studio/core'
-import type { Documents, Room } from '@gba-studio/core'
+import { SCREEN, TILE, rleDecode, rleLength, roomSize } from '@pecten-studio/core'
+import type { Documents, Room } from '@pecten-studio/core'
 import { HttpError } from './project.ts'
 import type { ProjectFolder } from './project.ts'
 

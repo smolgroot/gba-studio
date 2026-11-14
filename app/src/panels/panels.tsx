@@ -25,8 +25,8 @@ import List from '@mui/material/List'
 import ListItemButton from '@mui/material/ListItemButton'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { SCREEN, uniqueId } from '@gba-studio/core'
-import type { MultiKind, Project } from '@gba-studio/core'
+import { SCREEN, uniqueId } from '@pecten-studio/core'
+import type { MultiKind, Project } from '@pecten-studio/core'
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Checkbox, Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
@@ -54,12 +54,12 @@ const imageFileSx = tint('#fdd835')
 const AUDIO_EXT = /\.(wav|mid|midi|sf2|xm|mod|mp3|ogg)$/i
 const IMAGE_EXT = /\.(png|aseprite|ase|gif|jpe?g|bmp)$/i
 
-const COLLAPSED_KEY = 'gba-studio:collapsed-sections'
+const COLLAPSED_KEY = 'pecten-studio:collapsed-sections'
 function loadCollapsed(): Record<string, boolean> {
   try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}') } catch { return {} }
 }
 
-const HEIGHTS_KEY = 'gba-studio:section-heights'
+const HEIGHTS_KEY = 'pecten-studio:section-heights'
 /** Sizes the user dragged each section to, in px by title. A section with none grows with its list up to [`DEFAULT_MAX`]. */
 function loadHeights(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(HEIGHTS_KEY) ?? '{}') } catch { return {} }

@@ -1,11 +1,11 @@
-//! Runtime for games built with GBA-Studio.
+//! Runtime for games built with Pecten-Studio.
 //!
 //! [`data`] and [`physics`] are plain `no_std` code with no dependencies: rooms,
 //! collision classes, entities, and a body that moves against them. They compile for
 //! the host too, so game rules can be tested off the console. [`gfx`], behind the
 //! `agb` feature, draws rooms and plays sprite animations on agb.
 //!
-//! A game's `build.rs` calls `gba_studio_build::build()`, and its code brings the
+//! A game's `build.rs` calls `pecten_studio_build::build()`, and its code brings the
 //! result in with [`include_data!`] and [`include_gfx!`].
 #![no_std]
 

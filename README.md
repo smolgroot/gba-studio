@@ -1,4 +1,4 @@
-# GBA-Studio
+# Pecten-Studio
 
 A browser-based studio for making Game Boy Advance Metroidvanias from assets you
 create yourself: pixel art in PNG, music in MIDI or tracker files, and rooms painted
@@ -216,19 +216,19 @@ The studio's project code is also a command line and an MCP server, so an agent
 art, music and levels.
 
 ```sh
-gba-studio validate <folder> [--json]            # every problem; exit 1 on errors
-gba-studio build <folder> [--release] [--json]   # run the project's build command
-gba-studio schema                                # JSON Schema of every document kind
-gba-studio agents <folder> [--claude]            # write AGENTS.md; --claude also sets up Claude Code
-gba-studio mcp <folder>                          # MCP server over stdio
+pecten-studio validate <folder> [--json]            # every problem; exit 1 on errors
+pecten-studio build <folder> [--release] [--json]   # run the project's build command
+pecten-studio schema                                # JSON Schema of every document kind
+pecten-studio agents <folder> [--claude]            # write AGENTS.md; --claude also sets up Claude Code
+pecten-studio mcp <folder>                          # MCP server over stdio
 ```
 
-From a checkout, `gba-studio` is `node <this repo>/server/src/cli.ts`.
+From a checkout, `pecten-studio` is `node <this repo>/server/src/cli.ts`.
 
 ### Setting up Claude Code
 
 ```sh
-gba-studio agents ../my-game --claude
+pecten-studio agents ../my-game --claude
 ```
 
 writes three things into the game folder, leaving anything already there alone
@@ -236,13 +236,13 @@ unless you add `--force`:
 
 - `AGENTS.md`: which files are hand-made and must not be regenerated, how the format
   works, and which tools to use. (Also written whenever a project is created.)
-- `.claude/skills/gba-studio/SKILL.md`: a skill that tells Claude when to use the
+- `.claude/skills/pecten-studio/SKILL.md`: a skill that tells Claude when to use the
   tools and in what order: look, change, check, show, run.
 - `.mcp.json`: the studio's server, added beside any other servers in the file.
 
 ### Two ways to connect
 
-| | Stdio: `gba-studio mcp <folder>` | The running studio: `http://127.0.0.1:4517/mcp` |
+| | Stdio: `pecten-studio mcp <folder>` | The running studio: `http://127.0.0.1:4517/mcp` |
 | --- | --- | --- |
 | Needs the studio open | No | Yes |
 | Sees what you have on screen (`studio_view`) | No | Yes |
@@ -255,7 +255,7 @@ Either way, the edits are file saves: an open studio shows them at once, and
 To use the studio's endpoint from Claude Code:
 
 ```json
-{ "mcpServers": { "gba-studio": { "type": "http", "url": "http://127.0.0.1:4517/mcp" } } }
+{ "mcpServers": { "pecten-studio": { "type": "http", "url": "http://127.0.0.1:4517/mcp" } } }
 ```
 
 The endpoint refuses requests from other web pages, like the rest of the server.
@@ -288,22 +288,22 @@ A game is a Rust crate on agb that depends on two crates from this repository:
 
 ```toml
 [dependencies]
-gba_studio_rt = { path = "../runtime", features = ["agb"] }
+pecten_studio_rt = { path = "../runtime", features = ["agb"] }
 
 [build-dependencies]
-gba_studio_build = { path = "../codegen" }
+pecten_studio_build = { path = "../codegen" }
 ```
 
 `build.rs` is one line:
 
 ```rust
 fn main() {
-    gba_studio_build::build();
+    pecten_studio_build::build();
 }
 ```
 
 **The build helper** (`codegen/`) reads `studio/` next to the game's `Cargo.toml`
-(or the folder named by `GBA_STUDIO_PROJECT`), converts the PNGs, and writes Rust
+(or the folder named by `PECTEN_STUDIO_PROJECT`), converts the PNGs, and writes Rust
 and binary data the game includes. It checks what the GBA can hold and says what is
 wrong in terms of your project: a tile with more than 15 colours, tiles needing more
 than 16 palettes, a tileset over 1024 tiles, a sprite sheet with more than one
@@ -403,10 +403,10 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, up to 2 backgr
 | Folder | What it is |
 | --- | --- |
 | `core/` | The project format (zod schemas), cross-file validation, run-length and GBA colour helpers, room helpers. Shared by the server and the app. |
-| `server/` | The local Node server and the `gba-studio` command: JSON API over one game folder, uploads, file watcher, build runner, and the MCP server with its tools, renderer and headless emulator. |
+| `server/` | The local Node server and the `pecten-studio` command: JSON API over one game folder, uploads, file watcher, build runner, and the MCP server with its tools, renderer and headless emulator. |
 | `app/` | The React, Vite and MUI interface. |
-| `codegen/` | `gba_studio_build`: the build-script helper that turns a project into Rust data. |
-| `runtime/` | `gba_studio_rt`: data types, physics and agb drawing for games. |
+| `codegen/` | `pecten_studio_build`: the build-script helper that turns a project into Rust data. |
+| `runtime/` | `pecten_studio_rt`: data types, physics and agb drawing for games. |
 | `sample/` | A small game made from a studio project. |
 | `scripts/` | Generates the sample project; copies the Pecten core into the app. |
 

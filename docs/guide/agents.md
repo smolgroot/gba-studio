@@ -3,30 +3,30 @@
 The studio's project code is also a command line and an MCP server, so an agent (Claude Code or any MCP client) can work on a game without overwriting hand-made art, music and levels.
 
 ```sh
-gba-studio validate <folder> [--json]            # every problem; exit 1 on errors
-gba-studio build <folder> [--release] [--json]   # run the project's build command
-gba-studio schema                                # JSON Schema of every document kind
-gba-studio agents <folder> [--claude]            # write AGENTS.md; --claude also sets up Claude Code
-gba-studio mcp <folder>                          # MCP server over stdio
+pecten-studio validate <folder> [--json]            # every problem; exit 1 on errors
+pecten-studio build <folder> [--release] [--json]   # run the project's build command
+pecten-studio schema                                # JSON Schema of every document kind
+pecten-studio agents <folder> [--claude]            # write AGENTS.md; --claude also sets up Claude Code
+pecten-studio mcp <folder>                          # MCP server over stdio
 ```
 
-From a checkout, `gba-studio` is `node <this repo>/server/src/cli.ts`.
+From a checkout, `pecten-studio` is `node <this repo>/server/src/cli.ts`.
 
 ## Setting up Claude Code
 
 ```sh
-gba-studio agents ../my-game --claude
+pecten-studio agents ../my-game --claude
 ```
 
 writes three things into the game folder, leaving anything already there alone unless you add `--force`:
 
 - `AGENTS.md`: which files are hand-made and must not be regenerated, how the format works, and which tools to use. (Also written whenever a project is created.)
-- `.claude/skills/gba-studio/SKILL.md`: a skill that tells Claude when to use the tools and in what order: look, change, check, show, run.
+- `.claude/skills/pecten-studio/SKILL.md`: a skill that tells Claude when to use the tools and in what order: look, change, check, show, run.
 - `.mcp.json`: the studio's server, added beside any other servers in the file.
 
 ## Two ways to connect
 
-| | Stdio: `gba-studio mcp <folder>` | The running studio: `http://127.0.0.1:4517/mcp` |
+| | Stdio: `pecten-studio mcp <folder>` | The running studio: `http://127.0.0.1:4517/mcp` |
 | --- | --- | --- |
 | Needs the studio open | No | Yes |
 | Sees what you have on screen (`studio_view`) | No | Yes |
@@ -37,7 +37,7 @@ writes three things into the game folder, leaving anything already there alone u
 Either way, the edits are file saves: an open studio shows them at once, and **Ctrl+Z in the studio undoes an agent's change**. To use the studio's endpoint from Claude Code:
 
 ```json
-{ "mcpServers": { "gba-studio": { "type": "http", "url": "http://127.0.0.1:4517/mcp" } } }
+{ "mcpServers": { "pecten-studio": { "type": "http", "url": "http://127.0.0.1:4517/mcp" } } }
 ```
 
 The endpoint refuses requests from other web pages, like the rest of the server.

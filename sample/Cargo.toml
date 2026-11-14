@@ -3,16 +3,16 @@ name = "sample"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "A small Metroidvania skeleton built from a GBA-Studio project"
+description = "A small Metroidvania skeleton built from a Pecten-Studio project"
 publish = false
 
 [dependencies]
 agb = "0.25.0"
 agb_tracker = "0.25.0"
-gba_studio_rt = { path = "../runtime", features = ["agb"] }
+pecten_studio_rt = { path = "../runtime", features = ["agb"] }
 
 [build-dependencies]
-gba_studio_build = { path = "../codegen" }
+pecten_studio_build = { path = "../codegen" }
 
 [profile.dev]
 opt-level = 3

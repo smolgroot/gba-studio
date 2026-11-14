@@ -1,17 +1,17 @@
 {
-  "name": "@gba-studio/server",
+  "name": "@pecten-studio/server",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "bin": {
-    "gba-studio": "./src/cli.ts"
+    "pecten-studio": "./src/cli.ts"
   },
   "scripts": {
     "dev": "node --watch src/cli.ts ../sample"
   },
   "dependencies": {
     "@fastify/static": "^10.1.10",
-    "@gba-studio/core": "workspace:*",
+    "@pecten-studio/core": "workspace:*",
     "chokidar": "^6.0.0",
     "fastify": "^5.12.8",
     "pngjs": "^7.0.0",

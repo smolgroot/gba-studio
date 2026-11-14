@@ -1,4 +1,4 @@
-import type { DocKind, Documents, Problem } from '@gba-studio/core'
+import type { DocKind, Documents, Problem } from '@pecten-studio/core'
 
 export interface AssetFile {
   path: string

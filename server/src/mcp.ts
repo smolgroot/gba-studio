@@ -8,7 +8,7 @@ import { TOOLS } from './tools.ts'
 import type { ToolContext } from './tools.ts'
 
 const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
-const INSTRUCTIONS = `This server edits a GBA-Studio project: the rooms, world map, tilesets, sprites and audio of a Game Boy Advance game, kept as JSON in the game folder's studio/ directory.
+const INSTRUCTIONS = `This server edits a Pecten-Studio project: the rooms, world map, tilesets, sprites and audio of a Game Boy Advance game, kept as JSON in the game folder's studio/ directory.
 
 Start with project_overview. Look before you change: render_room and render_tileset return pictures, room_read_cells returns cells as text. Change rooms with room_fill, room_paint and the entity_ tools; they keep tile data valid. Run validate after a set of changes, then build and run_rom to see the game itself.
 
@@ -30,7 +30,7 @@ export async function handle(request: Request, context: ToolContext): Promise<un
       return {
         protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
         capabilities: { tools: {} },
-        serverInfo: { name: 'gba-studio', version: '0.1.0' },
+        serverInfo: { name: 'pecten-studio', version: '0.1.0' },
         instructions: INSTRUCTIONS,
       }
     }

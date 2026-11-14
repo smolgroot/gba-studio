@@ -14,7 +14,7 @@ import type { BuildMode } from './build.ts'
 import { handle } from './mcp.ts'
 import { HttpError, ProjectFolder } from './project.ts'
 import type { StudioView, ToolContext } from './tools.ts'
-import type { DocKind } from '@gba-studio/core'
+import type { DocKind } from '@pecten-studio/core'
 
 const APP_DIST = fileURLToPath(new URL('../../app/dist', import.meta.url))
 const WATCH_IGNORED = /(^|[/\\])(node_modules|target|dist|\.git)([/\\]|$)|\.tmp$/
@@ -121,7 +121,7 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
     return { ok: true }
   })
 
-  // The same tools as `gba-studio mcp`, over HTTP (MCP's streamable HTTP transport,
+  // The same tools as `pecten-studio mcp`, over HTTP (MCP's streamable HTTP transport,
   // answering in plain JSON). Run from here they share the studio's build runner, and
   // can see and steer what the page shows.
   const tools: ToolContext = {

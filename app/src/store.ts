@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Audio, MultiKind, Project, Room, Sprite, Tileset, World } from '@gba-studio/core'
+import type { Audio, MultiKind, Project, Room, Sprite, Tileset, World } from '@pecten-studio/core'
 import { api, watchFiles } from './api.ts'
 import type { AgentMessage, BuildMessage, BuildStatus, Bundle } from './api.ts'
 

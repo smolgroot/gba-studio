@@ -1,6 +1,6 @@
 # Getting started
 
-GBA-Studio is a browser-based studio for making Game Boy Advance Metroidvanias from assets you create yourself: pixel art in PNG, music in MIDI or tracker files, and rooms painted on a grid of GBA screens. It edits a project of plain JSON files, converts it to GBA-ready data for Rust games built on [agb](https://agbrs.dev), and runs the resulting ROM in the browser.
+Pecten-Studio is a browser-based studio for making Game Boy Advance Metroidvanias from assets you create yourself: pixel art in PNG, music in MIDI or tracker files, and rooms painted on a grid of GBA screens. It edits a project of plain JSON files, converts it to GBA-ready data for Rust games built on [agb](https://agbrs.dev), and runs the resulting ROM in the browser.
 
 It knows nothing about any particular game. It knows tiles, collision classes, entities with typed properties, sprites and animations, and music. What an entity *does* is written in each game's Rust code.
 
@@ -57,8 +57,8 @@ cargo test       # Rust tests (build helper, collision and physics)
 ## Working on these docs
 
 ```sh
-pnpm --filter @gba-studio/docs dev       # live preview
-pnpm --filter @gba-studio/docs build     # static site in docs/.vitepress/dist
+pnpm --filter @pecten-studio/docs dev       # live preview
+pnpm --filter @pecten-studio/docs build     # static site in docs/.vitepress/dist
 ```
 
 The docs are published by the **Docs** GitHub Actions workflow whenever a version tag (`v*`) is pushed.

@@ -31,9 +31,9 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile --filter @gba-studio/docs
+      - run: pnpm install --frozen-lockfile --filter @pecten-studio/docs
 
-      - run: pnpm --filter @gba-studio/docs build
+      - run: pnpm --filter @pecten-studio/docs build
 
       - uses: actions/configure-pages@v5
 

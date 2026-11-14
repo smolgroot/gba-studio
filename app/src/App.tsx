@@ -120,7 +120,10 @@ function TopBar() {
   const warnings = (bundle?.problems.length ?? 0) - errors
   return (
     <Box component="header" sx={{ height: BAR.top, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3, px: 3, bgcolor: '#141414', borderBottom: 1, borderColor: 'divider' }}>
-      <Typography sx={{ fontWeight: 700, letterSpacing: 0.4 }}>GBA-Studio</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box component="img" src="/logo.png" alt="" sx={{ height: BAR.top - 14, width: 'auto', imageRendering: 'pixelated' }} />
+        <Typography sx={{ fontWeight: 700, letterSpacing: 0.4 }}>Pecten-Studio</Typography>
+      </Box>
       {bundle && (
         <Typography color="text.secondary" noWrap sx={{ flex: 1 }}>
           {bundle.docs.project?.name ?? bundle.folder}

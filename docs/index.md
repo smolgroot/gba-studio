@@ -1,7 +1,7 @@
 ---
 layout: home
 hero:
-  name: GBA-Studio
+  name: Pecten-Studio
   text: Make Game Boy Advance Metroidvanias in your browser
   tagline: Draw pixel art, paint rooms on a grid of GBA screens, arrange a world, build the ROM and play it, all in one studio.
   image:

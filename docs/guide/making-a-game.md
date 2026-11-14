@@ -4,23 +4,23 @@ A game is a Rust crate on agb that depends on two crates from this repository.
 
 ```toml
 [dependencies]
-gba_studio_rt = { path = "../runtime", features = ["agb"] }
+pecten_studio_rt = { path = "../runtime", features = ["agb"] }
 
 [build-dependencies]
-gba_studio_build = { path = "../codegen" }
+pecten_studio_build = { path = "../codegen" }
 ```
 
 `build.rs` is one line:
 
 ```rust
 fn main() {
-    gba_studio_build::build();
+    pecten_studio_build::build();
 }
 ```
 
 ## The build helper
 
-`codegen/` reads `studio/` next to the game's `Cargo.toml` (or the folder named by `GBA_STUDIO_PROJECT`), converts the PNGs, and writes Rust and binary data the game includes. It checks what the GBA can hold and says what is wrong in terms of your project, and reports every problem in one run.
+`codegen/` reads `studio/` next to the game's `Cargo.toml` (or the folder named by `PECTEN_STUDIO_PROJECT`), converts the PNGs, and writes Rust and binary data the game includes. It checks what the GBA can hold and says what is wrong in terms of your project, and reports every problem in one run.
 
 A background is cut into 8x8 tiles like a tileset and keeps one of each tile that repeats. A sprite sheet saved with no transparency at all is taken to be drawn on a flat backdrop: the colour of its top-left pixel becomes transparent.
 
