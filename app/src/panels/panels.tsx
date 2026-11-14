@@ -1,12 +1,17 @@
 // The docked panels: project tree, the open document, its properties, and problems.
 import AddIcon from '@mui/icons-material/Add'
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
 import AudiotrackIcon from '@mui/icons-material/Audiotrack'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import GridOnIcon from '@mui/icons-material/GridOn'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined'
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined'
+import ViewListIcon from '@mui/icons-material/ViewList'
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined'
 import PublicIcon from '@mui/icons-material/Public'
@@ -62,11 +67,11 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
   )
 }
 
-function Row({ selection, icon, label, detail }: { selection: Selection; icon: ReactNode; label: string; detail?: string }) {
+function Row({ selection, icon, label, detail, indent = 0 }: { selection: Selection; icon: ReactNode; label: string; detail?: string; indent?: number }) {
   const selected = useStudio((s) => selectionKey(s.selection) === selectionKey(selection))
   const select = useStudio((s) => s.select)
   return (
-    <ListItemButton selected={selected} onClick={() => select(selection)} sx={{ px: 2, minHeight: { xs: BAR.touchRow, md: BAR.row } }}>
+    <ListItemButton selected={selected} onClick={() => select(selection)} sx={{ px: 2, pl: 2 + indent * 1.5, minHeight: { xs: BAR.touchRow, md: BAR.row } }}>
       {icon}
       <Typography noWrap sx={{ flex: 1 }}>{label}</Typography>
       {detail && <Typography variant="body2" color="text.secondary" noWrap sx={{ ml: 2 }}>{detail}</Typography>}
@@ -92,9 +97,66 @@ function AddButton({ title, onClick, disabled }: { title: string; onClick: () =>
   )
 }
 
+type Asset = { path: string; size: number }
+type Dir = { dirs: Map<string, Dir>; files: Asset[] }
+
+function AssetRow({ asset, label, indent }: { asset: Asset; label: string; indent?: number }) {
+  return (
+    <Row
+      selection={{ kind: 'asset', id: asset.path }}
+      icon={AUDIO_EXT.test(asset.path) ? <AudiotrackIcon sx={audioFileSx} /> : IMAGE_EXT.test(asset.path) ? <ImageOutlinedIcon sx={imageFileSx} /> : <InsertDriveFileOutlinedIcon sx={iconSx} />}
+      label={label}
+      detail={formatSize(asset.size)}
+      indent={indent}
+    />
+  )
+}
+
+function AssetTree({ assets }: { assets: Asset[] }) {
+  const [closed, setClosed] = useState<Set<string>>(new Set())
+  const root: Dir = { dirs: new Map(), files: [] }
+  for (const asset of assets) {
+    const parts = asset.path.split('/')
+    let dir = root
+    for (const part of parts.slice(0, -1)) {
+      if (!dir.dirs.has(part)) dir.dirs.set(part, { dirs: new Map(), files: [] })
+      dir = dir.dirs.get(part)!
+    }
+    dir.files.push(asset)
+  }
+  const toggle = (path: string) => setClosed((c) => {
+    const next = new Set(c)
+    if (!next.delete(path)) next.add(path)
+    return next
+  })
+  const render = (dir: Dir, prefix: string, depth: number): ReactNode[] => [
+    ...[...dir.dirs].sort(([a], [b]) => a.localeCompare(b)).flatMap(([name, child]) => {
+      const path = prefix + name
+      const open = !closed.has(path)
+      return [
+        <ListItemButton key={`dir:${path}`} onClick={() => toggle(path)} aria-expanded={open} sx={{ px: 2, pl: 2 + depth * 1.5, minHeight: { xs: BAR.touchRow, md: BAR.row } }}>
+          {open ? <ExpandMoreIcon sx={iconSx} /> : <ChevronRightIcon sx={iconSx} />}
+          <FolderOutlinedIcon sx={iconSx} />
+          <Typography noWrap sx={{ flex: 1 }}>{name}</Typography>
+        </ListItemButton>,
+        ...(open ? render(child, `${path}/`, depth + 1) : []),
+      ]
+    }),
+    ...dir.files.map((asset) => <AssetRow key={asset.path} asset={asset} label={asset.path.split('/').pop()!} indent={depth} />),
+  ]
+  return <>{render(root, '', 0)}</>
+}
+
 export function ProjectPanel() {
   const bundle = useStudio((s) => s.bundle)
   const [creating, setCreating] = useState<MultiKind | 'image' | null>(null)
+  const [tree, setTree] = useState(() => {
+    try { return localStorage.getItem('assetTree') === '1' } catch { return false }
+  })
+  const toggleTree = (value: boolean) => {
+    setTree(value)
+    try { localStorage.setItem('assetTree', value ? '1' : '0') } catch { /* ignore */ }
+  }
   if (!bundle) return null
   const { docs, assets } = bundle
   const rooms = Object.entries(docs.rooms)
@@ -132,18 +194,20 @@ export function ProjectPanel() {
         </List>
         {sprites.length === 0 && <Empty>No sprites yet.</Empty>}
       </Section>
-      <Section title="Asset files" action={<AddButton title="New blank image to draw" onClick={() => setCreating('image')} />}>
-        <List>
-          {assets.map((asset) => (
-            <Row
-              key={asset.path}
-              selection={{ kind: 'asset', id: asset.path }}
-              icon={AUDIO_EXT.test(asset.path) ? <AudiotrackIcon sx={audioFileSx} /> : IMAGE_EXT.test(asset.path) ? <ImageOutlinedIcon sx={imageFileSx} /> : <InsertDriveFileOutlinedIcon sx={iconSx} />}
-              label={asset.path}
-              detail={formatSize(asset.size)}
-            />
-          ))}
-        </List>
+      <Section
+        title="Asset files"
+        action={
+          <>
+            <Tooltip title={tree ? 'Show as a plain list' : 'Show as a directory tree'}>
+              <IconButton aria-label={tree ? 'Show assets as a plain list' : 'Show assets as a directory tree'} onClick={() => toggleTree(!tree)} sx={{ p: 0.5 }}>
+                {tree ? <ViewListIcon /> : <AccountTreeOutlinedIcon />}
+              </IconButton>
+            </Tooltip>
+            <AddButton title="New blank image to draw" onClick={() => setCreating('image')} />
+          </>
+        }
+      >
+        <List>{tree ? <AssetTree assets={assets} /> : assets.map((asset) => <AssetRow key={asset.path} asset={asset} label={asset.path} />)}</List>
         {assets.length === 0 && <Empty>No PNG, Aseprite, MIDI, SF2, XM, MOD or WAV files in this folder.</Empty>}
       </Section>
       {creating === 'image' && <NewImageDialog onClose={() => setCreating(null)} />}
