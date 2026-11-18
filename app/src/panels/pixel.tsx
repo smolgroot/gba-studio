@@ -21,13 +21,12 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import SvgIcon from '@mui/material/SvgIcon'
-import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { TILE, fromBgr555, toBgr555 } from '@pecten-studio/core'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { api, fileUrl } from '../api.ts'
-import { Checkbox, Field, Fields, NumberInput, TextInput } from '../fields.tsx'
+import { Field, Fields, NumberInput, TextInput } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
 import { Divider, Message, ToolButton, Viewport } from './views.tsx'
@@ -41,7 +40,7 @@ const MAX_ZOOM = 32
 const SAVE_DELAY = 700
 
 /** DawnBringer's 16 colours: a starter palette that suits the GBA well. */
-const STARTER = ['#140c1c', '#442434', '#30346d', '#4e4a4e', '#854c30', '#346524', '#d04648', '#757161', '#597dce', '#d27d2c', '#8595a1', '#6daa2c', '#d2aa99', '#6dc2ca', '#dad45e', '#deeed6']
+const STARTER_RAW = ['#140c1c', '#442434', '#30346d', '#4e4a4e', '#854c30', '#346524', '#d04648', '#757161', '#597dce', '#d27d2c', '#8595a1', '#6daa2c', '#d2aa99', '#6dc2ca', '#dad45e', '#deeed6']
 
 function EraserIcon() {
   return (
@@ -57,6 +56,8 @@ const rgba = (h: string): Rgba => [parseInt(h.slice(1, 3), 16), parseInt(h.slice
 /** The colour as the GBA shows it: 5 bits a channel. */
 const snapHex = (h: string): string => hex([...fromBgr555(toBgr555(...(rgba(h).slice(0, 3) as [number, number, number]))), 255])
 const isHex = (s: string) => /^#[0-9a-f]{6}$/i.test(s)
+/** The starter palette, snapped so every swatch is a colour the GBA can show. */
+const STARTER = [...new Set(STARTER_RAW.map(snapHex))]
 
 // Pixel maths on an ImageData. Transparent means alpha 0.
 function clone(img: ImageData): ImageData {
@@ -152,7 +153,7 @@ function coloursOf(img: ImageData): string[] {
   const counts = new Map<string, number>()
   for (let i = 0; i < img.data.length; i += 4) {
     if (img.data[i + 3]! < 128) continue
-    const key = hex([img.data[i]!, img.data[i + 1]!, img.data[i + 2]!, 255])
+    const key = snapHex(hex([img.data[i]!, img.data[i + 1]!, img.data[i + 2]!, 255]))
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key]) => key)
@@ -220,19 +221,14 @@ const Swatches = memo(function Swatches({ title, colours, chosen, onPick }: { ti
   )
 })
 
-/** The colour being painted with: a native picker, a hex field, and the GBA's view of it. */
-function ColourPicker({ colour, snap, onChange }: { colour: string; snap: boolean; onChange: (hex: string) => void }) {
+/** The colour being painted with: a native picker and a hex field; whatever is entered is snapped to the GBA's 15-bit palette. */
+function ColourPicker({ colour, onChange }: { colour: string; onChange: (hex: string) => void }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <input type="color" aria-label="Colour" value={colour} onChange={(event) => onChange(event.target.value)} style={{ width: ui(26), height: ui(22), padding: 0, border: '1px solid #3a3a3a', background: 'none', cursor: 'pointer' }} />
       <Box sx={{ width: ui(64) }}>
         <TextInput label="Colour as hex" value={colour} onCommit={(value) => isHex(value.startsWith('#') ? value : `#${value}`) && onChange((value.startsWith('#') ? value : `#${value}`).toLowerCase())} />
       </Box>
-      {snap && snapHex(colour) !== colour && (
-        <Tooltip title={`On the GBA this colour shows as ${snapHex(colour)} (5 bits a channel). Snapping is on, so that is what is painted.`}>
-          <Box sx={{ width: ui(14), height: ui(14), bgcolor: snapHex(colour), border: '1px dashed rgba(255,255,255,0.5)' }} />
-        </Tooltip>
-      )}
     </Box>
   )
 }
@@ -281,7 +277,6 @@ export function PixelEditor({ path }: { path: string }) {
   const [colour, setColour] = useState(STARTER[6]!)
   const [recent, setRecent] = useState<string[]>([])
   const [size, setSize] = useState(1)
-  const [snap, setSnap] = useState(true)
   const [showGrid, setShowGrid] = useState(true)
   const [showTiles, setShowTiles] = useState(true)
   const [resizing, setResizing] = useState(false)
@@ -371,11 +366,13 @@ export function PixelEditor({ path }: { path: string }) {
     changed()
   }, [changed])
 
-  const pick = useCallback((h: string) => {
+  /** Every colour chosen goes through here, snapped to what the GBA can show (5 bits a channel). */
+  const pick = useCallback((raw: string) => {
+    const h = snapHex(raw)
     setColour(h)
     setRecent((r) => [h, ...r.filter((c) => c !== h)].slice(0, 12))
   }, [])
-  const paintColour = (): Rgba => rgba(snap ? snapHex(colour) : colour)
+  const paintColour = (): Rgba => rgba(colour)
 
   // Keys act on the editor in front.
   useEffect(() => {
@@ -522,7 +519,7 @@ export function PixelEditor({ path }: { path: string }) {
       <Typography variant="body2" color="text.secondary">Size</Typography>
       <Box sx={{ width: ui(34) }}><NumberInput label="Brush size in pixels" value={size} min={1} max={16} onCommit={setSize} /></Box>
       <Divider />
-      <ColourPicker colour={colour} snap={snap} onChange={pick} />
+      <ColourPicker colour={colour} onChange={pick} />
       <Divider />
       <ToolButton title="Pixel grid" active={showGrid} onClick={() => setShowGrid(!showGrid)}><Grid4x4Icon /></ToolButton>
       <ToolButton title="8×8 tile grid" active={showTiles} onClick={() => setShowTiles(!showTiles)}><GridOnIcon /></ToolButton>
@@ -563,7 +560,6 @@ export function PixelEditor({ path }: { path: string }) {
         <Swatches title="In image" colours={colours.slice(0, 64)} chosen={colour} onPick={pick} />
         <Swatches title="Starter" colours={STARTER} chosen={colour} onPick={pick} />
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-          <Checkbox checked={snap} onChange={setSnap}>Snap colours to the GBA's 15-bit palette</Checkbox>
           <Typography variant="caption" color="text.secondary">Right button erases · Alt + click picks a colour · [ ] brush size · X last colour</Typography>
           <Box sx={{ ml: 'auto', display: 'flex', gap: 2, alignItems: 'center' }}>
             <Typography component="span" ref={coords} variant="body2" color="text.secondary" sx={{ minWidth: ui(100), textAlign: 'right' }} />

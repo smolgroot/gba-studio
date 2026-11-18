@@ -11,4 +11,5 @@ An honest list of what does not work yet.
 - **Tilesets** are one 16-colour-palette set per tile (up to 16 palettes). The runtime uses 4 bits a pixel throughout.
 - **One ROM at a time**, and the game logic in the sample is a skeleton: coins and diamonds to collect and one kind of enemy, but no health, combat, doors or saving. Those are the game's job, built on the runtime.
 - **Deleting** a room, tileset or sprite removes its file and cannot be undone from the studio.
+- **Desktop app:** Linux on x64 only for now. The packaged app does not include the `pecten-studio` command, so agents connect to [each project's endpoint](../guide/desktop#coding-agents).
 - Tested with the sample project and generated test files, in Chrome. Touch input, other browsers and larger real projects have not been tried.

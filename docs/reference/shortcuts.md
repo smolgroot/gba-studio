@@ -7,6 +7,15 @@
 | `Ctrl+Z` | Undo in the open document (up to 200 steps; 100 in the pixel editor) |
 | `Ctrl+Shift+Z` | Redo |
 
+## Desktop app
+
+| Key | Action |
+| --- | --- |
+| `Ctrl+O` | Open a folder |
+| `Ctrl+W` | Close the current project |
+| `Ctrl+Tab` | Next project |
+| `Ctrl+Shift+Tab` | Previous project |
+
 ## Map editor
 
 | Key | Action |

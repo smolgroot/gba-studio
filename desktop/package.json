@@ -1,0 +1,32 @@
+{
+  "name": "@pecten-studio/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pecten Studio, the Game Boy Advance game editor, as a desktop app",
+  "author": "Pecten Studio",
+  "homepage": "https://github.com/smolgroot/gba-studio",
+  "main": "dist/main.cjs",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "dev": "node scripts/dev.ts",
+    "dist": "pnpm --filter @pecten-studio/app build && node scripts/build.ts && electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.5.0",
+    "@mui/material": "^9.5.0",
+    "@pecten-studio/core": "workspace:*",
+    "@pecten-studio/server": "workspace:*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "45.3.4",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vite": "^8.3.8"
+  }
+}

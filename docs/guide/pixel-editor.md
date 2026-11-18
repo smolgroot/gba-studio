@@ -20,7 +20,7 @@ Pencil, eraser, line, rectangle, filled rectangle, ellipse, fill, colour picker 
 - **In image**: the colours already in the picture.
 - **Recent** colours you have used.
 - **Starter**: a 16-colour starter palette.
-- **Snap colours to the GBA's 15-bit palette** (on by default) rounds each channel to 5 bits, so what you paint is what the console shows. The number of distinct colours is shown in the top bar as you draw.
+- Every colour you choose (picker, hex field, swatches, eyedropper) is snapped to the GBA's 15-bit palette — 5 bits a channel — so you can only paint colours the console can show. The number of distinct colours is shown in the top bar as you draw.
 
 ## Grids and view
 

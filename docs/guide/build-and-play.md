@@ -17,9 +17,17 @@ Output is streamed live. A failed build is marked and its exit code shown; a suc
 
 The same builds can be run from the command line; see [Command line and MCP](./agents).
 
+### Getting a folder ready to build
+
+When the folder has no `Cargo.toml`, the panel offers **Set up game crate**. It writes a small Rust game that shows the start room, with its own copy of the studio's crates, and never replaces a file that exists. See [what it adds](./desktop#building-a-game).
+
+The panel also names anything missing from the Rust tools (`rustup`, the pinned nightly, `rust-src`, `agb-gbafix`) with the command that installs it. **Check again** looks once more after you have installed it.
+
+In the [desktop app](./desktop), builds carry on while you work in another project, and a dot on the project's tab shows how the last one went.
+
 ## Play panel
 
-Open **Play** in the Project panel. It runs the built ROM on the [Pecten](https://github.com/smolgroot/pecten) emulator core in the browser at the console's frame rate.
+Open **Play** in the Project panel. It runs the built ROM on the [Pecten](https://github.com/smolgroot/pecten) emulator core inside the studio at the console's frame rate.
 
 ![Diamond Hands running in the Play panel](/screenshots/play.png)
 
@@ -44,5 +52,7 @@ The panel names the ROM, its size and when it was built. On touch devices, on-sc
 | `A` / `S` | L / R |
 
 ::: tip
+In the desktop app, the game pauses while its project's tab is hidden.
+
 Only one ROM runs at a time. If both dev and release ROMs exist, the panel lets you choose between them.
 :::

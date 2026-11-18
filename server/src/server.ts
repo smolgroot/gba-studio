@@ -13,20 +13,55 @@ import { Builder } from './build.ts'
 import type { BuildMode } from './build.ts'
 import { handle } from './mcp.ts'
 import { HttpError, ProjectFolder } from './project.ts'
+import { checkToolchain, setupGameCrate } from './scaffold.ts'
 import type { StudioView, ToolContext } from './tools.ts'
 import type { DocKind } from '@pecten-studio/core'
 
 const APP_DIST = fileURLToPath(new URL('../../app/dist', import.meta.url))
+/** Where `runtime/` and `codegen/` are in a checkout. */
+const CRATES = fileURLToPath(new URL('../..', import.meta.url))
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
 const WATCH_IGNORED = /(^|[/\\])(node_modules|target|dist|\.git)([/\\]|$)|\.tmp$/
 
 export interface ServerOptions {
   folder: string
   host: string
   port: number
+  /** The built page. By default, app/dist of this checkout. */
+  appDist?: string
+  /** The folder holding the `runtime` and `codegen` crates. By default, this checkout. */
+  crates?: string
+  /** The environment of build commands and toolchain checks. By default, this process's. */
+  buildEnv?: NodeJS.ProcessEnv
+  /** Hears everything sent to the page, for a host that shows it elsewhere. */
+  onEvent?: (message: unknown) => void
+}
+
+const hostname = (host: string | undefined): string | null => {
+  try {
+    return new URL(`http://${host}`).hostname
+  } catch {
+    return null
+  }
+}
+/** A page may only act on the server it came from. Requests from outside a browser send no origin. */
+const sameOrigin = (origin: string | undefined, host: string | undefined): boolean => {
+  if (!origin) return true
+  try {
+    return new URL(origin).host === host
+  } catch {
+    return false
+  }
 }
 
 export async function startServer(options: ServerOptions): Promise<{ app: FastifyInstance; url: string; close: () => Promise<void> }> {
   const project = new ProjectFolder(options.folder)
+  const appDist = options.appDist ?? APP_DIST
+  const crates = options.crates ?? CRATES
+  // Bound to this machine, the server answers only to this machine's names, so a web
+  // page cannot reach it through a domain of its own that resolves here.
+  const loopbackOnly = LOOPBACK.has(options.host)
+  const hostAllowed = (host: string | undefined) => !loopbackOnly || LOOPBACK.has(hostname(host) ?? '')
   const app = fastify({ bodyLimit: 32 * 1024 * 1024 })
 
   app.setErrorHandler((error, _request, reply) => {
@@ -38,9 +73,9 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
   // The page may be opened from another device, but only this server's own pages may
   // write: a web page elsewhere must not be able to post to localhost.
   app.addHook('onRequest', async (request) => {
+    if (!hostAllowed(request.headers.host)) throw new HttpError(403, 'unknown host refused')
     if (request.method === 'GET' || request.method === 'HEAD') return
-    const origin = request.headers.origin
-    if (origin && new URL(origin).host !== request.headers.host) throw new HttpError(403, 'cross-origin request refused')
+    if (!sameOrigin(request.headers.origin, request.headers.host)) throw new HttpError(403, 'cross-origin request refused')
     if (request.method === 'DELETE') return
     const type = request.headers['content-type'] ?? ''
     const wanted = request.url.startsWith('/api/upload') ? 'application/octet-stream' : 'application/json'
@@ -83,13 +118,13 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
   })
 
   await app.register(fastifyStatic, { root: project.root, serve: false })
-  if (existsSync(APP_DIST)) {
-    await app.register(fastifyStatic, { root: APP_DIST, decorateReply: false })
+  if (existsSync(appDist)) {
+    await app.register(fastifyStatic, { root: appDist, decorateReply: false })
     // Any other page address is the app's; a missing script or image stays a 404.
     app.setNotFoundHandler((request, reply) => {
       const pathname = request.url.split('?')[0]!
       if (request.method === 'GET' && !pathname.startsWith('/api/') && !pathname.startsWith('/files/') && !path.extname(pathname)) {
-        return reply.sendFile('index.html', APP_DIST)
+        return reply.sendFile('index.html', appDist)
       }
       return reply.status(404).send({ error: 'not found' })
     })
@@ -97,12 +132,13 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
 
   const sockets = new WebSocketServer({ noServer: true })
   const broadcast = (message: unknown) => {
+    options.onEvent?.(message)
     const text = JSON.stringify(message)
     for (const ws of sockets.clients) ws.send(text)
   }
 
   // Builds run the commands in studio/project.json, in the game folder.
-  const builder = new Builder(project, broadcast)
+  const builder = new Builder(project, broadcast, options.buildEnv)
   app.get('/api/build', () => builder.status())
   app.post<{ Body: { mode?: unknown } }>('/api/build', async (request) => {
     await builder.start(request.body?.mode as BuildMode)
@@ -112,6 +148,10 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
     builder.stop()
     return { ok: true }
   })
+
+  // What building this folder still needs, and setting up a game crate in it.
+  app.get('/api/toolchain', () => checkToolchain(project, crates, options.buildEnv))
+  app.post('/api/setup-crate', async () => ({ written: await setupGameCrate(project, crates) }))
 
   // The studio's page says what is open in it, so an agent can be told "this room".
   let view: StudioView | null = null
@@ -173,7 +213,7 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
   // This server never opens a stream of its own, which the transport lets it say this way.
   app.get('/mcp', (_request, reply) => reply.status(405).header('allow', 'POST').send({ error: 'this MCP endpoint answers POST requests only' }))
   app.server.on('upgrade', (request, socket, head) => {
-    if (request.url !== '/ws') return socket.destroy()
+    if (request.url !== '/ws' || !hostAllowed(request.headers.host) || !sameOrigin(request.headers.origin, request.headers.host)) return socket.destroy()
     sockets.handleUpgrade(request, socket, head, (ws) => sockets.emit('connection', ws, request))
   })
 

@@ -1,0 +1,28 @@
+appId: studio.pecten.desktop
+productName: Pecten Studio
+artifactName: pecten-studio-${version}-${arch}.${ext}
+extraMetadata:
+  name: pecten-studio-desktop
+  desktopName: pecten-studio-desktop.desktop
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+# Kept out of the asar: the servers read them as ordinary files. Not called "app":
+# Electron would take resources/app for the application itself.
+extraResources:
+  - from: ../app/dist
+    to: studio-page
+  - from: ../runtime
+    to: crates/runtime
+    filter: ["**/*", "!target/**"]
+  - from: ../codegen
+    to: crates/codegen
+    filter: ["**/*", "!target/**", "!fixture/**"]
+linux:
+  target: [AppImage, deb]
+  category: Development
+  icon: build/icon.png
+  executableName: pecten-studio-desktop
+  maintainer: Pecten Studio

@@ -1,11 +1,11 @@
 import { defineConfig } from 'vitepress'
 
-// Served from https://<owner>.github.io/pecten-studio/ by the docs workflow.
-// Override with DOCS_BASE=/ for a custom domain or a local preview at the root.
+// Served from https://<owner>.github.io/<repository>/: the docs workflow sets DOCS_BASE
+// from the repository's name. Use DOCS_BASE=/ for a custom domain or a preview at the root.
 export default defineConfig({
   title: 'Pecten-Studio',
-  description: 'A browser-based studio for making Game Boy Advance Metroidvanias from assets you create yourself.',
-  base: process.env.DOCS_BASE ?? '/pecten-studio/',
+  description: 'A desktop and browser studio for making Game Boy Advance Metroidvanias from assets you create yourself.',
+  base: process.env.DOCS_BASE ?? '/gba-studio/',
   cleanUrls: true,
   lastUpdated: true,
   head: [['link', { rel: 'icon', href: 'data:,' }]],
@@ -13,13 +13,15 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Reference', link: '/reference/project-format' },
-      { text: 'GitHub', link: 'https://github.com/smolgroot/pecten-studio' },
+      { text: 'Download', link: 'https://github.com/smolgroot/gba-studio/releases/latest' },
+      { text: 'GitHub', link: 'https://github.com/smolgroot/gba-studio' },
     ],
     sidebar: [
       {
         text: 'Start here',
         items: [
           { text: 'Getting started', link: '/guide/getting-started' },
+          { text: 'Desktop app', link: '/guide/desktop' },
           { text: 'The interface', link: '/guide/interface' },
         ],
       },
@@ -55,7 +57,7 @@ export default defineConfig({
         ],
       },
     ],
-    socialLinks: [{ icon: 'github', link: 'https://github.com/smolgroot/pecten-studio' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/smolgroot/gba-studio' }],
     search: { provider: 'local' },
     outline: [2, 3],
     footer: { message: 'Screenshots show the Diamond Hands project open in the studio.' },

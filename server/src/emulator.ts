@@ -5,7 +5,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { HttpError } from './project.ts'
 import type { Picture } from './render.ts'
 
-const CORE = fileURLToPath(new URL('../../app/public/wasm/pecten.js', import.meta.url))
+let corePath = fileURLToPath(new URL('../../app/public/wasm/pecten.js', import.meta.url))
+/** Points at the core's script, for a host that keeps it somewhere else. Its .wasm is beside it. */
+export function setEmulatorCore(file: string): void {
+  corePath = file
+}
 
 interface Emulator {
   step_frame: () => Uint8Array
@@ -22,10 +26,10 @@ export type Key = keyof typeof KEY_BITS
 
 let core: Promise<Core> | undefined
 async function loadCore(): Promise<Core> {
-  if (!existsSync(CORE)) throw new HttpError(503, 'the Pecten emulator core is not in app/public/wasm; run scripts/sync-pecten.sh')
+  if (!existsSync(corePath)) throw new HttpError(503, 'the Pecten emulator core is not in app/public/wasm; run scripts/sync-pecten.sh')
   core ??= (async () => {
-    const mod = (await import(pathToFileURL(CORE).href)) as Core
-    await mod.default({ module_or_path: await readFile(CORE.replace(/\.js$/, '_bg.wasm')) })
+    const mod = (await import(pathToFileURL(corePath).href)) as Core
+    await mod.default({ module_or_path: await readFile(corePath.replace(/\.js$/, '_bg.wasm')) })
     return mod
   })()
   return core

@@ -7,12 +7,53 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fileUrl } from '../api.ts'
-import type { RomInfo } from '../api.ts'
+import { api, fileUrl } from '../api.ts'
+import type { RomInfo, ToolchainReport } from '../api.ts'
 import { Checkbox } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { ui } from '../theme.ts'
 import { Message } from './views.tsx'
+
+/** Says what this folder still needs before it can build, and offers to set up its crate. */
+function BuildSetup() {
+  const [report, setReport] = useState<ToolchainReport | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const refresh = useCallback(() => api.toolchain().then(setReport).catch(() => undefined), [])
+  useEffect(() => void refresh(), [refresh])
+
+  const missing = report?.items.filter((item) => !item.ok) ?? []
+  if (!report || (report.hasCrate && missing.length === 0)) return null
+  const setUp = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.setupCrate()
+      await refresh()
+      await useStudio.getState().load()
+    } catch (problem) {
+      setError((problem as Error).message)
+    }
+    setBusy(false)
+  }
+  return (
+    <Box sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', gap: 1, borderBottom: '1px solid #111' }}>
+      {!report.hasCrate && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <Typography variant="body2" color="text.secondary">This folder has no game crate yet, so there is nothing to build.</Typography>
+          {report.canSetUp && <Button variant="outlined" disabled={busy} onClick={() => void setUp()}>Set up game crate</Button>}
+        </Box>
+      )}
+      {missing.map((item) => (
+        <Typography key={item.name} variant="body2" color="warning.main">
+          {item.name} is missing. Install it with: <Box component="code" sx={{ userSelect: 'all', color: 'text.primary' }}>{item.install}</Box>
+        </Typography>
+      ))}
+      {missing.length > 0 && <Box><Button variant="text" onClick={() => void refresh()}>Check again</Button></Box>}
+      {error && <Typography variant="body2" color="error" role="alert">{error}</Typography>}
+    </Box>
+  )
+}
 
 /** Build buttons, status line and the streamed log. */
 export function BuildPanel() {
@@ -51,6 +92,7 @@ export function BuildPanel() {
         <Button variant="outlined" startIcon={<PlayArrowIcon />} onClick={() => select({ kind: 'play' })}>Play…</Button>
         <Typography color={failed ? 'error' : 'text.secondary'} noWrap sx={{ flex: 1, minWidth: 0 }}>{status}</Typography>
       </Box>
+      <BuildSetup />
       <Box
         ref={log}
         onScroll={(event) => {

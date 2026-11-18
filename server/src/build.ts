@@ -35,10 +35,12 @@ export class Builder {
   private state: Omit<BuildStatus, 'roms'> = { running: false, mode: null, command: null, exitCode: null, stopped: false, seconds: null, log: [] }
   private project: ProjectFolder
   private broadcast: (message: unknown) => void
+  private env: NodeJS.ProcessEnv | undefined
 
-  constructor(project: ProjectFolder, broadcast: (message: unknown) => void) {
+  constructor(project: ProjectFolder, broadcast: (message: unknown) => void, env?: NodeJS.ProcessEnv) {
     this.project = project
     this.broadcast = broadcast
+    this.env = env
   }
 
   private async settings(): Promise<Project['build']> {
@@ -69,7 +71,7 @@ export class Builder {
     const started = Date.now()
     this.state = { running: true, mode, command, exitCode: null, stopped: false, seconds: null, log: [] }
     // Its own process group, so stopping it also stops what it started (cargo, rustc).
-    const child = spawn(command, { cwd: this.project.root, shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, { cwd: this.project.root, env: this.env ?? process.env, shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
     this.child = child
     this.broadcast({ type: 'build-started', mode, command })
 

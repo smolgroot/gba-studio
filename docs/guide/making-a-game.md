@@ -1,6 +1,6 @@
 # Making a game with it
 
-A game is a Rust crate on agb that depends on two crates from this repository.
+A game is a Rust crate on agb that depends on two crates from this repository. **Set up game crate** in the [Build panel](./build-and-play#getting-a-folder-ready-to-build) writes one for you, with its own copy of those crates, so the game can live in any folder. To write one by hand inside a checkout:
 
 ```toml
 [dependencies]

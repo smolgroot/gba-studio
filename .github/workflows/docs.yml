@@ -33,7 +33,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --filter @pecten-studio/docs
 
+      # GitHub Pages serves the site under the repository's name.
       - run: pnpm --filter @pecten-studio/docs build
+        env:
+          DOCS_BASE: /${{ github.event.repository.name }}/
 
       - uses: actions/configure-pages@v5
 

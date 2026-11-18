@@ -27,6 +27,11 @@ export interface BuildStatus {
   log: string[]
   roms: Partial<Record<'dev' | 'release', RomInfo>>
 }
+export interface ToolchainReport {
+  hasCrate: boolean
+  canSetUp: boolean
+  items: Array<{ name: string; ok: boolean; install?: string }>
+}
 /** What the server pushes while a build runs. */
 export type BuildMessage =
   | { type: 'build-started'; mode: 'dev' | 'release'; command: string }
@@ -57,6 +62,8 @@ export const api = {
   buildStatus: () => request<BuildStatus>('/api/build'),
   build: (mode: 'dev' | 'release') => request<BuildStatus>('/api/build', json('POST', { mode })),
   stopBuild: () => request<{ ok: true }>('/api/build/stop', json('POST', {})),
+  toolchain: () => request<ToolchainReport>('/api/toolchain'),
+  setupCrate: () => request<{ written: string[] }>('/api/setup-crate', json('POST', {})),
   context: (view: unknown) => request<{ ok: true }>('/api/context', json('POST', view)),
   remove: (kind: DocKind, id: string) => request<{ ok: true }>(`/api/doc/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   upload: (path: string, file: Blob, overwrite: boolean) =>

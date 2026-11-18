@@ -191,6 +191,11 @@ pnpm start sample           # serve the sample project at http://127.0.0.1:4517
 pnpm start ../my-game       # or any game folder
 ```
 
+For a window of its own, with several projects open in tabs, use the desktop app:
+[download it for Linux](https://github.com/smolgroot/gba-studio/releases/latest), run it from a checkout with `pnpm desktop:dev [folder]`,
+or build the packages with `pnpm desktop:dist`. Pushing a version tag publishes a
+release. See [the desktop guide](docs/guide/desktop.md).
+
 - `--port N` changes the port.
 - `--lan` listens on every network interface, so a tablet on the same network can
   open the studio. Anyone on that network can then edit the game folder and run its
@@ -405,6 +410,7 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, up to 2 backgr
 | `core/` | The project format (zod schemas), cross-file validation, run-length and GBA colour helpers, room helpers. Shared by the server and the app. |
 | `server/` | The local Node server and the `pecten-studio` command: JSON API over one game folder, uploads, file watcher, build runner, and the MCP server with its tools, renderer and headless emulator. |
 | `app/` | The React, Vite and MUI interface. |
+| `desktop/` | The Electron app: project tabs, with one server process and page for each open folder. |
 | `codegen/` | `pecten_studio_build`: the build-script helper that turns a project into Rust data. |
 | `runtime/` | `pecten_studio_rt`: data types, physics and agb drawing for games. |
 | `sample/` | A small game made from a studio project. |
@@ -431,6 +437,8 @@ Honest list of what does not work yet:
   ones meet, the backdrop changes as the player crosses rather than at the border on
   screen. A background's colours share the 16 background palettes with the tileset,
   15 colours a tile: a photo will not convert, pixel art with few colours will.
+- **Desktop app:** Linux on x64 only for now, and the packaged app does not include the
+  `pecten-studio` command.
 - **Budgets:** the studio does not yet show palette, tile or sprite budgets while you
   draw; the build helper reports them when it runs.
 - **Tilesets** are one 16-colour-palette set per tile (up to 16 palettes). The

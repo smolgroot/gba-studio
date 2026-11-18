@@ -3,3 +3,8 @@ packages:
   - server
   - app
   - docs
+  - desktop
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild

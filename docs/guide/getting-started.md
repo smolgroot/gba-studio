@@ -1,10 +1,16 @@
 # Getting started
 
-Pecten-Studio is a browser-based studio for making Game Boy Advance Metroidvanias from assets you create yourself: pixel art in PNG, music in MIDI or tracker files, and rooms painted on a grid of GBA screens. It edits a project of plain JSON files, converts it to GBA-ready data for Rust games built on [agb](https://agbrs.dev), and runs the resulting ROM in the browser.
+Pecten-Studio is a studio for making Game Boy Advance Metroidvanias from assets you create yourself: pixel art in PNG, music in MIDI or tracker files, and rooms painted on a grid of GBA screens. It edits a project of plain JSON files, converts it to GBA-ready data for Rust games built on [agb](https://agbrs.dev), and runs the resulting ROM in the studio. Use it as a desktop app or in your browser.
 
 It knows nothing about any particular game. It knows tiles, collision classes, entities with typed properties, sprites and animations, and music. What an entity *does* is written in each game's Rust code.
 
 ![The studio with the Diamond Hands project open on its world map](/screenshots/studio-overview.png)
+
+## Desktop app
+
+On Linux, [download the latest release](https://github.com/smolgroot/gba-studio/releases/latest) and see [Desktop app](./desktop) for how to install it. It needs neither Node nor a browser, opens any folder, and keeps several projects open in tabs.
+
+The rest of this section runs the studio from a checkout, in your browser.
 
 ## Requirements
 
@@ -33,7 +39,7 @@ Opening a folder with no project offers to create one. That adds a `studio/` fol
 :::
 
 ::: warning Safety
-The server can only read and write inside the folder it was given (symlinks that point out of it are refused), and refuses writes from other web pages.
+The server can only read and write inside the folder it was given (symlinks that point out of it are refused), and refuses writes from other web pages. Unless started with `--lan`, it answers only to this computer's own addresses.
 :::
 
 ## Your first ten minutes
@@ -54,6 +60,8 @@ pnpm typecheck
 cargo test       # Rust tests (build helper, collision and physics)
 ```
 
+`pnpm desktop:dev` runs the [desktop app](./desktop#run-it-from-a-checkout) from the checkout.
+
 ## Working on these docs
 
 ```sh
@@ -61,4 +69,4 @@ pnpm --filter @pecten-studio/docs dev       # live preview
 pnpm --filter @pecten-studio/docs build     # static site in docs/.vitepress/dist
 ```
 
-The docs are published by the **Docs** GitHub Actions workflow whenever a version tag (`v*`) is pushed.
+The docs are published by the **Docs** GitHub Actions workflow whenever a version tag (`v*`) is pushed. The same tag [publishes a release](./desktop#publishing-a-release) of the desktop app.

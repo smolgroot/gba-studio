@@ -42,6 +42,8 @@ Either way, the edits are file saves: an open studio shows them at once, and **C
 
 The endpoint refuses requests from other web pages, like the rest of the server.
 
+In the [desktop app](./desktop#coding-agents), each open project has its own endpoint on its own port. **Project > Copy MCP Endpoint** copies the address to use. The `pecten-studio` command is not included in the packaged app, so the commands above and stdio need a checkout.
+
 ## The tools
 
 | Tools | What they do |

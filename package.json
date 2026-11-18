@@ -11,7 +11,9 @@
     "build": "pnpm --filter @pecten-studio/app build",
     "start": "node server/src/cli.ts",
     "test": "vitest run",
-    "typecheck": "tsc -b core server app",
+    "typecheck": "tsc -b core server app desktop",
+    "desktop:dev": "pnpm --filter @pecten-studio/app build && pnpm --filter @pecten-studio/desktop dev",
+    "desktop:dist": "pnpm --filter @pecten-studio/desktop dist",
     "sample:assets": "node scripts/make-sample-assets.ts"
   },
   "devDependencies": {

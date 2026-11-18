@@ -75,8 +75,20 @@ const HISTORY_LIMIT = 200
 const unsaved = new Set<string>()
 const versions = new Map<string, number>()
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
+/** Saves that have been started and not finished, or are waiting for their moment. */
+const pendingSaves = new Map<string, () => Promise<void>>()
+const runningSaves = new Set<Promise<void>>()
 /** Counts finished writes: a project load that started before one may be out of date. */
 let writes = 0
+
+/** Writes every edit now and waits until they are on disk, for when the page is about to go away. */
+export async function flushSaves(): Promise<void> {
+  for (const [key, save] of [...pendingSaves]) {
+    clearTimeout(timers.get(key))
+    void save()
+  }
+  await Promise.all(runningSaves)
+}
 
 interface StudioState {
   bundle: Bundle | null
@@ -117,10 +129,10 @@ export const useStudio = create<StudioState>((set, get) => {
     versions.set(key, version)
     unsaved.add(key)
     clearTimeout(timers.get(key))
-    timers.set(
-      key,
-      setTimeout(async () => {
-        const doc = getDoc(get().bundle!.docs, kind, id)
+    const save = () => {
+      pendingSaves.delete(key)
+      const doc = getDoc(get().bundle!.docs, kind, id)
+      const write = async () => {
         try {
           await api.save(kind, id, doc)
           if (versions.get(key) === version) unsaved.delete(key)
@@ -130,8 +142,13 @@ export const useStudio = create<StudioState>((set, get) => {
         }
         writes++
         void get().load()
-      }, 250),
-    )
+      }
+      const running = write().finally(() => runningSaves.delete(running))
+      runningSaves.add(running)
+      return running
+    }
+    pendingSaves.set(key, save)
+    timers.set(key, setTimeout(() => void save(), 250))
   }
 
   const step = (from: 'past' | 'future') => {
@@ -265,6 +282,7 @@ export const useStudio = create<StudioState>((set, get) => {
       if (!bundle) return
       const key = docKey(kind, id)
       clearTimeout(timers.get(key))
+      pendingSaves.delete(key)
       unsaved.delete(key)
       try {
         await api.remove(kind, id)

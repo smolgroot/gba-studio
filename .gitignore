@@ -3,5 +3,6 @@ dist
 *.tsbuildinfo
 .DS_Store
 target
+desktop/release
 docs/.vitepress/dist
 docs/.vitepress/cache
