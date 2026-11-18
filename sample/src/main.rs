@@ -5,7 +5,9 @@
 //! backgrounds, which scroll slower than the camera. Everything on screen comes from
 //! `studio/` and `assets/`; this file is the rules.
 //!
-//! D-pad moves, A jumps (hold for a higher jump), Down drops through platforms.
+//! D-pad moves, A jumps (hold for a higher jump), Down drops through platforms. How
+//! all of that feels is set in the studio's Physics tab. Switched to top-down there,
+//! the D-pad walks in every direction and the edges of the map are walls.
 //!
 //! Collectibles are entities whose type has a `value` property, like the project's
 //! coins and diamonds: touching one takes it for good and adds its value to the count
@@ -26,21 +28,15 @@ use agb::sound::mixer::{Frequency, Mixer, SoundChannel};
 use pecten_studio_rt::{
     data::{Collected, CollisionKind, SCREEN_H, SCREEN_W},
     gfx::{AnimPlayer, WorldView},
-    physics::{Body, SUB},
+    physics::{Body, PhysicsMode, PlatformerController, PlatformerInput, TopDownController},
 };
 
 pecten_studio_rt::include_data!();
 pecten_studio_rt::include_gfx!();
 pecten_studio_rt::include_audio!();
 
-use data::{EntityKind, WORLD};
+use data::{EntityKind, PHYSICS, WORLD};
 
-const RUN: i32 = SUB * 3 / 2;
-const GRAVITY: i32 = 48;
-const MAX_FALL: i32 = 4 * SUB;
-const JUMP: i32 = 1100;
-/// Letting go of A caps the rise at this speed, for short hops.
-const JUMP_CUT: i32 = 400;
 /// The most the camera moves in a frame when the area it may show changes, so it
 /// glides to its new place. Following the hero never needs this much.
 const CAMERA_SPEED: i32 = 6;
@@ -114,30 +110,37 @@ fn main(mut gba: agb::Gba) -> ! {
     let mut score = 0u32;
     // Ticks since the game began: every placed entity animates off this one clock.
     let mut clock = 0u32;
+    let top_down = PHYSICS.mode == PhysicsMode::TopDown;
+    let walls = WORLD.enclosed();
+    let mut platformer = PlatformerController::new();
+    let mut walker = TopDownController::new();
 
     loop {
         input.update();
         let direction = input.x_tri() as i32;
-        if direction != 0 {
-            faces_left = direction < 0;
-        }
-        body.vx = direction * RUN;
-        if body.on_ground && input.is_just_pressed(Button::A) {
-            body.vy = -JUMP;
-            play(&mut mixer, audio::sfx::JUMP);
-        }
-        if !input.is_pressed(Button::A) && body.vy < -JUMP_CUT {
-            body.vy = -JUMP_CUT;
-        }
-        body.vy = (body.vy + GRAVITY).min(MAX_FALL);
         let before = body;
-        body.step(&WORLD, input.is_pressed(Button::Down));
+        if top_down {
+            let vertical = input.is_pressed(Button::Down) as i32 - input.is_pressed(Button::Up) as i32;
+            walker.update(&mut body, &walls, &PHYSICS.top_down, direction, vertical);
+            if body.vx != 0 {
+                faces_left = body.vx < 0;
+            }
+        } else {
+            if direction != 0 {
+                faces_left = direction < 0;
+            }
+            let buttons = PlatformerInput { direction, jump_pressed: input.is_just_pressed(Button::A), jump_held: input.is_pressed(Button::A) };
+            if platformer.update(&mut body, &PHYSICS.platformer, buttons) {
+                play(&mut mixer, audio::sfx::JUMP);
+            }
+            body.step(&WORLD, input.is_pressed(Button::Down));
+        }
 
         let (x, y) = focus(&body);
         match WORLD.room_at(x, y) {
             Some(next) if next != room => {
                 room = next;
-                entry = body;
+                entry = walker.settled(body);
                 // A room drawn with another tileset cannot share the screen: cut to it.
                 if !view.shows(room) {
                     view = WorldView::new(&gfx::ROOMS, room, &mut graphics);
@@ -152,6 +155,7 @@ fn main(mut gba: agb::Gba) -> ! {
             // Off the map: its sides and top are walls, and below it is a pit.
             None if WORLD.room_at(x, before.y + before.h / 2).is_none() && body.y > before.y => {
                 body = entry;
+                walker.stop();
                 play(&mut mixer, audio::sfx::DAMAGE);
             }
             None => {
@@ -161,12 +165,14 @@ fn main(mut gba: agb::Gba) -> ! {
         }
         if body.touches(&WORLD, CollisionKind::Hazard) {
             body = entry;
+            walker.stop();
             play(&mut mixer, audio::sfx::DAMAGE);
         }
 
-        animation.play(if !body.on_ground {
+        let moving = if top_down { body.vx != 0 || body.vy != 0 } else { direction != 0 };
+        animation.play(if !top_down && !body.on_ground {
             jump
-        } else if direction != 0 {
+        } else if moving {
             run
         } else {
             idle
@@ -233,6 +239,7 @@ fn main(mut gba: agb::Gba) -> ! {
         }
         if hurt {
             body = entry;
+            walker.stop();
             play(&mut mixer, audio::sfx::DAMAGE);
         }
         // The count: a coin and the score beside it, in the top-left corner.

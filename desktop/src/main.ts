@@ -13,6 +13,8 @@ app.setName('pecten-studio')
 
 const resources = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '../..')
 const appDist = path.join(resources, app.isPackaged ? 'studio-page' : 'app/dist')
+// Set on the window too: an AppImage run directly has no installed .desktop file to supply it.
+const icon = path.join(resources, app.isPackaged ? 'icon.png' : 'desktop/build/icon.png')
 
 /** Folders named on a command line. */
 function foldersIn(argv: string[], cwd: string): string[] {
@@ -64,7 +66,7 @@ function start(): void {
     emulatorCore: path.join(appDist, 'wasm/pecten.js'),
     stateFile: path.join(app.getPath('userData'), 'projects.json'),
   }
-  const window = new BaseWindow({ width: 1440, height: 900, minWidth: 720, minHeight: 480, title: 'Pecten Studio', backgroundColor: '#1c1c1c' })
+  const window = new BaseWindow({ width: 1440, height: 900, minWidth: 720, minHeight: 480, title: 'Pecten Studio', icon, backgroundColor: '#1c1c1c' })
   const shellView = new WebContentsView({
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false },
   })

@@ -87,6 +87,11 @@ draws the rooms around a camera, with the backgrounds of one room behind them: c
 \`view.set_backgrounds(room, &graphics)\` when the player enters a room. The data
 and physics half of the runtime has no dependencies and runs on the host, so rules
 can be unit tested with \`cargo test\`.
+
+The Physics tab of the studio saves \`physics\` in \`studio/project.json\`: the game type
+(\`platformer\` or \`topdown\`) and how it moves. The game gets it as \`data::PHYSICS\`.
+\`physics::PlatformerController\` and \`physics::TopDownController\` apply it, so use
+them rather than hard-coding gravity or speeds.
 `
 }
 
@@ -161,7 +166,8 @@ Behaviour is Rust in \`src/\`, on agb and \`pecten_studio_rt\`:
   read its typed properties with \`entity.int("name")\`, \`.bool\`, \`.str\`.
 - \`physics::Body\` moves through \`&data::WORLD\` in world pixels: walls, one-way
   platforms, slopes. \`gfx::WorldView\` draws the rooms; \`gfx::AnimPlayer\` plays a
-  sprite's animations by name.
+  sprite's animations by name. \`data::PHYSICS\` holds the Physics tab's numbers, for
+  \`physics::PlatformerController\` and \`physics::TopDownController\`.
 - Adding an entity type is two steps: \`entity_type_set\` in the project, then its
   behaviour in code. After a project change, rebuild before relying on new
   constants: they are generated.

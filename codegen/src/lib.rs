@@ -135,6 +135,36 @@ fn palettes_source(palettes: &[[u16; 16]]) -> String {
     rows.join(",\n        ")
 }
 
+/// The project's physics as a Rust value.
+fn physics_source(physics: &model::Physics) -> String {
+    let p = &physics.platformer;
+    let t = &physics.top_down;
+    format!(
+        "Physics {{\n        mode: PhysicsMode::{},\n        platformer: PlatformerPhysics {{ gravity: {}, fall_gravity: {}, max_fall_speed: {}, run_speed: {}, ground_acceleration: {}, ground_friction: {}, air_acceleration: {}, jump_speed: {}, jump_cut: {}, air_jumps: {}, coyote_frames: {}, jump_buffer_frames: {} }},\n        top_down: TopDownPhysics {{ movement: Movement::{}, speed: {}, acceleration: {}, friction: {}, directions: {}, normalize_diagonal: {}, corner_slide: {}, grid_size: {} }},\n    }}",
+        if physics.mode == model::PhysicsMode::Topdown { "TopDown" } else { "Platformer" },
+        p.gravity,
+        p.fall_gravity,
+        p.max_fall_speed,
+        p.run_speed,
+        p.ground_acceleration,
+        p.ground_friction,
+        p.air_acceleration,
+        p.jump_speed,
+        p.jump_cut,
+        p.air_jumps,
+        p.coyote_frames,
+        p.jump_buffer_frames,
+        if t.movement == model::Movement::Grid { "Grid" } else { "Free" },
+        t.speed,
+        t.acceleration,
+        t.friction,
+        t.directions,
+        t.normalize_diagonal,
+        t.corner_slide,
+        t.grid_size,
+    )
+}
+
 pub fn generate(options: &Options) -> Result<Report, Error> {
     let docs = model::load(&options.project).map_err(Error)?;
     let mut problems = Vec::new();
@@ -560,6 +590,10 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
         r#"{header}#[allow(dead_code, unused_imports)]
 pub mod data {{
     use pecten_studio_rt::data::{{CollisionClass, CollisionKind, Entity, Prop, Room, World}};
+    use pecten_studio_rt::physics::{{Movement, Physics, PhysicsMode, PlatformerPhysics, TopDownPhysics}};
+
+    /// The numbers set in the studio's Physics tab.
+    pub static PHYSICS: Physics = {physics};
 
     pub static CLASSES: [CollisionClass; {class_count}] = [
 {class_rows}    ];
@@ -592,6 +626,7 @@ pub mod data {{
     pub static WORLD: World = World {{ rooms: &ROOMS, classes: &CLASSES, start: {start} }};
 }}
 "#,
+        physics = physics_source(&docs.project.physics),
         class_count = classes.len(),
         class_rows = classes
             .iter()
@@ -737,6 +772,10 @@ mod tests {
         assert!(data.contains("PlayerStart,"));
         assert!(data.contains("pub const ENTRY: usize = 0;"));
         assert!(data.contains("start: Some(0)"));
+        // The fixture says nothing about physics: it gets the defaults.
+        assert!(data.contains("mode: PhysicsMode::Platformer"), "{data}");
+        assert!(data.contains("gravity: 48, fall_gravity: 48, max_fall_speed: 1024, run_speed: 384"), "{data}");
+        assert!(data.contains("movement: Movement::Free, speed: 256"), "{data}");
 
         // The entry room: 60x20 cells, floor from row 17 down, a one-way girder at row 12.
         let collision = fs::read(out.join("room_entry.collision")).unwrap();
@@ -767,6 +806,18 @@ mod tests {
         assert!(distinct < 16 * 20, "repeated tiles are kept once: {distinct}");
         assert!(cells.chunks_exact(2).all(|cell| (u16::from_le_bytes([cell[0], cell[1]]) as usize) < distinct));
         fs::remove_dir_all(out).ok();
+    }
+
+    #[test]
+    fn writes_the_physics_set_in_the_project() {
+        let physics: model::Physics = serde_json::from_str(r#"{"mode":"topdown","platformer":{"gravity":30,"airJumps":2},"topDown":{"movement":"grid","gridSize":8,"directions":4}}"#).unwrap();
+        let source = physics_source(&physics);
+        assert!(source.contains("mode: PhysicsMode::TopDown"), "{source}");
+        assert!(source.contains("gravity: 30, fall_gravity: 48"), "fields left out keep their defaults: {source}");
+        assert!(source.contains("air_jumps: 2"), "{source}");
+        assert!(source.contains("movement: Movement::Grid"), "{source}");
+        assert!(source.contains("directions: 4"), "{source}");
+        assert!(source.contains("grid_size: 8"), "{source}");
     }
 
     /// A room's pictures share the console's four backgrounds with its tile layers.

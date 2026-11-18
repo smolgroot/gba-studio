@@ -159,7 +159,24 @@ impl Cells for World {
     }
 }
 
+/// A world whose outside is solid, for games with no pits: see [`World::enclosed`].
+#[derive(Clone, Copy)]
+pub struct Enclosed<'a>(&'a World);
+
+static MAP_EDGE: CollisionClass = CollisionClass { id: "map-edge", kind: CollisionKind::Solid, slope: (0, 0) };
+
+impl Cells for Enclosed<'_> {
+    fn class(&self, col: i32, row: i32) -> &CollisionClass {
+        if self.0.room_at_screen(col.div_euclid(SCREEN_W / TILE), row.div_euclid(SCREEN_H / TILE)).is_some() { self.0.class(col, row) } else { &MAP_EDGE }
+    }
+}
+
 impl World {
+    /// These cells with a wall wherever the map has no room.
+    pub const fn enclosed(&self) -> Enclosed<'_> {
+        Enclosed(self)
+    }
+
     /// How many entities the project has, over every room.
     pub const fn entity_count(&self) -> usize {
         let (mut count, mut room) = (0, 0);

@@ -1,5 +1,5 @@
 // What a new project starts with.
-import { FORMAT_VERSION } from './schema.ts'
+import { FORMAT_VERSION, Physics } from './schema.ts'
 import type { Audio, Project, World } from './schema.ts'
 
 export function newProject(name: string): { project: Project; world: World; audio: Audio } {
@@ -22,6 +22,7 @@ export function newProject(name: string): { project: Project; world: World; audi
         { id: 'hazard', name: 'Hazard', colour: '#d6409f', kind: 'hazard' },
       ],
       entityTypes: [{ id: 'player-start', name: 'Player start', colour: '#3e63dd', props: [] }],
+      physics: Physics.parse({}),
     },
     world: { version: FORMAT_VERSION, rooms: [] },
     audio: { version: FORMAT_VERSION, tracks: [], sfx: [] },

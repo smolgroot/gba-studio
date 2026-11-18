@@ -16,6 +16,88 @@ pub struct Project {
     pub collision_classes: Vec<CollisionClass>,
     #[serde(default)]
     pub entity_types: Vec<EntityType>,
+    #[serde(default)]
+    pub physics: Physics,
+}
+
+#[derive(Deserialize, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PhysicsMode {
+    #[default]
+    Platformer,
+    Topdown,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Physics {
+    pub mode: PhysicsMode,
+    pub platformer: PlatformerPhysics,
+    pub top_down: TopDownPhysics,
+}
+
+/// The defaults are those of `core/src/schema.ts`, for projects saved without them.
+#[derive(Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct PlatformerPhysics {
+    pub gravity: i32,
+    pub fall_gravity: i32,
+    pub max_fall_speed: i32,
+    pub run_speed: i32,
+    pub ground_acceleration: i32,
+    pub ground_friction: i32,
+    pub air_acceleration: i32,
+    pub jump_speed: i32,
+    pub jump_cut: i32,
+    pub air_jumps: u8,
+    pub coyote_frames: u8,
+    pub jump_buffer_frames: u8,
+}
+
+impl Default for PlatformerPhysics {
+    fn default() -> Self {
+        Self {
+            gravity: 48,
+            fall_gravity: 48,
+            max_fall_speed: 1024,
+            run_speed: 384,
+            ground_acceleration: 0,
+            ground_friction: 0,
+            air_acceleration: 0,
+            jump_speed: 1100,
+            jump_cut: 400,
+            air_jumps: 0,
+            coyote_frames: 0,
+            jump_buffer_frames: 0,
+        }
+    }
+}
+
+#[derive(Deserialize, Default, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Movement {
+    #[default]
+    Free,
+    Grid,
+}
+
+#[derive(Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TopDownPhysics {
+    pub movement: Movement,
+    pub speed: i32,
+    pub acceleration: i32,
+    pub friction: i32,
+    pub directions: u8,
+    pub normalize_diagonal: bool,
+    pub corner_slide: i32,
+    pub grid_size: i32,
+}
+
+impl Default for TopDownPhysics {
+    fn default() -> Self {
+        Self { movement: Movement::Free, speed: 256, acceleration: 0, friction: 0, directions: 8, normalize_diagonal: true, corner_slide: 4, grid_size: 16 }
+    }
 }
 
 #[derive(Deserialize)]

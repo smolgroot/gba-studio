@@ -3,7 +3,7 @@
 Plain JSON files in the game's repository, laid out to diff well in git. The schemas in [`core/src/schema.ts`](https://github.com/smolgroot/gba-studio/blob/main/core/src/schema.ts) are the reference, and `pecten-studio schema` prints them as JSON Schema.
 
 ```
-studio/project.json         name, build commands, collision classes, entity types
+studio/project.json         name, build commands, collision classes, entity types, physics
 studio/world.json           where each room sits on the world grid, in screens
 studio/audio.json           music tracks (MIDI + SF2, XM, MOD) and sound effects
 studio/tilesets/<id>.json   a PNG of 8x8 tiles and each tile's collision class
@@ -19,6 +19,7 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, up to 2 backgr
 - A room's `backgrounds`, back to front, are each `{ "image": "assets/backgrounds/sky.png", "parallax": { "x": 25, "y": 0 } }`: a PNG whose size is a multiple of 8, and its scroll speed in percent of the camera's.
 - Collision classes have a kind (`empty`, `solid`, `one-way`, `slope`, `hazard`, `custom`) and, for slopes, the floor height at the tile's left and right edge. What `hazard` and `custom` mean is up to the game.
 - An entity is a type, a position in pixels from the room's top-left, and the properties its type defines (integer, boolean, text or one of a list).
+- `physics` in `project.json` holds the game type and how it moves. Left out, it is the default platformer. See [Physics](../guide/physics).
 - Ids are lowercase letters, digits, `-` and `_`, and are also the file names.
 
 ## Examples

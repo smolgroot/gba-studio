@@ -16,6 +16,7 @@ import MapOutlinedIcon from '@mui/icons-material/MapOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined'
 import PublicIcon from '@mui/icons-material/Public'
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
+import SportsBasketballOutlinedIcon from '@mui/icons-material/SportsBasketballOutlined'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -35,6 +36,7 @@ import type { Selection } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
 import { MidiView } from './midi.tsx'
+import { PhysicsEditor } from './physics.tsx'
 import { PixelEditor } from './pixel.tsx'
 import { PlayView } from './play.tsx'
 import { UndoButtons } from './common.tsx'
@@ -269,6 +271,7 @@ export function ProjectPanel() {
       <List>
         <Row selection={{ kind: 'world' }} icon={<PublicIcon sx={iconSx} />} label="World" detail={`${docs.world?.rooms.length ?? 0} rooms`} />
         <Row selection={{ kind: 'project' }} icon={<SettingsOutlinedIcon sx={iconSx} />} label="Project settings" />
+        <Row selection={{ kind: 'physics' }} icon={<SportsBasketballOutlinedIcon sx={iconSx} />} label="Physics" detail={docs.project?.physics.mode === 'topdown' ? 'Top-down' : 'Platformer'} />
         <Row selection={{ kind: 'play' }} icon={<PlayCircleOutlineIcon sx={iconSx} />} label="Play" />
         <Row selection={{ kind: 'audio' }} icon={<AudiotrackIcon sx={iconSx} />} label="Audio" detail={`${docs.audio?.tracks.length ?? 0} tracks · ${docs.audio?.sfx.length ?? 0} sounds`} />
       </List>
@@ -327,6 +330,7 @@ export function DocumentPanel({ selection }: { selection: Selection }) {
     case 'sprite': return <SpriteEditor id={id!} />
     case 'asset': return /\.png$/i.test(id!) ? <PixelEditor path={id!} /> : /\.midi?$/i.test(id!) ? <MidiView path={id!} /> : <AssetView path={id!} />
     case 'project': return <ProjectSettings />
+    case 'physics': return <PhysicsEditor />
     case 'audio': return <AudioEditor />
     case 'play': return <PlayView />
   }
@@ -482,6 +486,15 @@ export function PropertiesPanel() {
       <Fields>
         <Field label="Folder"><Typography>{bundle.folder}</Typography></Field>
         <Field label="Format version"><Typography>{docs.project.version}</Typography></Field>
+      </Fields>
+    )
+  } else if (kind === 'physics' && docs.project) {
+    body = (
+      <Fields>
+        <Field label="Game type"><Typography>{docs.project.physics.mode === 'topdown' ? 'Top-down' : '2D platformer'}</Typography></Field>
+        <Field label="Saved in"><Typography>studio/project.json</Typography></Field>
+        <Field label="Speeds"><Typography>1/256 pixel per frame</Typography></Field>
+        <Field label="Frame rate"><Typography>60 per second</Typography></Field>
       </Fields>
     )
   } else if (kind === 'play') {

@@ -82,3 +82,8 @@ draws the rooms around a camera, with the backgrounds of one room behind them: c
 `view.set_backgrounds(room, &graphics)` when the player enters a room. The data
 and physics half of the runtime has no dependencies and runs on the host, so rules
 can be unit tested with `cargo test`.
+
+The Physics tab of the studio saves `physics` in `studio/project.json`: the game type
+(`platformer` or `topdown`) and how it moves. The game gets it as `data::PHYSICS`.
+`physics::PlatformerController` and `physics::TopDownController` apply it, so use
+them rather than hard-coding gravity or speeds.

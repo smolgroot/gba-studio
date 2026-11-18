@@ -65,6 +65,55 @@ export const EntityType = z.object({
   props: z.array(PropertyDef).default([]),
 })
 
+const tuning = (min: number, max: number, value: number) => z.number().int().min(min).max(max).default(value)
+
+/**
+ * How a side-on game moves. Speeds are in 1/256 pixel per frame and accelerations in
+ * 1/256 pixel per frame per frame, at 60 frames a second. An acceleration of 0 is instant.
+ */
+export const PlatformerPhysics = z.object({
+  /** Pulls down while rising. */
+  gravity: tuning(1, 256, 48),
+  /** Pulls down while falling. More than `gravity` makes a jump land sooner. */
+  fallGravity: tuning(1, 256, 48),
+  maxFallSpeed: tuning(64, 2048, 1024),
+  runSpeed: tuning(32, 1024, 384),
+  groundAcceleration: tuning(0, 256, 0),
+  groundFriction: tuning(0, 256, 0),
+  airAcceleration: tuning(0, 256, 0),
+  jumpSpeed: tuning(128, 2048, 1100),
+  /** Letting go of jump caps the rise at this speed, for short hops. */
+  jumpCut: tuning(0, 2048, 400),
+  /** Extra jumps before landing. */
+  airJumps: tuning(0, 3, 0),
+  /** Frames after leaving a ledge in which a jump still works. */
+  coyoteFrames: tuning(0, 30, 0),
+  /** Frames a jump pressed too early is remembered until landing. */
+  jumpBufferFrames: tuning(0, 30, 0),
+})
+
+/** How a game seen from above moves: freely, or one grid step at a time. */
+export const TopDownPhysics = z.object({
+  movement: z.enum(['free', 'grid']).default('free'),
+  speed: tuning(32, 1024, 256),
+  /** Free movement only, like the rest down to `cornerSlide`. */
+  acceleration: tuning(0, 256, 0),
+  friction: tuning(0, 256, 0),
+  directions: z.union([z.literal(4), z.literal(8)]).default(8),
+  /** Keeps diagonal movement as fast as straight movement. */
+  normalizeDiagonal: z.boolean().default(true),
+  /** How many pixels a body is nudged around a corner it just clips. */
+  cornerSlide: tuning(0, 8, 4),
+  /** Grid movement only: pixels in one step. */
+  gridSize: z.union([z.literal(8), z.literal(16)]).default(16),
+})
+
+export const Physics = z.object({
+  mode: z.enum(['platformer', 'topdown']).default('platformer'),
+  platformer: PlatformerPhysics.prefault({}),
+  topDown: TopDownPhysics.prefault({}),
+})
+
 export const Project = z.object({
   version: Version,
   name: z.string().min(1),
@@ -78,6 +127,8 @@ export const Project = z.object({
   }),
   collisionClasses: z.array(CollisionClass).min(1),
   entityTypes: z.array(EntityType).default([]),
+  /** Left out, a project has the default platformer physics. */
+  physics: Physics.prefault({}),
 })
 
 export const Tileset = z.object({
@@ -188,6 +239,9 @@ export const Audio = z.object({
 
 export type CollisionClass = z.infer<typeof CollisionClass>
 export type EntityType = z.infer<typeof EntityType>
+export type PlatformerPhysics = z.infer<typeof PlatformerPhysics>
+export type TopDownPhysics = z.infer<typeof TopDownPhysics>
+export type Physics = z.infer<typeof Physics>
 export type Project = z.infer<typeof Project>
 export type Tileset = z.infer<typeof Tileset>
 export type Sprite = z.infer<typeof Sprite>

@@ -5,19 +5,19 @@ import type { AgentMessage, BuildMessage, BuildStatus, Bundle } from './api.ts'
 
 /** What is open in the document area and described in Properties. */
 export interface Selection {
-  kind: 'world' | 'project' | 'audio' | 'play' | 'room' | 'tileset' | 'sprite' | 'asset'
+  kind: 'world' | 'project' | 'physics' | 'audio' | 'play' | 'room' | 'tileset' | 'sprite' | 'asset'
   /** Document id, or the file path of an asset. */
   id?: string
 }
 export const selectionKey = (s: Selection): string => `${s.kind}:${s.id ?? ''}`
 
-const KINDS: ReadonlyArray<Selection['kind']> = ['world', 'project', 'audio', 'play', 'room', 'tileset', 'sprite', 'asset']
+const KINDS: ReadonlyArray<Selection['kind']> = ['world', 'project', 'physics', 'audio', 'play', 'room', 'tileset', 'sprite', 'asset']
 /** The open item lives in the URL's hash (`#room:entry`), so a reload or a shared link comes back to it. */
 export function selectionFromHash(): Selection {
   const [kind, ...rest] = decodeURIComponent(location.hash.slice(1)).split(':')
   const id = rest.join(':')
   if (!KINDS.includes(kind as Selection['kind'])) return { kind: 'world' }
-  const single = kind === 'world' || kind === 'project' || kind === 'audio' || kind === 'play'
+  const single = kind === 'world' || kind === 'project' || kind === 'physics' || kind === 'audio' || kind === 'play'
   return single ? { kind: kind as Selection['kind'] } : id ? { kind: kind as Selection['kind'], id } : { kind: 'world' }
 }
 
@@ -45,6 +45,12 @@ function withDoc<K extends EditKind>(docs: Docs, kind: K, id: string | undefined
   return { ...docs, [`${kind}s`]: group }
 }
 const docKey = (kind: EditKind, id?: string): string => `${kind}:${id ?? ''}`
+
+/** The document undo acts on for what is open, if any. The Physics tab edits the project file. */
+function editedDoc(selection: Selection): { kind: EditKind; id?: string } | null {
+  if (selection.kind === 'asset' || selection.kind === 'play') return null
+  return selection.kind === 'physics' ? { kind: 'project' } : { kind: selection.kind, id: selection.id }
+}
 
 /** Whether two documents say the same thing, whatever order their keys are in. */
 function same(a: unknown, b: unknown): boolean {
@@ -153,18 +159,19 @@ export const useStudio = create<StudioState>((set, get) => {
 
   const step = (from: 'past' | 'future') => {
     const { selection, bundle, history } = get()
-    if (!bundle || selection.kind === 'asset' || selection.kind === 'play') return
-    const key = docKey(selection.kind, selection.id)
+    const edited = editedDoc(selection)
+    if (!bundle || !edited) return
+    const key = docKey(edited.kind, edited.id)
     const entry = history[key]
-    const current = getDoc(bundle.docs, selection.kind, selection.id)
+    const current = getDoc(bundle.docs, edited.kind, edited.id)
     if (!entry || entry[from].length === 0 || current === undefined) return
     const to = from === 'past' ? 'future' : 'past'
     const target = entry[from][entry[from].length - 1] as DocTypes[EditKind]
     set({
-      bundle: { ...bundle, docs: withDoc(bundle.docs, selection.kind, selection.id, target) },
+      bundle: { ...bundle, docs: withDoc(bundle.docs, edited.kind, edited.id, target) },
       history: { ...history, [key]: { ...entry, [from]: entry[from].slice(0, -1), [to]: [...entry[to], current] } as History },
     })
-    scheduleSave(selection.kind, selection.id)
+    scheduleSave(edited.kind, edited.id)
   }
 
   return {
@@ -319,7 +326,10 @@ export const useStudio = create<StudioState>((set, get) => {
 
 /** Whether the open document has steps to undo or redo. */
 export function useHistoryDepth(): { undo: number; redo: number } {
-  const entry = useStudio((s) => (s.selection.kind === 'asset' || s.selection.kind === 'play' ? undefined : s.history[docKey(s.selection.kind, s.selection.id)]))
+  const entry = useStudio((s) => {
+    const edited = editedDoc(s.selection)
+    return edited ? s.history[docKey(edited.kind, edited.id)] : undefined
+  })
   return { undo: entry?.past.length ?? 0, redo: entry?.future.length ?? 0 }
 }
 
@@ -330,6 +340,7 @@ export function selectionTitle(selection: Selection, bundle: Bundle | null): str
   switch (kind) {
     case 'world': return 'World'
     case 'project': return 'Project settings'
+    case 'physics': return 'Physics'
     case 'audio': return 'Audio'
     case 'play': return 'Play'
     case 'room': return docs?.rooms[id!]?.name ?? id!

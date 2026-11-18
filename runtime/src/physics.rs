@@ -2,6 +2,10 @@
 //! slopes. It moves in whatever [`Cells`] it is given: one room's, or the whole world's
 //! so that it walks from a room into the next without noticing. Enough for a platformer's player or a walking enemy; a game
 //! with other needs reads [`Room::class_index`] and writes its own.
+//!
+//! [`PlatformerController`] and [`TopDownController`] turn buttons into movement with the
+//! numbers set in the studio's Physics tab, which a game gets as `data::PHYSICS`.
+//! `core/src/physics.ts` is the same logic for the tab's preview: change them together.
 
 use crate::data::{Cells, CollisionKind, TILE};
 
@@ -9,6 +13,256 @@ use crate::data::{Cells, CollisionKind, TILE};
 pub const SUB: i32 = 256;
 /// How far a grounded body follows the floor up or down in one step, to stay on slopes.
 const SNAP: i32 = TILE;
+
+/// Side-on movement. Speeds are in 1/256 pixel per frame, accelerations in 1/256 pixel
+/// per frame per frame; an acceleration of 0 is instant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlatformerPhysics {
+    pub gravity: i32,
+    pub fall_gravity: i32,
+    pub max_fall_speed: i32,
+    pub run_speed: i32,
+    pub ground_acceleration: i32,
+    pub ground_friction: i32,
+    pub air_acceleration: i32,
+    pub jump_speed: i32,
+    pub jump_cut: i32,
+    pub air_jumps: u8,
+    pub coyote_frames: u8,
+    pub jump_buffer_frames: u8,
+}
+
+impl PlatformerPhysics {
+    pub const DEFAULT: Self = Self {
+        gravity: 48,
+        fall_gravity: 48,
+        max_fall_speed: 4 * SUB,
+        run_speed: SUB * 3 / 2,
+        ground_acceleration: 0,
+        ground_friction: 0,
+        air_acceleration: 0,
+        jump_speed: 1100,
+        jump_cut: 400,
+        air_jumps: 0,
+        coyote_frames: 0,
+        jump_buffer_frames: 0,
+    };
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Movement {
+    /// Moves by the pixel, in any direction allowed.
+    Free,
+    /// Moves one grid step at a time and always finishes it.
+    Grid,
+}
+
+/// Movement seen from above, in the units of [`PlatformerPhysics`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TopDownPhysics {
+    pub movement: Movement,
+    pub speed: i32,
+    pub acceleration: i32,
+    pub friction: i32,
+    /// 4 or 8. Grid movement always uses 4.
+    pub directions: u8,
+    pub normalize_diagonal: bool,
+    pub corner_slide: i32,
+    pub grid_size: i32,
+}
+
+impl TopDownPhysics {
+    pub const DEFAULT: Self =
+        Self { movement: Movement::Free, speed: SUB, acceleration: 0, friction: 0, directions: 8, normalize_diagonal: true, corner_slide: 4, grid_size: 16 };
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PhysicsMode {
+    Platformer,
+    TopDown,
+}
+
+/// What the studio's Physics tab holds. The project's own is `data::PHYSICS`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Physics {
+    pub mode: PhysicsMode,
+    pub platformer: PlatformerPhysics,
+    pub top_down: TopDownPhysics,
+}
+
+/// Moves a speed toward a target by at most `rate`; a rate of 0 gets there at once.
+const fn approach(value: i32, target: i32, rate: i32) -> i32 {
+    if rate <= 0 {
+        target
+    } else if value < target {
+        if value + rate < target { value + rate } else { target }
+    } else if value - rate > target {
+        value - rate
+    } else {
+        target
+    }
+}
+
+/// This frame's buttons for a [`PlatformerController`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PlatformerInput {
+    /// -1 left, 0 neither, 1 right.
+    pub direction: i32,
+    pub jump_pressed: bool,
+    pub jump_held: bool,
+}
+
+/// Running and jumping. What it remembers between frames is here, the numbers are not.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PlatformerController {
+    coyote: u8,
+    buffer: u8,
+    air_jumps: u8,
+}
+
+impl PlatformerController {
+    pub const fn new() -> Self {
+        Self { coyote: 0, buffer: 0, air_jumps: 0 }
+    }
+
+    /// Sets the body's velocity for this frame, before [`Body::step`]. Returns whether it jumped.
+    pub fn update(&mut self, body: &mut Body, physics: &PlatformerPhysics, input: PlatformerInput) -> bool {
+        let rate = if !body.on_ground {
+            physics.air_acceleration
+        } else if input.direction != 0 {
+            physics.ground_acceleration
+        } else {
+            physics.ground_friction
+        };
+        body.vx = approach(body.vx, input.direction * physics.run_speed, rate);
+
+        if body.on_ground {
+            self.coyote = physics.coyote_frames;
+            self.air_jumps = physics.air_jumps;
+        }
+        if input.jump_pressed {
+            self.buffer = physics.jump_buffer_frames.saturating_add(1);
+        }
+        let mut jumped = false;
+        if self.buffer > 0 {
+            if body.on_ground || self.coyote > 0 {
+                jumped = true;
+                self.coyote = 0;
+            } else if self.air_jumps > 0 {
+                jumped = true;
+                self.air_jumps -= 1;
+            }
+        }
+        if jumped {
+            body.vy = -physics.jump_speed;
+            self.buffer = 0;
+        }
+        self.buffer = self.buffer.saturating_sub(1);
+        if !body.on_ground {
+            self.coyote = self.coyote.saturating_sub(1);
+        }
+
+        if !input.jump_held && body.vy < -physics.jump_cut {
+            body.vy = -physics.jump_cut;
+        }
+        let gravity = if body.vy >= 0 { physics.fall_gravity } else { physics.gravity };
+        body.vy = (body.vy + gravity).min(physics.max_fall_speed);
+        jumped
+    }
+}
+
+/// Walking seen from above, freely or one grid step at a time.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TopDownController {
+    held: (i32, i32),
+    horizontal: bool,
+    step: (i32, i32),
+    left: i32,
+    sub: i32,
+}
+
+impl TopDownController {
+    pub const fn new() -> Self {
+        Self { held: (0, 0), horizontal: false, step: (0, 0), left: 0, sub: 0 }
+    }
+
+    /// Forgets a grid step under way, for when the body is put somewhere else.
+    pub const fn stop(&mut self) {
+        self.left = 0;
+        self.sub = 0;
+    }
+
+    /// The body as it will be when its grid step ends: a safe place to come back to.
+    pub const fn settled(&self, mut body: Body) -> Body {
+        body.x += self.step.0 * self.left;
+        body.y += self.step.1 * self.left;
+        body
+    }
+
+    /// With both axes held, the one pressed last wins.
+    fn one_axis(&mut self, dx: i32, dy: i32) -> (i32, i32) {
+        if dx != 0 && dy != 0 {
+            if self.held.0 == 0 {
+                self.horizontal = true;
+            } else if self.held.1 == 0 {
+                self.horizontal = false;
+            }
+        } else {
+            self.horizontal = dx != 0;
+        }
+        self.held = (dx, dy);
+        match (dx != 0 && dy != 0, self.horizontal) {
+            (false, _) => (dx, dy),
+            (true, true) => (dx, 0),
+            (true, false) => (0, dy),
+        }
+    }
+
+    /// Moves the body for this frame. `dx` and `dy` are -1, 0 or 1; down is positive.
+    pub fn update(&mut self, body: &mut Body, cells: &impl Cells, physics: &TopDownPhysics, dx: i32, dy: i32) {
+        let (dx, dy) = (dx.signum(), dy.signum());
+        let single = self.one_axis(dx, dy);
+        if physics.movement == Movement::Grid {
+            self.update_grid(body, cells, physics, single);
+            return;
+        }
+        let (mx, my) = if physics.directions == 4 { single } else { (dx, dy) };
+        let speed = if mx != 0 && my != 0 && physics.normalize_diagonal { physics.speed * 181 / SUB } else { physics.speed };
+        body.vx = approach(body.vx, mx * speed, if mx != 0 { physics.acceleration } else { physics.friction });
+        body.vy = approach(body.vy, my * speed, if my != 0 { physics.acceleration } else { physics.friction });
+        body.step_top_down(cells, physics.corner_slide);
+    }
+
+    fn update_grid(&mut self, body: &mut Body, cells: &impl Cells, physics: &TopDownPhysics, (mx, my): (i32, i32)) {
+        body.hit_wall = false;
+        body.hit_ceiling = false;
+        body.on_ground = false;
+        if self.left == 0 {
+            if (mx, my) == (0, 0) {
+                self.sub = 0;
+            } else if (1..=physics.grid_size).all(|n| !body.blocked_at(cells, body.x + mx * n, body.y + my * n)) {
+                self.step = (mx, my);
+                self.left = physics.grid_size;
+            } else {
+                body.hit_wall = true;
+                self.sub = 0;
+            }
+        }
+        if self.left == 0 {
+            body.vx = 0;
+            body.vy = 0;
+            return;
+        }
+        self.sub += physics.speed;
+        let pixels = (self.sub / SUB).min(self.left);
+        self.sub -= pixels * SUB;
+        self.left -= pixels;
+        body.x += self.step.0 * pixels;
+        body.y += self.step.1 * pixels;
+        body.vx = self.step.0 * physics.speed;
+        body.vy = self.step.1 * physics.speed;
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Body {
@@ -111,6 +365,79 @@ impl Body {
         if self.on_ground {
             self.vy = 0;
             self.sub_y = 0;
+        }
+    }
+
+    /// Moves by the velocity for one frame as seen from above: only solid cells stop it,
+    /// on either axis. `corner_slide` is how many pixels it is nudged around a corner it
+    /// clips while moving straight.
+    pub fn step_top_down(&mut self, cells: &impl Cells, corner_slide: i32) {
+        self.hit_wall = false;
+        self.hit_ceiling = false;
+        self.on_ground = false;
+
+        self.sub_x += self.vx;
+        let dx = self.sub_x / SUB;
+        self.sub_x -= dx * SUB;
+        for _ in 0..dx.abs() {
+            if self.blocked_at(cells, self.x + dx.signum(), self.y) {
+                self.hit_wall = true;
+                self.sub_x = 0;
+                if self.vy == 0 {
+                    self.slide_around(cells, dx.signum(), 0, corner_slide);
+                }
+                break;
+            }
+            self.x += dx.signum();
+        }
+
+        self.sub_y += self.vy;
+        let dy = self.sub_y / SUB;
+        self.sub_y -= dy * SUB;
+        for _ in 0..dy.abs() {
+            if self.blocked_at(cells, self.x, self.y + dy.signum()) {
+                self.hit_wall = true;
+                self.sub_y = 0;
+                if self.vx == 0 {
+                    self.slide_around(cells, 0, dy.signum(), corner_slide);
+                }
+                break;
+            }
+            self.y += dy.signum();
+        }
+    }
+
+    /// Whether a solid cell overlaps the body with its top-left corner at a point.
+    fn blocked_at(&self, cells: &impl Cells, x: i32, y: i32) -> bool {
+        let mut row = y.div_euclid(TILE);
+        while row <= (y + self.h - 1).div_euclid(TILE) {
+            let mut col = x.div_euclid(TILE);
+            while col <= (x + self.w - 1).div_euclid(TILE) {
+                if cells.class(col, row).kind == CollisionKind::Solid {
+                    return true;
+                }
+                col += 1;
+            }
+            row += 1;
+        }
+        false
+    }
+
+    /// Stopped while moving by `(dx, dy)`: takes one pixel sideways toward the nearest
+    /// opening within `reach`, if the way there is clear.
+    fn slide_around(&mut self, cells: &impl Cells, dx: i32, dy: i32, reach: i32) {
+        let (across_x, across_y) = (dy.abs(), dx.abs());
+        let mut open = [true, true];
+        for distance in 1..=reach {
+            for (index, side) in [-1, 1].into_iter().enumerate() {
+                let (x, y) = (self.x + across_x * side * distance, self.y + across_y * side * distance);
+                open[index] = open[index] && !self.blocked_at(cells, x, y);
+                if open[index] && !self.blocked_at(cells, x + dx, y + dy) {
+                    self.x += across_x * side;
+                    self.y += across_y * side;
+                    return;
+                }
+            }
         }
     }
 
@@ -254,6 +581,205 @@ mod tests {
             body.vy = (body.vy + 40).min(4 * SUB);
             body.step(&world.room_cells(0), false);
         }
+    }
+
+    /// Jumps from a flat floor; returns the height reached and the frames in the air.
+    fn jump_arc(physics: &PlatformerPhysics, held_frames: u32) -> (i32, u32) {
+        let w = world(&[".."; 400]);
+        let floor = FlatFloor(&w, 300);
+        let mut body = Body::standing_at(8, 2400, 8, 8);
+        body.on_ground = true;
+        let mut control = PlatformerController::new();
+        let (mut highest, mut frames) = (0, 0);
+        loop {
+            let input = PlatformerInput { direction: 0, jump_pressed: frames == 0, jump_held: frames < held_frames };
+            control.update(&mut body, physics, input);
+            body.step(&floor, false);
+            frames += 1;
+            highest = highest.max(2400 - (body.y + body.h));
+            if body.on_ground || frames > 5000 {
+                return (highest, frames);
+            }
+        }
+    }
+
+    /// Solid from a row down, for arcs that need no walls.
+    struct FlatFloor<'a>(&'a World, i32);
+    impl Cells for FlatFloor<'_> {
+        fn class(&self, _col: i32, row: i32) -> &CollisionClass {
+            &self.0.classes[usize::from(row >= self.1)]
+        }
+    }
+
+    // The same numbers are asserted of the preview's copy in core/test/physics.test.ts.
+    #[test]
+    fn default_jump_matches_the_preview() {
+        assert_eq!(jump_arc(&PlatformerPhysics::DEFAULT, u32::MAX), (47, 45));
+        assert_eq!(jump_arc(&PlatformerPhysics::DEFAULT, 1), (9, 20));
+    }
+
+    #[test]
+    fn tuned_jump_matches_the_preview() {
+        let physics = PlatformerPhysics { gravity: 30, fall_gravity: 70, max_fall_speed: 700, jump_speed: 900, ..PlatformerPhysics::DEFAULT };
+        assert_eq!(jump_arc(&physics, u32::MAX), (50, 54));
+    }
+
+    #[test]
+    fn acceleration_builds_up_and_zero_is_instant() {
+        let mut body = Body::new(0, 0, 8, 8);
+        body.on_ground = true;
+        let physics = PlatformerPhysics { ground_acceleration: 100, ground_friction: 50, ..PlatformerPhysics::DEFAULT };
+        let mut control = PlatformerController::new();
+        let right = PlatformerInput { direction: 1, ..PlatformerInput::default() };
+        control.update(&mut body, &physics, right);
+        assert_eq!(body.vx, 100);
+        for _ in 0..9 {
+            control.update(&mut body, &physics, right);
+            body.on_ground = true;
+        }
+        assert_eq!(body.vx, physics.run_speed);
+        control.update(&mut body, &physics, PlatformerInput::default());
+        assert_eq!(body.vx, physics.run_speed - 50);
+        control.update(&mut body, &PlatformerPhysics::DEFAULT, PlatformerInput::default());
+        assert_eq!(body.vx, 0);
+    }
+
+    #[test]
+    fn coyote_time_buffer_and_air_jumps_allow_late_and_early_jumps() {
+        let press = PlatformerInput { jump_pressed: true, jump_held: true, direction: 0 };
+        let idle = PlatformerInput::default();
+
+        // Coyote time: two frames after leaving the ground, and not three.
+        let physics = PlatformerPhysics { coyote_frames: 2, ..PlatformerPhysics::DEFAULT };
+        let mut control = PlatformerController::new();
+        let mut body = Body::new(0, 0, 8, 8);
+        body.on_ground = true;
+        control.update(&mut body, &physics, idle);
+        body.on_ground = false;
+        control.update(&mut body, &physics, idle);
+        assert!(control.update(&mut body, &physics, press));
+        let mut control = PlatformerController::new();
+        body.on_ground = true;
+        control.update(&mut body, &physics, idle);
+        body.on_ground = false;
+        control.update(&mut body, &physics, idle);
+        control.update(&mut body, &physics, idle);
+        assert!(!control.update(&mut body, &physics, press));
+
+        // Buffer: pressed in the air, it fires on landing within the window.
+        let physics = PlatformerPhysics { jump_buffer_frames: 2, ..PlatformerPhysics::DEFAULT };
+        let mut control = PlatformerController::new();
+        body.on_ground = false;
+        assert!(!control.update(&mut body, &physics, press));
+        control.update(&mut body, &physics, idle);
+        body.on_ground = true;
+        assert!(control.update(&mut body, &physics, idle));
+
+        // One air jump, then no more until landing.
+        let physics = PlatformerPhysics { air_jumps: 1, ..PlatformerPhysics::DEFAULT };
+        let mut control = PlatformerController::new();
+        body.on_ground = true;
+        control.update(&mut body, &physics, idle);
+        body.on_ground = false;
+        assert!(control.update(&mut body, &physics, press));
+        assert!(!control.update(&mut body, &physics, press));
+    }
+
+    const ROOM: [&str; 6] = ["########", "#......#", "#..##..#", "#......#", "#......#", "########"];
+
+    #[test]
+    fn top_down_walks_on_both_axes_and_stops_at_walls() {
+        let w = world(&ROOM);
+        let cells = w.room_cells(0);
+        let mut body = Body::new(10, 10, 6, 6);
+        let mut control = TopDownController::new();
+        for _ in 0..60 {
+            control.update(&mut body, &cells, &TopDownPhysics { corner_slide: 0, ..TopDownPhysics::DEFAULT }, 0, 1);
+        }
+        assert_eq!(body.y + body.h, 40, "gravity plays no part: it walks to the wall");
+        assert!(body.hit_wall);
+        for _ in 0..60 {
+            control.update(&mut body, &cells, &TopDownPhysics::DEFAULT, 1, 0);
+        }
+        assert_eq!(body.x + body.w, 56);
+    }
+
+    #[test]
+    fn top_down_diagonals_are_no_faster_and_four_way_takes_the_newest_axis() {
+        let w = world(&["................"; 16]);
+        let cells = w.room_cells(0);
+        let mut body = Body::new(8, 8, 6, 6);
+        let mut control = TopDownController::new();
+        control.update(&mut body, &cells, &TopDownPhysics::DEFAULT, 1, 1);
+        assert_eq!((body.vx, body.vy), (181, 181));
+
+        let physics = TopDownPhysics { directions: 4, ..TopDownPhysics::DEFAULT };
+        let mut control = TopDownController::new();
+        control.update(&mut body, &cells, &physics, 1, 0);
+        assert_eq!((body.vx, body.vy), (SUB, 0));
+        control.update(&mut body, &cells, &physics, 1, 1);
+        assert_eq!((body.vx, body.vy), (0, SUB), "down was pressed last");
+        control.update(&mut body, &cells, &physics, 1, 1);
+        assert_eq!((body.vx, body.vy), (0, SUB), "and it stays that way");
+    }
+
+    #[test]
+    fn top_down_slides_around_a_corner_it_clips() {
+        let w = world(&["........", "...#....", "........", "........"]);
+        let cells = w.room_cells(0);
+        // Walking right, the top two pixels of the body catch the block's lower corner.
+        let mut body = Body::new(10, 14, 6, 6);
+        let mut control = TopDownController::new();
+        for _ in 0..30 {
+            control.update(&mut body, &cells, &TopDownPhysics::DEFAULT, 1, 0);
+        }
+        assert_eq!(body.y, 16, "nudged clear of the block");
+        assert!(body.x > 32, "and on past it");
+    }
+
+    #[test]
+    fn grid_movement_finishes_steps_and_refuses_blocked_ones() {
+        let w = world(&["##########", "#........#", "#........#", "#...#....#", "#........#", "##########"]);
+        let cells = w.room_cells(0);
+        let physics = TopDownPhysics { movement: Movement::Grid, grid_size: 8, ..TopDownPhysics::DEFAULT };
+        let mut body = Body::new(8, 24, 8, 8);
+        let mut control = TopDownController::new();
+        // A tap is a whole step.
+        control.update(&mut body, &cells, &physics, 1, 0);
+        for _ in 0..20 {
+            control.update(&mut body, &cells, &physics, 0, 0);
+        }
+        assert_eq!((body.x, body.y), (16, 24));
+        // Held, it stops on the last free cell before the block.
+        for _ in 0..40 {
+            control.update(&mut body, &cells, &physics, 1, 0);
+            assert_eq!(body.y, 24);
+        }
+        assert_eq!(body.x, 24);
+        assert!(body.hit_wall);
+        assert_eq!((body.vx, body.vy), (0, 0));
+    }
+
+    #[test]
+    fn a_grid_step_under_way_settles_on_its_end() {
+        let w = world(&["........"; 4]);
+        let cells = w.room_cells(0);
+        let physics = TopDownPhysics { movement: Movement::Grid, ..TopDownPhysics::DEFAULT };
+        let mut body = Body::new(0, 0, 8, 8);
+        let mut control = TopDownController::new();
+        control.update(&mut body, &cells, &physics, 1, 0);
+        assert_eq!(body.x, 1);
+        assert_eq!(control.settled(body).x, 16);
+        control.stop();
+        assert_eq!(control.settled(body).x, 1);
+    }
+
+    #[test]
+    fn an_enclosed_world_is_solid_where_it_has_no_room() {
+        let w = world(&["."; 20].map(|_| "..............................").as_slice());
+        assert_eq!(w.enclosed().class(5, 5).kind, CollisionKind::Empty);
+        assert_eq!(w.enclosed().class(-1, 5).kind, CollisionKind::Solid);
+        assert_eq!(w.enclosed().class(30, 5).kind, CollisionKind::Solid);
     }
 
     #[test]

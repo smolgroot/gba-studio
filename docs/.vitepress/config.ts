@@ -35,6 +35,7 @@ export default defineConfig({
           { text: 'Pixel editor', link: '/guide/pixel-editor' },
           { text: 'Audio', link: '/guide/audio' },
           { text: 'Project settings', link: '/guide/project-settings' },
+          { text: 'Physics', link: '/guide/physics' },
         ],
       },
       {
