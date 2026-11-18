@@ -158,6 +158,7 @@ any size in `assets/sprites/`, `assets/tilesets/` or `assets/backgrounds/`.
   with an **SF2** soundfont (agb needs one to turn notes into sound).
 - Name tracks and effects, remove them from the project (the file stays on disk),
   pick which soundfont a MIDI file uses, and give a room a music track.
+- Read a MIDI file as a piano roll, with its tracks, notes, velocities and bars.
 - Sound effects play in the studio. Music formats are converted when the ROM is
   built, so you hear them in the Play panel, not in the Audio list.
 

@@ -34,6 +34,7 @@ import { selectionKey, useStudio } from '../store.ts'
 import type { Selection } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
+import { MidiView } from './midi.tsx'
 import { PixelEditor } from './pixel.tsx'
 import { PlayView } from './play.tsx'
 import { UndoButtons } from './common.tsx'
@@ -324,7 +325,7 @@ export function DocumentPanel({ selection }: { selection: Selection }) {
     case 'room': return <RoomEditor id={id!} />
     case 'tileset': return <TilesetEditor id={id!} />
     case 'sprite': return <SpriteEditor id={id!} />
-    case 'asset': return /\.png$/i.test(id!) ? <PixelEditor path={id!} /> : <AssetView path={id!} />
+    case 'asset': return /\.png$/i.test(id!) ? <PixelEditor path={id!} /> : /\.midi?$/i.test(id!) ? <MidiView path={id!} /> : <AssetView path={id!} />
     case 'project': return <ProjectSettings />
     case 'audio': return <AudioEditor />
     case 'play': return <PlayView />

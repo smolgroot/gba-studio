@@ -1,6 +1,7 @@
 // Music and sound effects: import the files, name them, and say what a MIDI plays through.
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
+import PianoOutlinedIcon from '@mui/icons-material/PianoOutlined'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -49,6 +50,7 @@ export function AudioEditor() {
   const assets = useStudio((s) => s.bundle?.assets)
   const revision = useStudio((s) => s.revision)
   const commit = useStudio((s) => s.commit)
+  const select = useStudio((s) => s.select)
   const player = useRef<HTMLAudioElement | null>(null)
   if (!audio || !assets) return <Message>The audio file is missing or has errors. See Problems.</Message>
 
@@ -97,6 +99,7 @@ export function AudioEditor() {
                 )}
               </Box>
               <Box sx={cell}>
+                {track.format === 'midi' && <IconButton aria-label={`Show the notes of ${track.name}`} title="Show the notes" onClick={() => select({ kind: 'asset', id: track.file })}><PianoOutlinedIcon /></IconButton>}
                 <IconButton aria-label={`Remove ${track.name} from the project`} onClick={() => commit('audio', undefined, { ...audio, tracks: audio.tracks.filter((_, i) => i !== index) })}><DeleteOutlinedIcon /></IconButton>
               </Box>
             </Box>
