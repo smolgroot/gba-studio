@@ -1,24 +1,68 @@
 // The world map: every room on a grid of screens. Drag rooms to arrange them.
 import AddIcon from '@mui/icons-material/Add'
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined'
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
-import { resizeRoom } from '@pecten-studio/core'
-import { useRef, useState } from 'react'
+import { SCREEN, TILE, resizeRoom } from '@pecten-studio/core'
+import type { Room } from '@pecten-studio/core'
+import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { NumberInput } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { ui } from '../theme.ts'
 import { UndoButtons } from './common.tsx'
 import { CreateDialog, freeSpot } from './create.tsx'
-import { Divider, GridOverlay, Message, Viewport } from './views.tsx'
+import { BackgroundPicture, decodeRoom } from './room.tsx'
+import { Divider, GridOverlay, Message, ToolButton, Viewport, useImage } from './views.tsx'
 
 // A screen on the map keeps the GBA's 3:2 shape.
 const CELL_W = 24
 const CELL_H = 16
 /** Empty screens shown around the rooms, to drag into. */
 const MARGIN = 2
+/** Map pixels per game pixel, at 100% zoom. */
+const MAP_SCALE = CELL_W / SCREEN.width
+/** The longest side of a room's preview, so that huge rooms stay cheap to draw. */
+const MAX_PREVIEW_SIDE = 4096
+const PREVIEWS_KEY = 'worldPreviews'
+
+/** A room's tiles and backgrounds, filling the block that stands for it on the map. */
+function RoomPreview({ room, zoom }: { room: Room; zoom: number }) {
+  const tileset = useStudio((s) => s.bundle?.docs.tilesets[room.tileset])
+  const image = useImage(tileset?.image)
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const scale = MAP_SCALE * zoom
+  // Only as sharp as the map shows it: zooming out draws fewer pixels.
+  const longest = Math.max(room.width * SCREEN.cols, room.height * SCREEN.rows)
+  const tilePixels = Math.max(1, Math.min(TILE, Math.ceil(TILE * scale * window.devicePixelRatio), Math.floor(MAX_PREVIEW_SIDE / longest)))
+
+  useEffect(() => {
+    const element = canvas.current
+    if (!element || !image || image === 'error') return
+    const { cols, rows, layers } = decodeRoom(room)
+    element.width = cols * tilePixels
+    element.height = rows * tilePixels
+    const context = element.getContext('2d')!
+    const sheetCols = Math.floor(image.width / TILE)
+    const sheetTiles = sheetCols * Math.floor(image.height / TILE)
+    for (const cells of layers) {
+      for (let i = 0; i < cells.length; i++) {
+        const tile = cells[i]! - 1
+        if (tile < 0 || tile >= sheetTiles) continue
+        context.drawImage(image, (tile % sheetCols) * TILE, Math.floor(tile / sheetCols) * TILE, TILE, TILE, (i % cols) * tilePixels, Math.floor(i / cols) * tilePixels, tilePixels, tilePixels)
+      }
+    }
+  }, [room, image, tilePixels])
+
+  return (
+    <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      {room.backgrounds?.map((background, index) => <BackgroundPicture key={index} image={background.image} zoom={scale} />)}
+      <canvas ref={canvas} className="pixelated" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+    </Box>
+  )
+}
 
 export function WorldEditor() {
   const world = useStudio((s) => s.bundle?.docs.world)
@@ -30,6 +74,13 @@ export function WorldEditor() {
   const [creating, setCreating] = useState<{ at?: { x: number; y: number } } | null>(null)
   const [drag, setDrag] = useState<{ room: string; x: number; y: number } | null>(null)
   const grab = useRef<{ room: string; pointerX: number; pointerY: number; x: number; y: number; moved: boolean } | null>(null)
+  const [previews, setPreviews] = useState(() => {
+    try { return localStorage.getItem(PREVIEWS_KEY) !== '0' } catch { return true }
+  })
+  const togglePreviews = () => {
+    setPreviews(!previews)
+    try { localStorage.setItem(PREVIEWS_KEY, previews ? '0' : '1') } catch { /* storage unavailable */ }
+  }
   if (!world || !rooms) return <Message>The world file is missing or has errors. See Problems.</Message>
 
   const placed = world.rooms.flatMap((p) => (rooms[p.room] ? [{ ...p, doc: rooms[p.room]! }] : []))
@@ -54,6 +105,7 @@ export function WorldEditor() {
       <UndoButtons />
       <Divider />
       <Button variant="text" startIcon={<AddIcon />} onClick={() => setCreating({})}>New room</Button>
+      <ToolButton title="Show room previews" active={previews} onClick={togglePreviews}><ImageOutlinedIcon /></ToolButton>
       <Divider />
       <Button variant="text" startIcon={<HomeOutlinedIcon />} disabled={!chosen || world.start === chosen} onClick={() => chosen && commit('world', undefined, { ...world, start: chosen })}>Start here</Button>
       <Button variant="text" disabled={!chosen} onClick={() => chosen && select({ kind: 'room', id: chosen })}>Open room</Button>
@@ -154,7 +206,8 @@ export function WorldEditor() {
                         p: 0,
                         border: chosen === p.room ? '2px solid #fff' : '1px solid',
                         borderColor: chosen === p.room ? '#fff' : isStart ? 'primary.main' : '#6a6a6a',
-                        bgcolor: isStart ? 'rgba(76,159,254,0.25)' : '#3a3a3a',
+                        // Under a preview, a tint would read as the colour of the room's empty cells.
+                        bgcolor: previews ? '#222' : isStart ? 'rgba(76,159,254,0.25)' : '#3a3a3a',
                         color: 'text.primary',
                         font: 'inherit',
                         overflow: 'hidden',
@@ -165,8 +218,20 @@ export function WorldEditor() {
                         '&:focus-visible': { outline: '2px solid #4c9ffe' },
                       }}
                     >
-                      {p.doc.name}
-                      {isStart && <Typography variant="caption" component="span" sx={{ display: 'block', color: 'primary.main' }}>start</Typography>}
+                      {previews ? (
+                        <>
+                          <RoomPreview room={p.doc} zoom={zoom} />
+                          <Typography variant="caption" component="span" noWrap sx={{ position: 'absolute', top: 0, left: 0, maxWidth: '100%', px: 0.5, bgcolor: 'rgba(0,0,0,0.65)' }}>
+                            {p.doc.name}
+                            {isStart && <Box component="span" sx={{ color: 'primary.main' }}> · start</Box>}
+                          </Typography>
+                        </>
+                      ) : (
+                        <>
+                          {p.doc.name}
+                          {isStart && <Typography variant="caption" component="span" sx={{ display: 'block', color: 'primary.main' }}>start</Typography>}
+                        </>
+                      )}
                     </Box>
                   )
                 })}

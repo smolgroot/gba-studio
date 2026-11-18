@@ -12,6 +12,7 @@ One screen is 240x160 pixels, or 30x20 tiles. The map shows the grid in screens.
 | --- | --- |
 | **Undo / Redo** | Step back and forward through map changes. |
 | **New room** | Make a room beside the others. |
+| **Show room previews** | Draw each room's tiles and backgrounds on the map, or turn them off to see plain blocks. The choice is remembered. |
 | **Start here** | Make the selected room the one the game starts in. |
 | **Open room** | Open the selected room in the map editor. |
 | **Take off the map** | Remove the selected room from the map without deleting it. An unplaced room can be put back. |

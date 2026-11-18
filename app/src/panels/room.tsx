@@ -63,7 +63,7 @@ interface Work {
   collision: Uint16Array
 }
 
-function decodeRoom(room: Room): Work {
+export function decodeRoom(room: Room): Work {
   const { cols, rows } = roomSize(room)
   const cells = (data: readonly number[] | undefined) =>
     // Data of the wrong length is reported in Problems; it is shown empty here.
@@ -509,7 +509,7 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
 }
 
 /** A background behind the room's tiles, repeating from the room's top-left corner: where it lies when the camera is there. In the game it scrolls slower than the room. */
-function BackgroundPicture({ image, zoom }: { image: string; zoom: number }) {
+export function BackgroundPicture({ image, zoom }: { image: string; zoom: number }) {
   const revision = useStudio((s) => s.revision)
   const picture = useImage(image)
   if (!picture || picture === 'error') return null
