@@ -129,6 +129,17 @@ Notes / open questions
 | US-105 | Tutorials from an empty folder to a game | E11 | P1 | Proposed | M |
 | US-106 | Test on more browsers, touch and large projects | E11 | P2 | Proposed | M |
 | US-107 | Fix the README's "left out on purpose" list | E11 | P0 | Proposed | S |
+| US-110 | Game flags and variables | E12 | P1 | Proposed | M |
+| US-111 | Trigger zones | E12 | P1 | Proposed | S |
+| US-112 | Rule format: event, conditions, actions | E12 | P1 | Proposed | M |
+| US-113 | Rules compiled to tables and run by the runtime | E12 | P1 | Proposed | L |
+| US-114 | Built-in events, conditions and actions | E12 | P1 | Proposed | L |
+| US-115 | Rule editor in the studio | E12 | P1 | Proposed | L |
+| US-116 | Rules checked as problems | E12 | P1 | Proposed | M |
+| US-117 | Flags and fired rules in the live inspector | E12 | P2 | Proposed | M |
+| US-118 | Custom events, conditions and actions from Rust | E12 | P2 | Proposed | M |
+| US-119 | Rule tools for agents | E12 | P2 | Proposed | S |
+| US-120 | Template games built with rules only | E12 | P1 | Proposed | M |
 
 ---
 
@@ -887,3 +898,197 @@ As a reader, I want the README to match the studio, which now has a pixel editor
 Acceptance criteria
 - [ ] The pixel editor is removed from "Left out on purpose".
 - [ ] The roadmap points to this file.
+
+---
+
+## E12 · Triggers and game rules
+
+Behaviours (E2) say what an object does on its own. Rules say how a game hangs
+together: "when the player touches the lever, open the gate", "when all three gems
+are taken, start the boss music", "if the player has the double jump, hide this
+hint". With rules, a game that fits a template needs no Rust at all.
+
+This is not visual scripting. A rule is one event, a list of conditions and a list
+of actions, edited as a form, stored as JSON and compiled to tables. There are no
+loops, no expressions beyond comparisons, and nothing that runs every frame unless
+an event fires. Anything that needs more is a behaviour written in Rust (US-018),
+which rules can then call (US-118).
+
+#### US-110 · Game flags and variables
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-060
+**Touches** core (schema), codegen, runtime, app
+
+As an author, I want to declare named flags (on/off) and small counters in the
+project, so that rules and behaviours can remember what has happened.
+
+Acceptance criteria
+- [ ] Flags and counters are declared in `studio/project.json` with a name, a
+  scope (game, room) and, for counters, a range; they get constants in
+  `include_data!()`.
+- [ ] Game-scope values are saved with the rest of the save data (US-060); room
+  scope is reset on leaving the room.
+- [ ] Codegen packs them into bits and the smallest integers that hold their range,
+  and reports the total size.
+- [ ] Project settings lists, adds, renames and removes them; renaming updates every
+  rule that uses them.
+
+#### US-111 · Trigger zones
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** core, app, codegen, runtime
+
+As an author, I want to draw a rectangle in a room that fires an event when the
+player enters, stays in or leaves it, so that places can start things.
+
+Acceptance criteria
+- [ ] A zone tool in the map editor; zones have an id, a size in pixels and are
+  shown in their own colour.
+- [ ] Zones are entities of a built-in kind, so they can be referenced (US-017).
+- [ ] The runtime reports enter and leave once each, not every frame.
+
+#### US-112 · Rule format: event, conditions, actions
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-110
+**Touches** core (schema), docs
+
+As an author, I want rules stored as plain JSON next to the rooms, so that they
+diff well in git and agents can read them.
+
+Acceptance criteria
+- [ ] Rules live in `studio/rules/<id>.json` (game-wide) and in a room's file
+  (that room only).
+- [ ] A rule has an event, zero or more conditions (all must hold), one or more
+  actions run in order, and an option to fire once.
+- [ ] Actions can wait a number of frames between steps (for cutscenes) without
+  blocking the game.
+- [ ] The format is in the JSON Schema output and in `docs/reference/`.
+
+```json
+{
+  "on": { "event": "touch", "entity": "lever-1" },
+  "if": [{ "flag": "gate-open", "is": false }],
+  "do": [
+    { "action": "set_flag", "flag": "gate-open", "to": true },
+    { "action": "play_sound", "sound": "clunk" },
+    { "action": "wait", "frames": 20 },
+    { "action": "open", "entity": "gate-1" }
+  ],
+  "once": true
+}
+```
+
+#### US-113 · Rules compiled to tables and run by the runtime
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** US-112, US-001
+**Touches** codegen, runtime, sample
+
+As a programmer, I want codegen to turn rules into compact tables and the runtime
+to run them, so that rules cost little ROM and almost no CPU.
+
+Acceptance criteria
+- [ ] Rules are indexed by event, so a frame with no events does no rule work.
+- [ ] Each rule is a few bytes of opcodes with no allocation at run time.
+- [ ] The rule tables are part of the patchable data section (US-001), so editing a
+  rule needs no compile (US-002).
+- [ ] Host unit tests cover every condition and action; a bench on hardware speed
+  shows 100 rules firing in one frame stay inside a frame.
+
+#### US-114 · Built-in events, conditions and actions
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** US-113, US-010
+**Touches** runtime, codegen
+
+As an author, I want enough built-in pieces to make a whole game, so that I only
+reach for Rust for something truly new.
+
+Acceptance criteria
+- [ ] **Events:** game start, room enter and leave, zone enter and leave, touch
+  entity, entity taken, entity destroyed, button pressed near an entity, flag or
+  counter changed, timer done, player hurt, player died, dialogue choice made.
+- [ ] **Conditions:** flag is, counter compared to a number, player has ability,
+  entity is alive or taken, player in room or zone, button held.
+- [ ] **Actions:** set flag, add to or set counter, give or remove ability, open or
+  close a door or gate, spawn, destroy, show or hide an entity, move an entity to a
+  point, play sound, change music, start dialogue (US-051), move the player to a
+  room and point, camera shake or pan to a point (US-063), start a timer, save the
+  game, fade, wait, end the game.
+- [ ] Each piece declares its parameters like behaviours do (US-011), so the
+  studio builds its form from the same data.
+
+#### US-115 · Rule editor in the studio
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** US-114
+**Touches** app
+
+As an author, I want to make and edit rules with forms and by picking things on the
+map, so that I never write the JSON by hand.
+
+Acceptance criteria
+- [ ] A Rules panel lists rules for the game and for the open room, with search.
+- [ ] Each rule reads as a sentence ("When the player touches Lever 1, if Gate open
+  is off: set Gate open, play Clunk, wait 20 frames, open Gate 1").
+- [ ] Entity, zone, room, sound and flag parameters are picked from lists or by
+  clicking on the map.
+- [ ] Selecting an entity shows the rules that mention it; the map draws arrows from
+  a rule's trigger to the things it acts on.
+- [ ] Undo and redo, like other documents.
+
+#### US-116 · Rules checked as problems
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-112
+**Touches** core (validate), app
+
+As an author, I want mistakes in rules to show in the Problems panel, so that I
+find them before playing.
+
+Acceptance criteria
+- [ ] Unknown or deleted entities, zones, rooms, sounds, flags and abilities are
+  errors.
+- [ ] A flag that is read but never set, or set but never read, is a warning.
+- [ ] Two rules on the same event that set the same flag to different values are a
+  warning.
+- [ ] Clicking a problem opens the rule at the step at fault.
+
+#### US-117 · Flags and fired rules in the live inspector
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** US-113, US-021
+**Touches** app, codegen
+
+As an author, I want to see flags and counters live while playing, change them, and
+see which rules fired, so that I can find out why a door did not open.
+
+Acceptance criteria
+- [ ] The Play panel lists flags and counters, updated every frame, and editable.
+- [ ] A log lists each rule that fired with its frame, and each rule whose event
+  came but whose conditions failed, with the condition that failed.
+- [ ] Clicking a log line opens the rule.
+
+#### US-118 · Custom events, conditions and actions from Rust
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** US-113, US-018
+**Touches** runtime, codegen, app
+
+As a programmer, I want to add my own events, conditions and actions in the game
+crate, so that authors can use my game's special mechanics from rules.
+
+Acceptance criteria
+- [ ] A custom piece is declared like a behaviour, with typed parameters, and shows
+  in the rule editor after a build.
+- [ ] Documented with an example in `sample/` (for example a "boss phase" event).
+
+#### US-119 · Rule tools for agents
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-112
+**Touches** server
+
+As an agent, I want tools to list, add, change and remove rules and flags, checked
+against the schema, so that I can wire up a level for an author.
+
+Acceptance criteria
+- [ ] MCP tools `rule_list`, `rule_set`, `rule_remove`, `flag_set`, `flag_remove`.
+- [ ] Writes answer with the problems they left, like other tools.
+
+#### US-120 · Template games built with rules only
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-114, US-080
+**Touches** server (scaffold), sample, docs
+
+As an author, I want the genre templates to use rules for their doors, gates,
+pickups and story beats, so that I can see that a whole game needs no Rust.
+
+Acceptance criteria
+- [ ] The Metroidvania template has a lever and gate, an ability gate, a locked
+  room opened by collecting items, and an ending, all done with rules and built-in
+  behaviours.
+- [ ] Its `main.rs` is not edited by the author at any point in the tutorial
+  (US-105).
