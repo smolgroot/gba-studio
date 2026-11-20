@@ -6,6 +6,7 @@
 | --- | --- |
 | `Ctrl+Z` | Undo in the open document (up to 200 steps; 100 in the pixel editor) |
 | `Ctrl+Shift+Z` | Redo |
+| `Ctrl+B` | Hide or show the Project panel |
 
 ## Desktop app
 

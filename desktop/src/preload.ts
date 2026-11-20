@@ -1,4 +1,4 @@
-// The only desktop abilities the shell page gets. Project pages get none.
+// The only desktop abilities the shell page gets. Project pages get page-preload.ts.
 import { contextBridge, ipcRenderer } from 'electron'
 import type { ShellBridge, ShellState } from './protocol.ts'
 

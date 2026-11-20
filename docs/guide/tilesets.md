@@ -10,6 +10,8 @@ Press **+** beside Tilesets, name it, and choose a PNG already in the folder or 
 
 ![The New tileset dialog](/screenshots/new-tileset.png)
 
+To make one from scratch, use the [Platformer tileset generator](./tools#platformer-tileset-generator) in Tools.
+
 ## Paint collision
 
 1. Open the tileset.

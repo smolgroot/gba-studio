@@ -1,22 +1,24 @@
 import { create } from 'zustand'
 import type { Audio, MultiKind, Project, Room, Sprite, Tileset, World } from '@pecten-studio/core'
 import { api, watchFiles } from './api.ts'
+import { toolName } from './tools.ts'
 import type { AgentMessage, BuildMessage, BuildStatus, Bundle } from './api.ts'
 
 /** What is open in the document area and described in Properties. */
 export interface Selection {
-  kind: 'world' | 'project' | 'physics' | 'audio' | 'play' | 'room' | 'tileset' | 'sprite' | 'asset'
-  /** Document id, or the file path of an asset. */
+  kind: 'world' | 'project' | 'physics' | 'audio' | 'play' | 'tools' | 'room' | 'tileset' | 'sprite' | 'asset'
+  /** Document id, the file path of an asset, or for `tools` the tool open (none: the gallery). */
   id?: string
 }
 export const selectionKey = (s: Selection): string => `${s.kind}:${s.id ?? ''}`
 
-const KINDS: ReadonlyArray<Selection['kind']> = ['world', 'project', 'physics', 'audio', 'play', 'room', 'tileset', 'sprite', 'asset']
+const KINDS: ReadonlyArray<Selection['kind']> = ['world', 'project', 'physics', 'audio', 'play', 'tools', 'room', 'tileset', 'sprite', 'asset']
 /** The open item lives in the URL's hash (`#room:entry`), so a reload or a shared link comes back to it. */
 export function selectionFromHash(): Selection {
   const [kind, ...rest] = decodeURIComponent(location.hash.slice(1)).split(':')
   const id = rest.join(':')
   if (!KINDS.includes(kind as Selection['kind'])) return { kind: 'world' }
+  if (kind === 'tools') return id ? { kind, id } : { kind }
   const single = kind === 'world' || kind === 'project' || kind === 'physics' || kind === 'audio' || kind === 'play'
   return single ? { kind: kind as Selection['kind'] } : id ? { kind: kind as Selection['kind'], id } : { kind: 'world' }
 }
@@ -48,7 +50,7 @@ const docKey = (kind: EditKind, id?: string): string => `${kind}:${id ?? ''}`
 
 /** The document undo acts on for what is open, if any. The Physics tab edits the project file. */
 function editedDoc(selection: Selection): { kind: EditKind; id?: string } | null {
-  if (selection.kind === 'asset' || selection.kind === 'play') return null
+  if (selection.kind === 'asset' || selection.kind === 'play' || selection.kind === 'tools') return null
   return selection.kind === 'physics' ? { kind: 'project' } : { kind: selection.kind, id: selection.id }
 }
 
@@ -343,6 +345,7 @@ export function selectionTitle(selection: Selection, bundle: Bundle | null): str
     case 'physics': return 'Physics'
     case 'audio': return 'Audio'
     case 'play': return 'Play'
+    case 'tools': return id ? toolName(id) : 'Tools'
     case 'room': return docs?.rooms[id!]?.name ?? id!
     case 'tileset': return docs?.tilesets[id!]?.name ?? id!
     case 'sprite': return docs?.sprites[id!]?.name ?? id!

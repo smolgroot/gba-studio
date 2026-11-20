@@ -1,7 +1,9 @@
 // The tab strip, and the screens shown when no project page is: welcome, starting, failed.
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import FolderOpenIcon from '@mui/icons-material/FolderOpenOutlined'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CssBaseline from '@mui/material/CssBaseline'
@@ -12,11 +14,12 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { ThemeProvider } from '@mui/material/styles'
 import { StrictMode, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import logo from '../../app/public/logo.png'
 import { theme } from '../../app/src/theme.ts'
 import { TAB_BAR_HEIGHT } from '../src/protocol.ts'
-import type { BuildMarker, ShellBridge, ShellState, TabState } from '../src/protocol.ts'
+import type { BuildMarker, PageStatus, ShellBridge, ShellState, TabState } from '../src/protocol.ts'
 
 const pecten = (window as unknown as { pecten: ShellBridge }).pecten
 
@@ -65,13 +68,56 @@ function ProjectTab({ tab, active }: { tab: TabState; active: boolean }) {
   )
 }
 
-function TabBar({ state }: { state: ShellState }) {
+function Count({ icon, count, colour, label }: { icon: ReactNode; count: number; colour: string; label: string }) {
   return (
-    <Box role="tablist" aria-label="Open projects" sx={{ height: TAB_BAR_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'stretch', bgcolor: '#141414', borderBottom: 1, borderColor: 'divider', overflow: 'hidden' }}>
-      {state.tabs.map((tab) => <ProjectTab key={tab.root} tab={tab} active={tab.root === state.active} />)}
+    <Box aria-label={`${count} ${label}`} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: count ? colour : 'text.secondary' }}>
+      {icon}
+      <Typography variant="body2" color="inherit">{count}</Typography>
+    </Box>
+  )
+}
+
+/** What the active project's page would show in its own top bar. */
+function PageStatusBar({ page }: { page: PageStatus }) {
+  return (
+    <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 2, px: 2, flexShrink: 1, minWidth: 0 }}>
+      {page.agent && (
+        <Typography variant="body2" color={page.agent.failed ? 'warning.main' : 'primary.main'} role="status" noWrap title={page.agent.summary} sx={{ minWidth: 0 }}>
+          Agent · {page.agent.tool}: {page.agent.summary}
+        </Typography>
+      )}
+      {page.saveError && (
+        <Typography variant="body2" color="error" role="alert" noWrap title={page.saveError} sx={{ minWidth: 0 }}>
+          Not saved: {page.saveError}
+        </Typography>
+      )}
+      {page.initialised && (
+        <>
+          <Count icon={<ErrorOutlineIcon />} count={page.errors} colour="error.main" label="errors" />
+          <Count icon={<WarningAmberIcon />} count={page.warnings} colour="warning.main" label="warnings" />
+        </>
+      )}
+      {page.offline && <Typography variant="body2" color="warning.main" role="status" noWrap sx={{ flexShrink: 0 }}>{page.offline}</Typography>}
+    </Box>
+  )
+}
+
+/** One line: the app's name, the open projects, and the active project's status. */
+function TabBar({ state }: { state: ShellState }) {
+  const page = state.tabs.find((tab) => tab.root === state.active)?.page
+  return (
+    <Box component="header" sx={{ height: TAB_BAR_HEIGHT, flexShrink: 0, display: 'flex', alignItems: 'stretch', bgcolor: '#141414', borderBottom: 1, borderColor: 'divider', overflow: 'hidden' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, flexShrink: 0, borderRight: 1, borderColor: 'divider' }}>
+        <Box component="img" src={logo} alt="" sx={{ height: TAB_BAR_HEIGHT - 16, width: 'auto', imageRendering: 'pixelated' }} />
+        <Typography noWrap sx={{ fontWeight: 700, letterSpacing: 0.4 }}>Pecten Studio</Typography>
+      </Box>
+      <Box role="tablist" aria-label="Open projects" sx={{ display: 'flex', alignItems: 'stretch', flex: '0 1 auto', minWidth: 0, overflow: 'hidden' }}>
+        {state.tabs.map((tab) => <ProjectTab key={tab.root} tab={tab} active={tab.root === state.active} />)}
+      </Box>
       <Tooltip title="Open folder (Ctrl+O)">
-        <IconButton aria-label="Open folder" onClick={() => pecten.openFolder()} sx={{ alignSelf: 'center', mx: 1 }}><AddIcon /></IconButton>
+        <IconButton aria-label="Open folder" onClick={() => pecten.openFolder()} sx={{ alignSelf: 'center', mx: 1, flexShrink: 0 }}><AddIcon /></IconButton>
       </Tooltip>
+      {page && <PageStatusBar page={page} />}
     </Box>
   )
 }

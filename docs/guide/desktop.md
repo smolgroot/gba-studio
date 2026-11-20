@@ -16,6 +16,8 @@ chmod +x pecten-studio-*.AppImage
 
 If it stops with a FUSE error, start it with `APPIMAGE_EXTRACT_AND_RUN=1` set in the environment.
 
+On a Wayland desktop the app runs through XWayland, so the window gets its title bar and icon from the desktop. To run it as a native Wayland window, start it with `--ozone-platform=wayland`. On GNOME 50 that window has no title bar.
+
 **Debian or Ubuntu package**, which adds the app to the desktop menu:
 
 ```sh

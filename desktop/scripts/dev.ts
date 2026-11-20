@@ -19,7 +19,10 @@ const stopPage = () => {
 }
 // Terminals inside VS Code inherit ELECTRON_RUN_AS_NODE, which would make this plain Node.
 const { ELECTRON_RUN_AS_NODE: _ignored, ...env } = process.env
-const app = spawn(electron, [path.join(here, 'dist/main.cjs'), ...process.argv.slice(2)], { stdio: 'inherit', env: { ...env, PECTEN_DESKTOP_DEV: '1' } })
+// XWayland, as the packaged app relaunches itself into (see relaunchUnderX11 in src/main.ts).
+// Passed here so the app never relaunches, which would end this process's child.
+const platform = process.platform === 'linux' && process.env.DISPLAY ? ['--ozone-platform=x11'] : []
+const app = spawn(electron, [path.join(here, 'dist/main.cjs'), ...platform, ...process.argv.slice(2)], { stdio: 'inherit', env: { ...env, PECTEN_DESKTOP_DEV: '1' } })
 app.on('exit', (code) => {
   stopPage()
   process.exit(code ?? 0)

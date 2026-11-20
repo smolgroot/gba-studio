@@ -11,7 +11,7 @@ Panels are dockable: drag them, tab them together and split them.
 | Panel | What it holds |
 | --- | --- |
 | **Project** | Everything in the game, see below. |
-| **Document tabs** | One tab per open item: World, a room, a tileset, a sprite, Project settings, Play, Audio, or an image in the pixel editor. |
+| **Document tabs** | One tab per open item: World, a room, a tileset, a sprite, Project settings, Play, Audio, Tools or one tool, or an image in the pixel editor. |
 | **Properties** | The settings of whatever is open or selected: a room's name, size, tileset, music and backgrounds, a sprite's anchor and hitbox, and so on. |
 | **Tiles & Layers** | In a room: its layers, the entity types to place and the collision classes. |
 | **Problems** and **Build** | Below the editor. Problems lists what is wrong; Build runs and streams the build. |
@@ -24,11 +24,17 @@ The top bar shows the project name and, on the right, the number of errors and w
 
 | Section | Contents |
 | --- | --- |
-| **World**, **Project settings**, **Play**, **Audio** | The four fixed pages. World shows the number of rooms; Audio shows tracks and sound effects. |
+| **World**, **Project settings**, **Play**, **Audio**, **Tools** | The fixed pages. World shows the number of rooms; Audio shows tracks and sound effects. |
 | **Rooms** | Every room with its size in screens. **+** makes a new room (a room needs a tileset first). |
 | **Tilesets** | PNGs of 8x8 tiles with collision classes. **+** makes one from a PNG. |
 | **Sprites** | Sprite sheets with their frame size and number of animations. **+** makes one from a sheet. |
 | **Asset files** | Every PNG, audio and other file in `assets/`, with its size. **+** makes a new blank image to draw. Click a PNG to open it in the [pixel editor](./pixel-editor). |
+
+The panel always fills the window's height and never scrolls as a whole. Each open section scrolls its own list, and the open sections share the height between them. Drag the line above a section to give it more or less room; double-click the line to share the height out evenly again. Click a section's title to fold it.
+
+### The activity bar
+
+The thin strip of icons on the far left works like VS Code's. The top button, or `Ctrl+B`, hides the Project panel to give the editor the room and brings it back. Below it, the fixed pages (World, Project settings, Physics, Play, Audio, [Tools](./tools)) open in one click. The section icons (Rooms, Tilesets, Sprites, Asset files) show the panel with that section open; clicking one whose section is already open folds it.
 
 ## Narrow screens and phones
 

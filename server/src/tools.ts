@@ -571,8 +571,8 @@ export const TOOLS: Tool[] = [
 
   tool(
     'studio_open',
-    'Opens an item in the author\'s studio so they see it: a room, tileset or sprite by id, or the world map, audio list, project settings, Physics tab or Play panel.',
-    z.object({ kind: z.enum(['world', 'project', 'physics', 'audio', 'play', 'room', 'tileset', 'sprite']), id: Id.optional() }),
+    'Opens an item in the author\'s studio so they see it: a room, tileset or sprite by id, or the world map, audio list, project settings, Physics tab, Play panel, or the Tools gallery (kind tools; id tileset-generator opens the tileset generator, pixel-art the pixel art converter).',
+    z.object({ kind: z.enum(['world', 'project', 'physics', 'audio', 'play', 'tools', 'room', 'tileset', 'sprite']), id: Id.optional() }),
     async ({ kind, id }, context) => {
       if (!context.studio) return { text: 'No studio is attached to this server. This tool works through the running studio\'s own MCP endpoint.' }
       if ((kind === 'room' || kind === 'tileset' || kind === 'sprite') && !id) throw new HttpError(400, `a ${kind} needs an id`)

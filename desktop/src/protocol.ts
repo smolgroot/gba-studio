@@ -8,6 +8,23 @@ export interface TabState {
   error: string | null
   build: BuildMarker
   port: number | null
+  /** What the project page reports for the top bar, once it has loaded. */
+  page: PageStatus | null
+}
+/** The project page's top bar status, shown on the tab strip's line instead of in the page. */
+export interface PageStatus {
+  initialised: boolean
+  errors: number
+  warnings: number
+  saveError: string | null
+  /** What a coding agent just did; sent only while it should be on screen. */
+  agent: { tool: string; summary: string; failed: boolean } | null
+  /** Why the folder on disk is not being followed, when it is not. */
+  offline: string | null
+}
+/** The one desktop ability a project page gets, as `window.pectenPage`. */
+export interface PageBridge {
+  status: (status: PageStatus) => void
 }
 export interface ShellState {
   tabs: TabState[]

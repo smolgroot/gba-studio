@@ -5,7 +5,7 @@ export const UI_SCALE = 1.25
 /** A base-size measure in pixels at the interface scale. */
 export const ui = (n: number): number => Math.round(n * UI_SCALE)
 /** Heights of the bars and rows, and the icon size, at the interface scale. */
-export const BAR = { top: ui(30), tool: ui(28), row: ui(22), touchRow: 40, icon: ui(15), input: ui(22) } as const
+export const BAR = { top: ui(30), tool: ui(28), row: ui(22), touchRow: 40, icon: ui(15), input: ui(22), activity: ui(36) } as const
 
 /** Neutral greys, small type, tight spacing: the look of an image editor's panels. */
 export const theme = createTheme({

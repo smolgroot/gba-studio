@@ -6,12 +6,14 @@ import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import GridOnIcon from '@mui/icons-material/GridOn'
+import HandymanOutlinedIcon from '@mui/icons-material/HandymanOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined'
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined'
 import ViewListIcon from '@mui/icons-material/ViewList'
+import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined'
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined'
 import PublicIcon from '@mui/icons-material/Public'
@@ -28,11 +30,14 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { SCREEN, uniqueId } from '@pecten-studio/core'
 import type { MultiKind, Project } from '@pecten-studio/core'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import type { ReactNode } from 'react'
 import { Checkbox, Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
 import { selectionKey, useStudio } from '../store.ts'
 import type { Selection } from '../store.ts'
+import { useSidebar } from '../sidebar.ts'
+import type { SectionTitle } from '../sidebar.ts'
 import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
 import { MidiView } from './midi.tsx'
@@ -44,6 +49,8 @@ import { CreateDialog, NewImageDialog } from './create.tsx'
 import { Heading, RoomEditor, RoomProperties } from './room.tsx'
 import { SpriteEditor, SpriteProperties } from './sprite.tsx'
 import { TilesetEditor, TilesetProperties } from './tileset.tsx'
+import { ToolView } from './tools.tsx'
+import { TOOLS } from '../tools.ts'
 import { AssetView, Message, useImage } from './views.tsx'
 import { WorldEditor } from './world.tsx'
 
@@ -57,116 +64,134 @@ const imageFileSx = tint('#fdd835')
 const AUDIO_EXT = /\.(wav|mid|midi|sf2|xm|mod|mp3|ogg)$/i
 const IMAGE_EXT = /\.(png|aseprite|ase|gif|jpe?g|bmp)$/i
 
-const COLLAPSED_KEY = 'pecten-studio:collapsed-sections'
-function loadCollapsed(): Record<string, boolean> {
-  try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}') } catch { return {} }
-}
-
-const HEIGHTS_KEY = 'pecten-studio:section-heights'
-/** Sizes the user dragged each section to, in px by title. A section with none grows with its list up to [`DEFAULT_MAX`]. */
-function loadHeights(): Record<string, number> {
-  try { return JSON.parse(localStorage.getItem(HEIGHTS_KEY) ?? '{}') } catch { return {} }
-}
-function saveHeight(title: string, height: number | null) {
-  const heights = loadHeights()
-  if (height === null) delete heights[title]
-  else heights[title] = height
-  try { localStorage.setItem(HEIGHTS_KEY, JSON.stringify(heights)) } catch { /* storage unavailable */ }
-}
-const DEFAULT_MAX = 280
-const MIN_HEIGHT = 56
-const MAX_HEIGHT = 1200
+const MIN_HEIGHT = 48
 const KEY_STEP = 24
 
-/** A collapsible group of the sidebar. Its list scrolls inside the section, and the bar under it drags (or, focused, arrow-keys) to resize it; double-click puts it back. */
-function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  const [collapsed, setCollapsed] = useState(() => !!loadCollapsed()[title])
-  const [height, setHeight] = useState<number | null>(() => loadHeights()[title] ?? null)
-  const body = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ y: number; height: number } | null>(null)
-  const toggle = () => {
-    const next = !collapsed
-    setCollapsed(next)
-    try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify({ ...loadCollapsed(), [title]: next })) } catch { /* storage unavailable */ }
+interface SectionDef { title: SectionTitle; action?: ReactNode; children: ReactNode }
+/** A height being moved between the open sections either side of a separator, in px. */
+interface Drag { above: SectionTitle; below: SectionTitle; a: number; b: number; all: Record<string, number> }
+
+/**
+ * The sidebar's collapsible sections, as VS Code stacks its views: together they fill the
+ * panel's height, each open one scrolls its own list, and the line above a section drags
+ * (or, focused, arrow-keys) to move height between the open sections around it.
+ * Double-click a line to share the height out evenly again.
+ */
+function SectionStack({ sections }: { sections: SectionDef[] }) {
+  const collapsed = useSidebar((s) => s.collapsed)
+  const sizes = useSidebar((s) => s.sizes)
+  const reveal = useSidebar((s) => s.reveal)
+  const { setCollapsed, setSizes, resetSizes } = useSidebar.getState()
+  const bodies = useRef(new Map<string, HTMLDivElement>())
+  const headers = useRef(new Map<string, HTMLButtonElement>())
+  const drag = useRef<({ y: number } & Drag) | null>(null)
+
+  useEffect(() => {
+    if (reveal) headers.current.get(reveal.title)?.focus()
+  }, [reveal])
+
+  const open = sections.filter((s) => !collapsed[s.title]).map((s) => s.title)
+  /** The heights of the open sections now, in px: flex weights that keep the layout as it is. */
+  const measure = () => Object.fromEntries(open.map((t) => [t, bodies.current.get(t)?.offsetHeight ?? MIN_HEIGHT]))
+  const start = (index: number): Drag | null => {
+    const above = [...sections.slice(0, index)].reverse().find((s) => !collapsed[s.title])?.title
+    const below = sections.slice(index).find((s) => !collapsed[s.title])?.title
+    if (!above || !below) return null
+    const all = measure()
+    return { above, below, a: all[above]!, b: all[below]!, all }
   }
-  const resize = (next: number | null, keep = true) => {
-    const clamped = next === null ? null : Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.round(next)))
-    setHeight(clamped)
-    if (keep) saveHeight(title, clamped)
+  const move = (from: Drag, by: number, keep: boolean) => {
+    const a = Math.min(from.a + from.b - MIN_HEIGHT, Math.max(MIN_HEIGHT, from.a + by))
+    setSizes({ ...from.all, [from.above]: a, [from.below]: from.a + from.b - a }, keep)
   }
-  const current = () => body.current?.offsetHeight ?? DEFAULT_MAX
+
   return (
-    <Box component="section">
-      <Box sx={{ display: 'flex', alignItems: 'center', bgcolor: 'background.default', pr: 1 }}>
-        <ButtonBase
-          onClick={toggle}
-          aria-expanded={!collapsed}
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${title}`}
-          sx={{ flex: 1, justifyContent: 'flex-start', px: 1, py: 1, minWidth: 0 }}
-        >
-          {collapsed ? <ChevronRightIcon fontSize="small" sx={{ color: 'text.secondary' }} /> : <ExpandMoreIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
-          <Typography variant="caption" component="h2" sx={{ pl: 0.5, m: 0, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6 }}>
-            {title}
-          </Typography>
-        </ButtonBase>
-        {action}
-      </Box>
-      {!collapsed && (
-        <>
+    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {sections.map(({ title, action, children }, index) => {
+        const isOpen = !collapsed[title]
+        const resizable = index > 0 && !!start(index)
+        return (
           <Box
-            ref={body}
-            tabIndex={-1}
-            sx={{ overflowY: 'auto', overflowX: 'hidden', ...(height === null ? { maxHeight: DEFAULT_MAX } : { height }) }}
+            key={title}
+            component="section"
+            aria-label={title}
+            sx={{ position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0, ...(isOpen ? { flex: `${sizes[title] ?? 1} 1 0px` } : { flexShrink: 0 }) }}
           >
-            {children}
+            <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, bgcolor: 'background.default', borderTop: index > 0 ? 1 : 0, borderColor: 'divider', pr: 1 }}>
+              <ButtonBase
+                ref={(el: HTMLButtonElement | null) => { if (el) headers.current.set(title, el); else headers.current.delete(title) }}
+                onClick={() => setCollapsed(title, isOpen)}
+                aria-expanded={isOpen}
+                aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${title}`}
+                sx={{ flex: 1, justifyContent: 'flex-start', px: 1, py: 1, minWidth: 0, '&:focus-visible': { outline: '1px solid', outlineColor: 'primary.main', outlineOffset: -1 } }}
+              >
+                {isOpen ? <ExpandMoreIcon fontSize="small" sx={{ color: 'text.secondary' }} /> : <ChevronRightIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
+                <Typography variant="caption" component="h2" sx={{ pl: 0.5, m: 0, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                  {title}
+                </Typography>
+              </ButtonBase>
+              {action}
+            </Box>
+            {isOpen && (
+              <Box
+                ref={(el: HTMLDivElement | null) => { if (el) bodies.current.set(title, el); else bodies.current.delete(title) }}
+                tabIndex={-1}
+                sx={{ flex: 1, minHeight: MIN_HEIGHT, overflowY: 'auto', overflowX: 'hidden' }}
+              >
+                {children}
+              </Box>
+            )}
+            {resizable && (
+              <Box
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label={`Resize ${title}`}
+                tabIndex={0}
+                onPointerDown={(e) => {
+                  const from = start(index)
+                  if (!from) return
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                  drag.current = { y: e.clientY, ...from }
+                }}
+                onPointerMove={(e) => {
+                  if (drag.current) move(drag.current, e.clientY - drag.current.y, false)
+                }}
+                onPointerUp={(e) => {
+                  if (!drag.current) return
+                  e.currentTarget.releasePointerCapture(e.pointerId)
+                  drag.current = null
+                  setSizes(useSidebar.getState().sizes)
+                }}
+                onPointerCancel={() => { drag.current = null }}
+                onDoubleClick={resetSizes}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    const from = start(index)
+                    if (from) move(from, e.key === 'ArrowDown' ? KEY_STEP : -KEY_STEP, true)
+                  } else if (e.key === 'Home' || e.key === 'Escape') {
+                    resetSizes()
+                  }
+                }}
+                sx={{
+                  position: 'absolute',
+                  zIndex: 2,
+                  left: 0,
+                  right: 0,
+                  top: -3,
+                  height: 6,
+                  cursor: 'row-resize',
+                  touchAction: 'none',
+                  transition: 'background-color 0.1s 0.15s',
+                  '&:hover, &:focus-visible, &:active': { bgcolor: 'primary.main', outline: 'none' },
+                }}
+              />
+            )}
           </Box>
-          <Tooltip title="Drag to resize, double-click to reset" placement="left" enterDelay={600}>
-            <Box
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label={`Resize ${title}`}
-              aria-valuenow={height ?? undefined}
-              aria-valuemin={MIN_HEIGHT}
-              aria-valuemax={MAX_HEIGHT}
-              tabIndex={0}
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId)
-                drag.current = { y: e.clientY, height: current() }
-              }}
-              onPointerMove={(e) => {
-                if (drag.current) resize(drag.current.height + e.clientY - drag.current.y, false)
-              }}
-              onPointerUp={(e) => {
-                if (!drag.current) return
-                e.currentTarget.releasePointerCapture(e.pointerId)
-                drag.current = null
-                saveHeight(title, height)
-              }}
-              onPointerCancel={() => { drag.current = null }}
-              onDoubleClick={() => resize(null)}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                  e.preventDefault()
-                  resize(current() + (e.key === 'ArrowDown' ? KEY_STEP : -KEY_STEP))
-                } else if (e.key === 'Home' || e.key === 'Escape') {
-                  resize(null)
-                }
-              }}
-              sx={{
-                height: 8,
-                cursor: 'row-resize',
-                touchAction: 'none',
-                borderBottom: 1,
-                borderColor: 'divider',
-                position: 'relative',
-                '&::after': { content: '""', position: 'absolute', left: '50%', top: 3, width: 28, height: 2, ml: '-14px', borderRadius: 1, bgcolor: 'text.disabled' },
-                '&:hover, &:focus-visible': { bgcolor: 'action.hover', outline: 'none' },
-                '&:hover::after, &:focus-visible::after': { bgcolor: 'primary.main' },
-              }}
-            />
-          </Tooltip>
-        </>
-      )}
+        )
+      })}
+      {/* With every section folded, the headers sit at the top. */}
+      {open.length === 0 && <Box sx={{ flex: 1 }} />}
     </Box>
   )
 }
@@ -266,58 +291,178 @@ export function ProjectPanel() {
   const rooms = Object.entries(docs.rooms)
   const tilesets = Object.entries(docs.tilesets)
   const sprites = Object.entries(docs.sprites)
+  const sections: SectionDef[] = [
+    {
+      title: 'Rooms',
+      action: <AddButton title={tilesets.length ? 'New room' : 'A room needs a tileset: create one first'} disabled={!tilesets.length} onClick={() => setCreating('room')} />,
+      children: (
+        <>
+          <List>
+            {rooms.map(([id, room]) => (
+              <Row key={id} selection={{ kind: 'room', id }} icon={<MapOutlinedIcon sx={roomSx} />} label={room.name} detail={`${room.width}×${room.height}`} />
+            ))}
+          </List>
+          {rooms.length === 0 && <Empty>No rooms yet.</Empty>}
+        </>
+      ),
+    },
+    {
+      title: 'Tilesets',
+      action: <AddButton title="New tileset from a PNG" onClick={() => setCreating('tileset')} />,
+      children: (
+        <>
+          <List>
+            {tilesets.map(([id, tileset]) => (
+              <Row key={id} selection={{ kind: 'tileset', id }} icon={<GridOnIcon sx={tilesetSx} />} label={tileset.name} />
+            ))}
+          </List>
+          {tilesets.length === 0 && <Empty>No tilesets yet.</Empty>}
+        </>
+      ),
+    },
+    {
+      title: 'Sprites',
+      action: <AddButton title="New sprite from a sheet" onClick={() => setCreating('sprite')} />,
+      children: (
+        <>
+          <List>
+            {sprites.map(([id, sprite]) => (
+              <Row key={id} selection={{ kind: 'sprite', id }} icon={<DirectionsRunIcon sx={spriteSx} />} label={sprite.name} detail={`${sprite.frame.width}×${sprite.frame.height} · ${sprite.animations.length} anim`} />
+            ))}
+          </List>
+          {sprites.length === 0 && <Empty>No sprites yet.</Empty>}
+        </>
+      ),
+    },
+    {
+      title: 'Asset files',
+      action: (
+        <>
+          <Tooltip title={tree ? 'Show as a plain list' : 'Show as a directory tree'}>
+            <IconButton aria-label={tree ? 'Show assets as a plain list' : 'Show assets as a directory tree'} onClick={() => toggleTree(!tree)} sx={{ p: 0.5 }}>
+              {tree ? <ViewListIcon /> : <AccountTreeOutlinedIcon />}
+            </IconButton>
+          </Tooltip>
+          <AddButton title="New blank image to draw" onClick={() => setCreating('image')} />
+        </>
+      ),
+      children: (
+        <>
+          <List>{tree ? <AssetTree assets={assets} /> : assets.map((asset) => <AssetRow key={asset.path} asset={asset} label={asset.path} />)}</List>
+          {assets.length === 0 && <Empty>No PNG, Aseprite, MIDI, SF2, XM, MOD or WAV files in this folder.</Empty>}
+        </>
+      ),
+    },
+  ]
+  // The panel never scrolls as a whole: each open section scrolls its own list.
   return (
-    <Box sx={{ height: '100%', overflow: 'auto' }}>
-      <List>
-        <Row selection={{ kind: 'world' }} icon={<PublicIcon sx={iconSx} />} label="World" detail={`${docs.world?.rooms.length ?? 0} rooms`} />
-        <Row selection={{ kind: 'project' }} icon={<SettingsOutlinedIcon sx={iconSx} />} label="Project settings" />
-        <Row selection={{ kind: 'physics' }} icon={<SportsBasketballOutlinedIcon sx={iconSx} />} label="Physics" detail={docs.project?.physics.mode === 'topdown' ? 'Top-down' : 'Platformer'} />
-        <Row selection={{ kind: 'play' }} icon={<PlayCircleOutlineIcon sx={iconSx} />} label="Play" />
-        <Row selection={{ kind: 'audio' }} icon={<AudiotrackIcon sx={iconSx} />} label="Audio" detail={`${docs.audio?.tracks.length ?? 0} tracks · ${docs.audio?.sfx.length ?? 0} sounds`} />
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <List sx={{ flexShrink: 0 }}>
+        {SHORTCUTS.map(({ selection, label, Icon }) => (
+          <Row key={selection.kind} selection={selection} icon={<Icon sx={iconSx} />} label={label} detail={shortcutDetail(selection.kind, docs)} />
+        ))}
       </List>
-      <Section title="Rooms" action={<AddButton title={tilesets.length ? 'New room' : 'A room needs a tileset: create one first'} disabled={!tilesets.length} onClick={() => setCreating('room')} />}>
-        <List>
-          {rooms.map(([id, room]) => (
-            <Row key={id} selection={{ kind: 'room', id }} icon={<MapOutlinedIcon sx={roomSx} />} label={room.name} detail={`${room.width}×${room.height}`} />
-          ))}
-        </List>
-        {rooms.length === 0 && <Empty>No rooms yet.</Empty>}
-      </Section>
-      <Section title="Tilesets" action={<AddButton title="New tileset from a PNG" onClick={() => setCreating('tileset')} />}>
-        <List>
-          {tilesets.map(([id, tileset]) => (
-            <Row key={id} selection={{ kind: 'tileset', id }} icon={<GridOnIcon sx={tilesetSx} />} label={tileset.name} />
-          ))}
-        </List>
-        {tilesets.length === 0 && <Empty>No tilesets yet.</Empty>}
-      </Section>
-      <Section title="Sprites" action={<AddButton title="New sprite from a sheet" onClick={() => setCreating('sprite')} />}>
-        <List>
-          {sprites.map(([id, sprite]) => (
-            <Row key={id} selection={{ kind: 'sprite', id }} icon={<DirectionsRunIcon sx={spriteSx} />} label={sprite.name} detail={`${sprite.frame.width}×${sprite.frame.height} · ${sprite.animations.length} anim`} />
-          ))}
-        </List>
-        {sprites.length === 0 && <Empty>No sprites yet.</Empty>}
-      </Section>
-      <Section
-        title="Asset files"
-        action={
-          <>
-            <Tooltip title={tree ? 'Show as a plain list' : 'Show as a directory tree'}>
-              <IconButton aria-label={tree ? 'Show assets as a plain list' : 'Show assets as a directory tree'} onClick={() => toggleTree(!tree)} sx={{ p: 0.5 }}>
-                {tree ? <ViewListIcon /> : <AccountTreeOutlinedIcon />}
-              </IconButton>
-            </Tooltip>
-            <AddButton title="New blank image to draw" onClick={() => setCreating('image')} />
-          </>
-        }
-      >
-        <List>{tree ? <AssetTree assets={assets} /> : assets.map((asset) => <AssetRow key={asset.path} asset={asset} label={asset.path} />)}</List>
-        {assets.length === 0 && <Empty>No PNG, Aseprite, MIDI, SF2, XM, MOD or WAV files in this folder.</Empty>}
-      </Section>
+      <SectionStack sections={sections} />
       {creating === 'image' && <NewImageDialog onClose={() => setCreating(null)} />}
       {creating && creating !== 'image' && <CreateDialog kind={creating} onClose={() => setCreating(null)} />}
     </Box>
+  )
+}
+
+/** The single items at the top of the sidebar, also on the activity bar. */
+const SHORTCUTS = [
+  { selection: { kind: 'world' }, label: 'World', Icon: PublicIcon },
+  { selection: { kind: 'project' }, label: 'Project settings', Icon: SettingsOutlinedIcon },
+  { selection: { kind: 'physics' }, label: 'Physics', Icon: SportsBasketballOutlinedIcon },
+  { selection: { kind: 'play' }, label: 'Play', Icon: PlayCircleOutlineIcon },
+  { selection: { kind: 'audio' }, label: 'Audio', Icon: AudiotrackIcon },
+  { selection: { kind: 'tools' }, label: 'Tools', Icon: HandymanOutlinedIcon },
+] as const satisfies readonly { selection: Selection; label: string; Icon: typeof PublicIcon }[]
+
+type Docs = NonNullable<ReturnType<typeof useStudio.getState>['bundle']>['docs']
+function shortcutDetail(kind: (typeof SHORTCUTS)[number]['selection']['kind'], docs: Docs): string | undefined {
+  switch (kind) {
+    case 'world': return `${docs.world?.rooms.length ?? 0} rooms`
+    case 'physics': return docs.project?.physics.mode === 'topdown' ? 'Top-down' : 'Platformer'
+    case 'audio': return `${docs.audio?.tracks.length ?? 0} tracks · ${docs.audio?.sfx.length ?? 0} sounds`
+    case 'tools': return `${TOOLS.length}`
+    default: return undefined
+  }
+}
+
+/** The sidebar's sections on the activity bar, with what each one lists. */
+const SECTION_ICONS: { title: SectionTitle; Icon: typeof PublicIcon; kinds: Selection['kind'][] }[] = [
+  { title: 'Rooms', Icon: MapOutlinedIcon, kinds: ['room'] },
+  { title: 'Tilesets', Icon: GridOnIcon, kinds: ['tileset'] },
+  { title: 'Sprites', Icon: DirectionsRunIcon, kinds: ['sprite'] },
+  { title: 'Asset files', Icon: FolderOutlinedIcon, kinds: ['asset'] },
+]
+
+/**
+ * The thin strip left of the sidebar, as in VS Code: a button that shows or hides the
+ * sidebar (also Ctrl+B), the top items to open in one click, and each section, which
+ * shows the sidebar with that section open.
+ */
+export function ActivityBar() {
+  const hidden = useSidebar((s) => s.hidden)
+  const collapsed = useSidebar((s) => s.collapsed)
+  const kind = useStudio((s) => s.selection.kind)
+  const select = useStudio((s) => s.select)
+  const counts = useStudio(useShallow((s): Record<SectionTitle, number> => {
+    const b = s.bundle
+    return { Rooms: Object.keys(b?.docs.rooms ?? {}).length, Tilesets: Object.keys(b?.docs.tilesets ?? {}).length, Sprites: Object.keys(b?.docs.sprites ?? {}).length, 'Asset files': b?.assets.length ?? 0 }
+  }))
+  const { toggleHidden, open, setCollapsed } = useSidebar.getState()
+  const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘B' : 'Ctrl+B'
+  return (
+    <Box component="nav" aria-label="Activity bar" sx={{ width: BAR.activity, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, py: 1, bgcolor: '#141414', borderRight: 1, borderColor: 'divider', overflowY: 'auto', overflowX: 'hidden' }}>
+      <ActivityButton title={`${hidden ? 'Show' : 'Hide'} the Project sidebar (${shortcut})`} active={false} onClick={toggleHidden} pressed={!hidden}>
+        <ViewSidebarOutlinedIcon sx={{ transform: 'scaleX(-1)' }} />
+      </ActivityButton>
+      <Box sx={{ width: '60%', borderTop: 1, borderColor: '#3a3a3a', my: 0.5 }} />
+      {SHORTCUTS.map(({ selection, label, Icon }) => (
+        <ActivityButton key={selection.kind} title={label} active={kind === selection.kind} onClick={() => select(selection)}>
+          <Icon />
+        </ActivityButton>
+      ))}
+      <Box sx={{ width: '60%', borderTop: 1, borderColor: '#3a3a3a', my: 0.5 }} />
+      {SECTION_ICONS.map(({ title, Icon, kinds }) => (
+        <ActivityButton
+          key={title}
+          title={`${title} (${counts[title]})`}
+          active={kinds.includes(kind)}
+          // A second click on a section already in view folds it, as VS Code hides a view.
+          onClick={() => (!hidden && !collapsed[title] ? setCollapsed(title, true) : open(title))}
+        >
+          <Icon />
+        </ActivityButton>
+      ))}
+    </Box>
+  )
+}
+
+function ActivityButton({ title, active, pressed, onClick, children }: { title: string; active: boolean; pressed?: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <Tooltip title={title} placement="right">
+      <IconButton
+        aria-label={title}
+        aria-pressed={pressed}
+        aria-current={active || undefined}
+        onClick={onClick}
+        sx={{
+          position: 'relative',
+          width: BAR.activity - 8,
+          height: BAR.activity - 8,
+          color: active ? 'text.primary' : 'text.secondary',
+          '&:hover': { color: 'text.primary' },
+          '& .MuiSvgIcon-root': { fontSize: ui(18) },
+          // The active item is marked by a bar on the left edge, as in VS Code.
+          '&::before': active ? { content: '""', position: 'absolute', left: -4, top: 6, bottom: 6, width: 2, borderRadius: 1, bgcolor: 'primary.main' } : undefined,
+        }}
+      >
+        {children}
+      </IconButton>
+    </Tooltip>
   )
 }
 
@@ -333,6 +478,7 @@ export function DocumentPanel({ selection }: { selection: Selection }) {
     case 'physics': return <PhysicsEditor />
     case 'audio': return <AudioEditor />
     case 'play': return <PlayView />
+    case 'tools': return <ToolView id={id} />
   }
 }
 
@@ -497,6 +643,9 @@ export function PropertiesPanel() {
         <Field label="Frame rate"><Typography>60 per second</Typography></Field>
       </Fields>
     )
+  } else if (kind === 'tools') {
+    const tool = TOOLS.find((t) => t.id === id)
+    body = tool ? <Empty>{tool.description}</Empty> : <Empty>{TOOLS.length} {TOOLS.length === 1 ? 'tool' : 'tools'}. Click a card to open one in the main area.</Empty>
   } else if (kind === 'play') {
     body = <Empty>Plays the ROM from the last build. Rebuilds restart it while “Restart on rebuild” is on.</Empty>
   } else if (kind === 'audio' && docs.audio) {

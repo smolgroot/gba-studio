@@ -4,12 +4,14 @@ import { BaseWindow, WebContentsView, clipboard, dialog, shell, utilityProcess }
 import type { UtilityProcess, WebContents } from 'electron'
 import type { HostMessage, HostRequest, HostStart } from '../../server/src/host.ts'
 import { TAB_BAR_HEIGHT } from './protocol.ts'
-import type { BuildMarker, ShellState, TabState } from './protocol.ts'
+import type { BuildMarker, PageStatus, ShellState, TabState } from './protocol.ts'
 import { portCandidates, saveState, withRecent } from './state.ts'
 import type { DesktopState } from './state.ts'
 
 export interface Paths {
   host: string
+  /** The preload script for project pages. */
+  pagePreload: string
   appDist: string
   crates: string
   emulatorCore: string
@@ -25,6 +27,24 @@ interface Tab extends TabState {
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 const isWeb = (url: string) => /^https?:\/\//i.test(url)
+
+const count = (value: unknown) => (typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0)
+const text = (value: unknown, max = 500) => (typeof value === 'string' ? value.slice(0, max) : null)
+
+/** A page's status, kept to the expected shape: it comes from the page, which the project controls. */
+function readPageStatus(value: unknown): PageStatus | null {
+  if (!value || typeof value !== 'object') return null
+  const status = value as Record<string, unknown>
+  const agent = status.agent && typeof status.agent === 'object' ? (status.agent as Record<string, unknown>) : null
+  return {
+    initialised: status.initialised === true,
+    errors: count(status.errors),
+    warnings: count(status.warnings),
+    saveError: text(status.saveError),
+    agent: agent ? { tool: text(agent.tool, 100) ?? '', summary: text(agent.summary) ?? '', failed: agent.failed === true } : null,
+    offline: text(status.offline, 100),
+  }
+}
 
 export class Projects {
   private readonly tabs = new Map<string, Tab>()
@@ -77,7 +97,7 @@ export class Projects {
     }
     const root = realpathSync(folder)
     if (!this.tabs.has(root)) {
-      const tab: Tab = { root, name: root.split('/').pop() || root, status: 'starting', error: null, build: 'idle', port: null, child: null, view: null, url: null, closing: false }
+      const tab: Tab = { root, name: root.split('/').pop() || root, status: 'starting', error: null, build: 'idle', port: null, page: null, child: null, view: null, url: null, closing: false }
       this.tabs.set(root, tab)
       this.state.recent = withRecent(this.state.recent, root)
       this.missing = this.missing.filter((item) => item !== root)
@@ -208,6 +228,7 @@ export class Projects {
     if (!view) return
     tab.view = null
     tab.url = null
+    tab.page = null
     this.window.contentView.removeChildView(view)
     if (!view.webContents.isDestroyed()) view.webContents.close()
   }
@@ -301,7 +322,7 @@ export class Projects {
     tab.name = name
     tab.status = 'ready'
     this.state.ports[tab.root] = port
-    const view = new WebContentsView({ webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } })
+    const view = new WebContentsView({ webPreferences: { preload: this.paths.pagePreload, sandbox: true, contextIsolation: true, nodeIntegration: false } })
     view.setBackgroundColor('#1c1c1c')
     tab.view = view
     this.guard(view.webContents, url, tab)
@@ -332,6 +353,15 @@ export class Projects {
     })
   }
 
+  /** A project page's top bar status, which the tab strip shows on its line. */
+  pageStatus(sender: WebContents, status: unknown): void {
+    const tab = [...this.tabs.values()].find((t) => t.view?.webContents === sender)
+    const page = tab && readPageStatus(status)
+    if (!tab || !page) return
+    tab.page = page
+    this.publish()
+  }
+
   private layout(): void {
     const [width, height] = this.window.getContentSize() as [number, number]
     const shown = this.active ? this.tabs.get(this.active) : undefined
@@ -359,7 +389,7 @@ export class Projects {
 
   snapshot(): ShellState {
     return {
-      tabs: [...this.tabs.values()].map(({ root, name, status, error, build, port }) => ({ root, name, status, error, build, port })),
+      tabs: [...this.tabs.values()].map(({ root, name, status, error, build, port, page }) => ({ root, name, status, error, build, port, page })),
       active: this.active,
       recent: this.state.recent.map((root) => ({ root, exists: this.isFolder(root) })),
       missing: this.missing,

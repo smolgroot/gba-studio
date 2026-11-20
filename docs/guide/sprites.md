@@ -1,6 +1,6 @@
 # Sprites and animations
 
-Import a PNG sheet (or an Aseprite file, which is converted at build time but cannot be previewed here yet) and choose one of the twelve GBA sprite sizes.
+Import a PNG sheet (or an Aseprite file, which is converted at build time but cannot be previewed here yet) and choose one of the twelve GBA sprite sizes. To turn a picture into pixel art first, use the [Pixel art converter](./tools#pixel-art-converter) in Tools.
 
 ![The sprite editor for Wassie, with the live preview and animations](/screenshots/sprite.png)
 

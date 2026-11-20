@@ -36,6 +36,7 @@ export default defineConfig({
           { text: 'Audio', link: '/guide/audio' },
           { text: 'Project settings', link: '/guide/project-settings' },
           { text: 'Physics', link: '/guide/physics' },
+          { text: 'Tools', link: '/guide/tools' },
         ],
       },
       {

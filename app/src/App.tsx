@@ -10,11 +10,12 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { DockviewReact, themeDark } from 'dockview-react'
 import type { DockviewApi, IDockviewPanelProps } from 'dockview-react'
 import { useEffect, useRef, useState } from 'react'
-import { DocumentPanel, ProblemsPanel, ProjectPanel, PropertiesPanel } from './panels/panels.tsx'
+import { ActivityBar, DocumentPanel, ProblemsPanel, ProjectPanel, PropertiesPanel } from './panels/panels.tsx'
 import { BuildPanel } from './panels/play.tsx'
 import { PalettePanel } from './panels/room.tsx'
 import { BAR } from './theme.ts'
 import { api } from './api.ts'
+import { useSidebar } from './sidebar.ts'
 import { useEditor } from './editor.ts'
 import { selectionFromHash, selectionKey, selectionTitle, useStudio } from './store.ts'
 import type { Selection } from './store.ts'
@@ -102,6 +103,9 @@ function Centre({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** Set when the page runs as a tab of the desktop app (see desktop/src/page-preload.ts). */
+const desktop = (window as unknown as { pectenPage?: { status: (status: unknown) => void } }).pectenPage
+
 function TopBar() {
   const bundle = useStudio((s) => s.bundle)
   const connected = useStudio((s) => s.connected)
@@ -118,6 +122,22 @@ function TopBar() {
   }, [agent])
   const errors = bundle?.problems.filter((p) => p.severity === 'error').length ?? 0
   const warnings = (bundle?.problems.length ?? 0) - errors
+  const offline = bundle && (!connected || error) ? (error ? 'Server unreachable' : 'Reconnecting…') : null
+
+  // In the desktop app the tab strip shows all this on its own line, so the page gets the room.
+  const shownAgent = agent && agentShown ? agent : null
+  useEffect(() => {
+    desktop?.status({
+      initialised: !!bundle?.initialised,
+      errors,
+      warnings,
+      saveError: saveError ?? null,
+      agent: shownAgent && { tool: shownAgent.tool, summary: shownAgent.summary, failed: !!shownAgent.failed },
+      offline,
+    })
+  }, [bundle?.initialised, errors, warnings, saveError, shownAgent, offline])
+  if (desktop) return null
+
   return (
     <Box component="header" sx={{ height: BAR.top, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3, px: 3, bgcolor: '#141414', borderBottom: 1, borderColor: 'divider' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -147,9 +167,9 @@ function TopBar() {
           </>
         )}
         {/* Shown only when something is wrong: the folder on disk is not being followed. */}
-        {bundle && (!connected || error) && (
+        {offline && (
           <Typography variant="body2" color="warning.main" role="status">
-            {error ? 'Server unreachable' : 'Reconnecting…'}
+            {offline}
           </Typography>
         )}
       </Box>
@@ -229,6 +249,34 @@ function DockLayout() {
     })
   }, [api, selection])
 
+  // The sidebar hides and comes back from the activity bar or Ctrl+B. Closing its tab hides it too.
+  const hidden = useSidebar((s) => s.hidden)
+  useEffect(() => {
+    if (!api) return
+    let panel = api.getPanel('project')
+    if (!panel && !hidden) {
+      panel = api.addPanel({ id: 'project', component: 'project', title: 'Project', position: { direction: 'left' }, initialWidth: 290 })
+    }
+    if (panel && panel.group.api.isVisible === hidden) panel.group.api.setVisible(!hidden)
+  }, [api, hidden])
+  useEffect(() => {
+    if (!api) return
+    const removed = api.onDidRemovePanel((panel) => {
+      if (panel.id === 'project') useSidebar.getState().setHidden(true)
+    })
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'b') return
+      if (event.target instanceof HTMLElement && /^(INPUT|TEXTAREA)$/.test(event.target.tagName)) return
+      event.preventDefault()
+      useSidebar.getState().toggleHidden()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      removed.dispose()
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [api])
+
   // Tabs follow renames on disk.
   useEffect(() => {
     if (!api) return
@@ -238,28 +286,33 @@ function DockLayout() {
   }, [api, bundle])
 
   return (
-    <DockviewReact
-      theme={themeDark}
-      components={dockComponents}
-      onReady={(event) => {
-        const dock = event.api
-        const first = firstDoc.current
-        const docId = DOC_PREFIX + selectionKey(first)
-        dock.addPanel({ id: docId, component: 'document', title: selectionTitle(first, useStudio.getState().bundle), params: first })
-        dock.addPanel({ id: 'project', component: 'project', title: 'Project', position: { referencePanel: docId, direction: 'left' }, initialWidth: 290 })
-        dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: docId, direction: 'right' }, initialWidth: 330 })
-        dock.addPanel({ id: 'palette', component: 'palette', title: 'Tiles & Layers', position: { referencePanel: 'properties', direction: 'below' } })
-        dock.addPanel({ id: 'problems', component: 'problems', title: 'Problems', position: { referencePanel: docId, direction: 'below' }, initialHeight: 190 })
-        dock.addPanel({ id: 'build', component: 'build', title: 'Build', position: { referencePanel: 'problems', direction: 'within' } })
-        dock.getPanel('problems')?.api.setActive()
-        dock.getPanel(docId)?.api.setActive()
-        // Clicking a document tab selects it, so Properties describes what is in front.
-        dock.onDidActivePanelChange(({ panel }) => {
-          if (panel?.id.startsWith(DOC_PREFIX)) useStudio.getState().select(panel.params as Selection)
-        })
-        setApi(dock)
-      }}
-    />
+    <Box sx={{ height: '100%', display: 'flex' }}>
+      <ActivityBar />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <DockviewReact
+          theme={themeDark}
+          components={dockComponents}
+          onReady={(event) => {
+            const dock = event.api
+            const first = firstDoc.current
+            const docId = DOC_PREFIX + selectionKey(first)
+            dock.addPanel({ id: docId, component: 'document', title: selectionTitle(first, useStudio.getState().bundle), params: first })
+            dock.addPanel({ id: 'project', component: 'project', title: 'Project', position: { referencePanel: docId, direction: 'left' }, initialWidth: 290 })
+            dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: docId, direction: 'right' }, initialWidth: 330 })
+            dock.addPanel({ id: 'palette', component: 'palette', title: 'Tiles & Layers', position: { referencePanel: 'properties', direction: 'below' } })
+            dock.addPanel({ id: 'problems', component: 'problems', title: 'Problems', position: { referencePanel: docId, direction: 'below' }, initialHeight: 190 })
+            dock.addPanel({ id: 'build', component: 'build', title: 'Build', position: { referencePanel: 'problems', direction: 'within' } })
+            dock.getPanel('problems')?.api.setActive()
+            dock.getPanel(docId)?.api.setActive()
+            // Clicking a document tab selects it, so Properties describes what is in front.
+            dock.onDidActivePanelChange(({ panel }) => {
+              if (panel?.id.startsWith(DOC_PREFIX)) useStudio.getState().select(panel.params as Selection)
+            })
+            setApi(dock)
+          }}
+        />
+      </Box>
+    </Box>
   )
 }
 

@@ -608,88 +608,97 @@ export function PalettePanel() {
   }
   const { cols, rows } = roomSize(room)
   const layersFull = room.layers.length + (room.backgrounds?.length ?? 0) >= MAX_SCREEN_LAYERS
+  // The panel itself never scrolls: Layers keeps its place and what is below scrolls on its own.
   return (
-    <Box sx={{ height: '100%', overflow: 'auto' }}>
-      <Heading>Layers</Heading>
-      <Box role="listbox" aria-label="Layers">
-        <Box role="option" aria-selected={layer === 'collision'} sx={rowSx(layer === 'collision')} onClick={() => set({ layer: 'collision', showCollision: true, tool: tool === 'entity' ? 'brush' : tool })}>
-          <BlockOutlinedIcon sx={{ color: 'text.secondary' }} />
-          <Typography noWrap sx={{ flex: 1 }}>Collision</Typography>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ flexShrink: 0 }}>
+        <Heading>Layers</Heading>
+        <Box role="listbox" aria-label="Layers">
+          <Box role="option" aria-selected={layer === 'collision'} sx={rowSx(layer === 'collision')} onClick={() => set({ layer: 'collision', showCollision: true, tool: tool === 'entity' ? 'brush' : tool })}>
+            <BlockOutlinedIcon sx={{ color: 'text.secondary' }} />
+            <Typography noWrap sx={{ flex: 1 }}>Collision</Typography>
+          </Box>
+          {/* Front layer first, as it is drawn. */}
+          {room.layers.map((l, index) => ({ l, index })).reverse().map(({ l, index }) => (
+            <Box key={index} role="option" aria-selected={layer === index} sx={rowSx(layer === index)} onClick={() => set({ layer: index, tool: tool === 'entity' ? 'brush' : tool })}>
+              <IconButton
+                aria-label={hidden.includes(index) ? `Show ${l.name}` : `Hide ${l.name}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  set({ hidden: hidden.includes(index) ? hidden.filter((h) => h !== index) : [...hidden, index] })
+                }}
+                sx={{ p: 0, color: 'text.secondary' }}
+              >
+                {hidden.includes(index) ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
+              </IconButton>
+              <Typography noWrap sx={{ flex: 1, opacity: hidden.includes(index) ? 0.5 : 1 }}>{l.name}</Typography>
+            </Box>
+          ))}
         </Box>
-        {/* Front layer first, as it is drawn. */}
-        {room.layers.map((l, index) => ({ l, index })).reverse().map(({ l, index }) => (
-          <Box key={index} role="option" aria-selected={layer === index} sx={rowSx(layer === index)} onClick={() => set({ layer: index, tool: tool === 'entity' ? 'brush' : tool })}>
-            <IconButton
-              aria-label={hidden.includes(index) ? `Show ${l.name}` : `Hide ${l.name}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                set({ hidden: hidden.includes(index) ? hidden.filter((h) => h !== index) : [...hidden, index] })
-              }}
-              sx={{ p: 0, color: 'text.secondary' }}
-            >
-              {hidden.includes(index) ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
-            </IconButton>
-            <Typography noWrap sx={{ flex: 1, opacity: hidden.includes(index) ? 0.5 : 1 }}>{l.name}</Typography>
-          </Box>
-        ))}
-      </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 1 }}>
-        <ToolButton title={room.layers.length >= 3 ? 'A GBA room has at most 3 tile layers' : layersFull ? `Tile layers and backgrounds are at most ${MAX_SCREEN_LAYERS}, the layers the GBA draws: remove a background first` : 'Add a layer in front'} disabled={room.layers.length >= 3 || layersFull} onClick={() => change([...room.layers, { name: `Layer ${room.layers.length + 1}`, data: [cols * rows, 0] }], room.layers.length)}><AddIcon /></ToolButton>
-        <ToolButton title="Bring forward" disabled={layer === 'collision' || layer >= room.layers.length - 1} onClick={() => move(1)}><ArrowUpwardIcon /></ToolButton>
-        <ToolButton title="Send back" disabled={layer === 'collision' || layer <= 0} onClick={() => move(-1)}><ArrowDownwardIcon /></ToolButton>
-        <ToolButton
-          title="Delete layer"
-          disabled={layer === 'collision' || room.layers.length <= 1}
-          onClick={() => layer !== 'collision' && change(room.layers.filter((_, i) => i !== layer), Math.max(0, layer - 1))}
-        >
-          <DeleteOutlinedIcon />
-        </ToolButton>
-        {layer !== 'collision' && (
-          <Box sx={{ flex: 1, ml: 1 }}>
-            <TextInput label="Layer name" value={room.layers[layer]!.name} onCommit={(name) => commit('room', id, { ...room, layers: room.layers.map((l, i) => (i === layer ? { ...l, name } : l)) })} />
-          </Box>
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 1 }}>
+          <ToolButton title={room.layers.length >= 3 ? 'A GBA room has at most 3 tile layers' : layersFull ? `Tile layers and backgrounds are at most ${MAX_SCREEN_LAYERS}, the layers the GBA draws: remove a background first` : 'Add a layer in front'} disabled={room.layers.length >= 3 || layersFull} onClick={() => change([...room.layers, { name: `Layer ${room.layers.length + 1}`, data: [cols * rows, 0] }], room.layers.length)}><AddIcon /></ToolButton>
+          <ToolButton title="Bring forward" disabled={layer === 'collision' || layer >= room.layers.length - 1} onClick={() => move(1)}><ArrowUpwardIcon /></ToolButton>
+          <ToolButton title="Send back" disabled={layer === 'collision' || layer <= 0} onClick={() => move(-1)}><ArrowDownwardIcon /></ToolButton>
+          <ToolButton
+            title="Delete layer"
+            disabled={layer === 'collision' || room.layers.length <= 1}
+            onClick={() => layer !== 'collision' && change(room.layers.filter((_, i) => i !== layer), Math.max(0, layer - 1))}
+          >
+            <DeleteOutlinedIcon />
+          </ToolButton>
+          {layer !== 'collision' && (
+            <Box sx={{ flex: 1, ml: 1 }}>
+              <TextInput label="Layer name" value={room.layers[layer]!.name} onCommit={(name) => commit('room', id, { ...room, layers: room.layers.map((l, i) => (i === layer ? { ...l, name } : l)) })} />
+            </Box>
+          )}
+        </Box>
       </Box>
 
       {tool === 'entity' ? (
         <>
           <Heading>Entity to place</Heading>
-          {project?.entityTypes.length ? (
-            <Box role="listbox" aria-label="Entity types">
-              {project.entityTypes.map((type, index) => {
-                const selected = (editor.entityType ?? project.entityTypes[0]!.id) === type.id
-                return (
-                  <Box key={type.id} role="option" aria-selected={selected} sx={rowSx(selected)} onClick={() => set({ entityType: type.id })}>
-                    <Box sx={{ width: ui(10), height: ui(10), bgcolor: type.colour, border: '1px solid rgba(255,255,255,0.4)', flexShrink: 0 }} />
-                    <Typography noWrap sx={{ flex: 1 }}>{type.name}</Typography>
-                    <Typography variant="body2" color="text.secondary">{index + 1}</Typography>
-                  </Box>
-                )
-              })}
-            </Box>
-          ) : (
-            <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>No entity types yet. Add some in Project settings.</Typography>
-          )}
+          <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            {project?.entityTypes.length ? (
+              <Box role="listbox" aria-label="Entity types">
+                {project.entityTypes.map((type, index) => {
+                  const selected = (editor.entityType ?? project.entityTypes[0]!.id) === type.id
+                  return (
+                    <Box key={type.id} role="option" aria-selected={selected} sx={rowSx(selected)} onClick={() => set({ entityType: type.id })}>
+                      <Box sx={{ width: ui(10), height: ui(10), bgcolor: type.colour, border: '1px solid rgba(255,255,255,0.4)', flexShrink: 0 }} />
+                      <Typography noWrap sx={{ flex: 1 }}>{type.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">{index + 1}</Typography>
+                    </Box>
+                  )
+                })}
+              </Box>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>No entity types yet. Add some in Project settings.</Typography>
+            )}
+          </Box>
         </>
       ) : layer === 'collision' ? (
         <>
           <Heading>Collision to paint</Heading>
-          <Box role="listbox" aria-label="Collision classes">
-            {project?.collisionClasses.map((cls, index) => (
-              <Box key={cls.id} role="option" aria-selected={editor.collisionClass === index} sx={rowSx(editor.collisionClass === index)} onClick={() => set({ collisionClass: index, tool: tool === 'eraser' || tool === 'pick' ? 'brush' : tool })}>
-                <Box sx={{ width: ui(10), height: ui(10), bgcolor: cls.colour, border: '1px solid rgba(255,255,255,0.4)', flexShrink: 0 }} />
-                <Typography noWrap sx={{ flex: 1 }}>{cls.name}</Typography>
-              </Box>
-            ))}
+          <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <Box role="listbox" aria-label="Collision classes">
+              {project?.collisionClasses.map((cls, index) => (
+                <Box key={cls.id} role="option" aria-selected={editor.collisionClass === index} sx={rowSx(editor.collisionClass === index)} onClick={() => set({ collisionClass: index, tool: tool === 'eraser' || tool === 'pick' ? 'brush' : tool })}>
+                  <Box sx={{ width: ui(10), height: ui(10), bgcolor: cls.colour, border: '1px solid rgba(255,255,255,0.4)', flexShrink: 0 }} />
+                  <Typography noWrap sx={{ flex: 1 }}>{cls.name}</Typography>
+                </Box>
+              ))}
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>
+              Tiles bring their own collision from the tileset. Paint here only where a cell should differ; the eraser gives a cell back to its tile.
+            </Typography>
           </Box>
-          <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>
-            Tiles bring their own collision from the tileset. Paint here only where a cell should differ; the eraser gives a cell back to its tile.
-          </Typography>
         </>
       ) : (
         <>
           <Heading>Tiles</Heading>
-          {tileset ? <TilePicker tileset={tileset} /> : <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>The room's tileset is missing.</Typography>}
+          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+            {tileset ? <TilePicker tileset={tileset} /> : <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>The room's tileset is missing.</Typography>}
+          </Box>
         </>
       )}
     </Box>
@@ -719,14 +728,14 @@ function TilePicker({ tileset }: { tileset: Tileset }) {
     if (next.x !== stamp.x || next.y !== stamp.y || next.w !== stamp.w || next.h !== stamp.h) set({ stamp: next })
   }
   return (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1 }}>
+    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1, flexShrink: 0 }}>
         <Typography variant="body2" color="text.secondary" noWrap sx={{ flex: 1 }}>
           {tileset.name} · tile {stamp.y * sheetCols + stamp.x}{stamp.w * stamp.h > 1 ? ` · ${stamp.w}×${stamp.h} block` : ''}
         </Typography>
         <Button variant="text" onClick={() => setZoom(zoom >= 5 ? 2 : zoom + 1)} sx={{ minWidth: 0, py: 0 }}>{zoom}×</Button>
       </Box>
-      <Box sx={{ overflow: 'auto', px: 2, pb: 2 }}>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: 2, pb: 2 }}>
         <Box
           className="checker"
           onPointerDown={(event) => {
