@@ -12,7 +12,7 @@ import { WebSocketServer } from 'ws'
 import { Builder } from './build.ts'
 import type { BuildMode } from './build.ts'
 import { handle } from './mcp.ts'
-import { patchRom } from './patch.ts'
+import { patchRom, romStatus } from './patch.ts'
 import { HttpError, ProjectFolder } from './project.ts'
 import { checkToolchain, setupGameCrate } from './scaffold.ts'
 import type { StudioView, ToolContext } from './tools.ts'
@@ -147,6 +147,12 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
   })
   // Level data into the built ROM without a build, when only data changed.
   app.post<{ Body: { mode?: unknown } }>('/api/patch', (request) => patchRom(project, builder, request.body?.mode === 'release' ? 'release' : 'dev'))
+  // Whether the built ROM matches the project: the top bar's up to date, patched or needs build.
+  app.get<{ Querystring: { mode?: string } }>('/api/rom-status', (request) => {
+    const mode = request.query.mode
+    if (mode !== undefined && mode !== 'dev' && mode !== 'release') throw new HttpError(400, 'mode is "dev" or "release"')
+    return romStatus(project, builder, mode)
+  })
   app.post('/api/build/stop', async () => {
     builder.stop()
     return { ok: true }

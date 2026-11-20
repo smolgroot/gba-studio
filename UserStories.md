@@ -71,10 +71,11 @@ Notes / open questions
 | --- | --- | --- | --- | --- | --- |
 | US-001 | Fixed-layout data section in the ROM | E1 | P0 | Done | L |
 | US-002 | Patch level data into a built ROM without compiling | E1 | P0 | Done | M |
-| US-003 | Live-apply edits to the running game | E1 | P0 | Proposed | L |
-| US-004 | Say when a change needs a full build | E1 | P0 | Proposed | S |
+| US-003 | Live-apply edits to the running game | E1 | P0 | Done | L |
+| US-004 | Say when a change needs a full build | E1 | P0 | Done | S |
 | US-005 | Play from the room and spot under the cursor | E1 | P1 | Proposed | M |
 | US-006 | Data reserve and section use in Project settings | E1 | P2 | Proposed | S |
+| US-007 | Redraw only the changed tiles on live apply | E1 | P2 | Proposed | S |
 | US-010 | Behaviour library in the runtime | E2 | P0 | Proposed | L |
 | US-011 | Behaviours declare their properties to codegen | E2 | P0 | Proposed | M |
 | US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Proposed | M |
@@ -84,7 +85,7 @@ Notes / open questions
 | US-016 | Edit entity property definitions in the interface | E2 | P1 | Proposed | S |
 | US-017 | Entity references between entities | E2 | P1 | Proposed | M |
 | US-018 | Custom behaviours written in the game | E2 | P1 | Proposed | M |
-| US-020 | Symbol map of game state | E3 | P0 | Proposed | M |
+| US-020 | Symbol map of game state | E3 | P0 | Done | M |
 | US-021 | Live entity inspector in the Play panel | E3 | P0 | Proposed | L |
 | US-022 | Debug overlays on the game screen | E3 | P0 | Proposed | M |
 | US-023 | Pause, step a frame, rewind | E3 | P1 | Proposed | M |
@@ -129,8 +130,8 @@ Notes / open questions
 | US-104 | Plugin API for panels and build steps | E11 | P2 | Proposed | L |
 | US-105 | Tutorials from an empty folder to a game | E11 | P1 | Proposed | M |
 | US-106 | Test on more browsers, touch and large projects | E11 | P2 | Proposed | M |
-| US-107 | Fix the README's "left out on purpose" list | E11 | P0 | Proposed | S |
-| US-108 | Scripted documentation screenshots | E11 | P1 | In progress | S |
+| US-107 | Fix the README's "left out on purpose" list | E11 | P0 | Done | S |
+| US-108 | Scripted documentation screenshots | E11 | P1 | Done | S |
 | US-110 | Game flags and variables | E12 | P1 | Proposed | M |
 | US-111 | Trigger zones | E12 | P1 | Proposed | S |
 | US-112 | Rule format: event, conditions, actions | E12 | P1 | Proposed | M |
@@ -196,35 +197,35 @@ Acceptance criteria
   MCP (`patch_rom`).
 
 #### US-003 · Live-apply edits to the running game
-**Priority** P0 · **Status** Proposed · **Size** L · **Depends on** US-002, US-020
+**Priority** P0 · **Status** Done · **Size** L · **Depends on** US-002, US-020
 **Touches** runtime, app (Play panel), Pecten core
 
 As an author, I want an edit to appear in the game that is already running, with
 the player where they are, so that I can tune a room while standing in it.
 
 Acceptance criteria
-- [ ] Given the game running in the Play panel, when I paint tiles in the current
+- [x] Given the game running in the Play panel, when I paint tiles in the current
   room, then they appear on screen within a few frames and the player keeps their
   position and state.
-- [ ] Physics settings changes take effect on the next frame.
-- [ ] Entity edits respawn only the entities that changed.
-- [ ] A toggle turns live apply off; restart-on-change still works without it.
+- [x] Physics settings changes take effect on the next frame.
+- [x] Entity edits respawn only the entities that changed.
+- [x] A toggle turns live apply off; restart-on-change still works without it.
 
 Notes / open questions
 - Needs a small runtime hook the studio can signal through emulator memory (a
   "data changed" flag and the dirty ranges).
 
 #### US-004 · Say when a change needs a full build
-**Priority** P0 · **Status** Proposed · **Size** S · **Depends on** US-002
+**Priority** P0 · **Status** Done · **Size** S · **Depends on** US-002
 **Touches** app, server
 
 As an author, I want the studio to tell me which changes it can patch and which
 need a build, so that I am never playing a stale ROM without knowing it.
 
 Acceptance criteria
-- [ ] The top bar shows one of: up to date, patched, needs build (with the reason,
+- [x] The top bar shows one of: up to date, patched, needs build (with the reason,
   for example "Rust source changed" or "new sprite").
-- [ ] Changing a `.rs` file or a sprite sheet sets "needs build".
+- [x] Changing a `.rs` file or a sprite sheet sets "needs build".
 
 #### US-005 · Play from the room and spot under the cursor
 **Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-002
@@ -249,6 +250,22 @@ full build without editing JSON.
 Acceptance criteria
 - [ ] Project settings has a field for `build.dataReserve`, empty for the default.
 - [ ] After a build, the Build panel shows the section's bytes used and capacity.
+
+#### US-007 · Redraw only the changed tiles on live apply
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-003
+**Touches** runtime, core
+
+As an author, I want painting tiles while the game runs not to make it stutter, so
+that tuning a room feels smooth.
+
+Today a live tile change re-checks the whole section and redraws every tile in
+view, which costs the sample about two frames (measured in
+`server/test/liveapply.test.ts`).
+
+Acceptance criteria
+- [ ] The studio passes the changed cells (room and rectangle) through the inbox,
+  and the game redraws only those.
+- [ ] A one-tile change costs the sample no dropped frame.
 
 ---
 
@@ -386,16 +403,18 @@ Unity's inspector during play is the feature people miss most elsewhere. The stu
 runs the game on its own emulator, so it can see everything.
 
 #### US-020 · Symbol map of game state
-**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** —
-**Touches** codegen, runtime
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** —
+**Touches** runtime, server, core
 
 As a contributor, I want the build to write where the runtime keeps its state
 (entity table, player body, camera, current room), so that the studio can read it
 from emulator memory.
 
 Acceptance criteria
-- [ ] Each build writes a `debug.json` next to the ROM with addresses and layouts.
-- [ ] Release builds can leave it out.
+- [x] Each build writes a `debug.json` next to the ROM with addresses and layouts.
+  (Written as `<rom>.debug.json`, beside `<rom>.build.json`, so the dev and release
+  ROMs in one folder each have their own: see `design/US-020.md`.)
+- [x] Release builds can leave it out.
 
 #### US-021 · Live entity inspector in the Play panel
 **Priority** P0 · **Status** Proposed · **Size** L · **Depends on** US-020
@@ -906,17 +925,17 @@ Acceptance criteria
 - [ ] A generated 100-room project opens and paints without lag.
 
 #### US-107 · Fix the README's "left out on purpose" list
-**Priority** P0 · **Status** Proposed · **Size** S · **Depends on** —
+**Priority** P0 · **Status** Done · **Size** S · **Depends on** —
 **Touches** README.md
 
 As a reader, I want the README to match the studio, which now has a pixel editor.
 
 Acceptance criteria
-- [ ] The pixel editor is removed from "Left out on purpose".
-- [ ] The roadmap points to this file.
+- [x] The pixel editor is removed from "Left out on purpose".
+- [x] The roadmap points to this file.
 
 #### US-108 · Scripted documentation screenshots
-**Priority** P1 · **Status** In progress · **Size** S · **Depends on** —
+**Priority** P1 · **Status** Done · **Size** S · **Depends on** —
 **Touches** scripts, docs, package.json
 
 As a contributor, I want the docs' screenshots taken by a script from a list, so
@@ -930,17 +949,26 @@ Acceptance criteria
   the named shots and writes them; `--all` takes every shot not marked manual;
   `--list` lists them. With no names and no `--all` it refuses, so hand-taken
   pictures are not replaced by accident.
-- [ ] Playwright is a dev dependency in the lockfile and the script runs on a clean
+- [x] Playwright is a dev dependency in the lockfile and the script runs on a clean
   checkout after `pnpm install`, `pnpm exec playwright install chromium` and
   `pnpm build`.
-- [ ] Every non-manual shot in the list is taken successfully on `sample/`.
-- [ ] The shots marked manual (collision overlay, new tileset, new image, Build
+- [x] Every non-manual shot in the list is taken successfully on `sample/`.
+- [x] The shots marked manual (collision overlay, new tileset, new image, Build
   panel) get the actions that make them scriptable, or a note saying why not.
-- [ ] Decide which project the published pictures come from (the docs footer says
+- [x] Decide which project the published pictures come from (the docs footer says
   Diamond Hands, the list defaults to `sample/`) and make the footer match.
 
 Notes / open questions
-- The `play` shot needs a built ROM in the project first.
+- The `play` shots need a built dev ROM in the project first; a clean checkout has
+  none until the sample is built.
+- The script serves a temporary copy of the project, so shots can edit, patch and
+  build. The Build panel shot runs a real build, with `target/` linked to the
+  project's, so the project's next build of the game crate is not incremental.
+- How to add a shot: the `screenshots` skill in `.claude/skills/`.
+- Decided by the author: the pictures come from Diamond Hands
+  (`../diamond-hands/project`). The three about patching come from `sample/`,
+  because Diamond Hands does not read its level data from the ROM; the footer says
+  so.
 
 ---
 

@@ -91,6 +91,12 @@ function PageStatusBar({ page }: { page: PageStatus }) {
           Not saved: {page.saveError}
         </Typography>
       )}
+      {/* Text only: the Build and Play panels in the page have the buttons. */}
+      {page.rom && (
+        <Typography variant="body2" role="status" noWrap title={page.rom.detail} color={page.rom.tone === 'ok' ? 'success.main' : page.rom.tone === 'warning' ? 'warning.main' : 'text.secondary'} sx={{ minWidth: 0 }}>
+          {page.rom.text}
+        </Typography>
+      )}
       {page.initialised && (
         <>
           <Count icon={<ErrorOutlineIcon />} count={page.errors} colour="error.main" label="errors" />

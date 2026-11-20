@@ -250,7 +250,9 @@ impl<'a> RoomView<'a> {
 /// drift with the camera rather than sit on the map, so two rooms' pictures cannot
 /// meet at a border. Say which with [`WorldView::set_backgrounds`].
 pub struct WorldView<'a> {
-    world: &'a World<'a>,
+    /// A copy: `World` is a few slices, and the game may make a new one after the
+    /// studio changes the level data (see [`WorldView::set_world`]).
+    world: World<'a>,
     art: Art,
     /// The tileset's index in `art`, as rooms name it, and the tileset.
     shared: u16,
@@ -263,19 +265,35 @@ pub struct WorldView<'a> {
 impl<'a> WorldView<'a> {
     /// A view of the rooms that share `room`'s tileset, with `room`'s pictures behind
     /// them. Sets the background palettes.
-    pub fn new(world: &'a World<'a>, art: Art, room: usize, graphics: &mut Graphics) -> Self {
+    pub fn new(world: &World<'a>, art: Art, room: usize, graphics: &mut Graphics) -> Self {
+        let world = *world;
         let shared = world.room(room).tileset();
         let tileset = tileset_of(&world.room(room), &art);
         graphics.set_background_palettes(tileset.palettes);
         let count = world.rooms().filter(|r| r.tileset() == shared).map(|r| r.layer_count()).max().unwrap_or(1).min(3);
+        let layers = Self::layers(count);
+        let mut view = Self { world, art, shared, tileset, count, layers, backdrops: Backdrops::new() };
+        view.set_backgrounds(room, graphics);
+        view
+    }
+
+    /// Empty tile layers for a view of `count` layers, front layer in front.
+    fn layers(count: usize) -> [Option<InfiniteScrolledMap>; 3] {
         let mut layers = [const { None }; 3];
         for (index, layer) in layers.iter_mut().enumerate().take(count) {
             let priority = [Priority::P3, Priority::P2, Priority::P1][index + 3 - count];
             *layer = Some(InfiniteScrolledMap::new(RegularBackground::new(priority, RegularBackgroundSize::Background32x32, TileFormat::FourBpp)));
         }
-        let mut view = Self { world, art, shared, tileset, count, layers, backdrops: Backdrops::new() };
-        view.set_backgrounds(room, graphics);
-        view
+        layers
+    }
+
+    /// Redraws every tile in view from a new `World`, keeping the pictures behind. For
+    /// tiles changed live; a change to the rooms themselves (size, place on the map,
+    /// tileset, layers) needs a new view.
+    pub fn redraw(&mut self, world: &World<'a>, x: i32, y: i32) {
+        self.world = *world;
+        self.layers = Self::layers(self.count);
+        self.load(x, y);
     }
 
     /// Puts a room's pictures behind the view: call it when the player enters a room.
@@ -286,6 +304,13 @@ impl<'a> WorldView<'a> {
         let room = self.world.room(room);
         let origin = room.world().map_or((0, 0), |(x, y)| (x as i32 * 240, y as i32 * 160));
         self.backdrops.set(&room, &self.art, origin, self.tileset.palettes.len(), self.count, graphics);
+    }
+
+    /// Reads tiles from a new `World` from now on, without redrawing what is on screen.
+    /// For level data changed live where no tile did: the tables may have moved, so
+    /// the old `World` must not be read again. To show changed tiles, use [`WorldView::redraw`].
+    pub fn set_world(&mut self, world: &World<'a>) {
+        self.world = *world;
     }
 
     /// Whether a room is drawn by this view: it is on the map and shares the tileset.
@@ -333,7 +358,7 @@ impl<'a> WorldView<'a> {
     /// Moves the camera's top-left corner to a world pixel. Returns whether every tile
     /// in view is in place; it always is while the camera moves less than a screen a frame.
     pub fn set_camera(&mut self, x: i32, y: i32) -> bool {
-        let (world, shared, tileset, count) = (self.world, self.shared, self.tileset, self.count);
+        let (world, shared, tileset, count) = (&self.world, self.shared, self.tileset, self.count);
         let mut ready = true;
         for (slot, layer) in self.layers.iter_mut().enumerate() {
             if let Some(map) = layer {

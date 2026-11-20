@@ -74,7 +74,10 @@ dist
 #![no_std]
 #![no_main]
 
-use pecten_studio_rt::gfx::WorldView;
+use pecten_studio_rt::{
+    debug::{self, GameState},
+    gfx::WorldView,
+};
 
 pecten_studio_rt::include_data!();
 pecten_studio_rt::include_gfx!();
@@ -85,6 +88,10 @@ fn main(mut gba: agb::Gba) -> ! {
     // Rooms, entities and physics, read from the ROM's data section.
     let world = data::world();
     let room = world.start().unwrap_or(0) as usize;
+    // What the studio's debug map shows of the game, copied out once a frame. Dev
+    // builds only: in a release build \`publish\` does nothing.
+    let mut shown = GameState::new();
+    shown.room = room as u32;
 
     // A project with no rooms yet has a blank screen.
     let view = (room < world.room_count()).then(|| {
@@ -92,10 +99,13 @@ fn main(mut gba: agb::Gba) -> ! {
         let (x, y) = world.origin(room).unwrap_or((0, 0));
         let camera = world.camera_target(room, x, y, |other| view.shows(other));
         view.load(camera.0, camera.1);
+        (shown.camera_x, shown.camera_y) = camera;
         view
     });
 
     loop {
+        shown.frame = shown.frame.wrapping_add(1);
+        debug::publish(&shown);
         let mut frame = graphics.frame();
         if let Some(view) = &view {
             view.show(&mut frame);

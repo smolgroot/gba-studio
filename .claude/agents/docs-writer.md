@@ -44,7 +44,8 @@ first; its rules on commits and authorship apply.
 ## 4. Screenshots
 
 Shots are listed in `docs/screenshots.json` and taken by `scripts/screenshots.ts`
-in the sample project.
+in the Diamond Hands project (a few in the sample). The `screenshots` skill in `.claude/skills/` lists the
+actions a shot can use (clicks, typing, file edits, waiting for text).
 
 - For a new visible feature, add a shot: a `name` (kebab-case, also the file name),
   a `description` (used as the alt text), the `route` (the studio's hash, such as
@@ -52,8 +53,8 @@ in the sample project.
   get the page into the state to show (clicks by accessible name, key presses,
   waits). Mark it `"manual": true` only if it cannot be scripted, and say why in
   your report.
-- Update shots whose page the change altered, and only those. Never use `--all`:
-  some existing pictures were taken by hand in another project.
+- Update shots whose page the change altered, and only those. Use `--all` only
+  when the change alters every page (the top bar, say) or the author asks.
 - Run:
 
   ```sh

@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "stamp": "PSGS",
+  "size": 64,
+  "fields": [
+    { "name": "stamp", "offset": 0, "type": "u32" },
+    { "name": "frame", "offset": 4, "type": "u32" },
+    { "name": "room", "offset": 8, "type": "u32" },
+    { "name": "cameraX", "offset": 12, "type": "i32" },
+    { "name": "cameraY", "offset": 16, "type": "i32" },
+    { "name": "player", "offset": 20, "type": "body" },
+    { "name": "collected", "offset": 56, "type": "address" },
+    { "name": "collectedWords", "offset": 60, "type": "u32" }
+  ],
+  "bodySize": 36,
+  "body": [
+    { "name": "x", "offset": 0, "type": "i32" },
+    { "name": "y", "offset": 4, "type": "i32" },
+    { "name": "w", "offset": 8, "type": "i32" },
+    { "name": "h", "offset": 12, "type": "i32" },
+    { "name": "vx", "offset": 16, "type": "i32" },
+    { "name": "vy", "offset": 20, "type": "i32" },
+    { "name": "onGround", "offset": 32, "type": "bool" },
+    { "name": "hitWall", "offset": 33, "type": "bool" },
+    { "name": "hitCeiling", "offset": 34, "type": "bool" }
+  ],
+  "inboxSize": 12,
+  "inbox": [
+    { "name": "generation", "offset": 0, "type": "u32" },
+    { "name": "changed", "offset": 4, "type": "u32" },
+    { "name": "seen", "offset": 8, "type": "u32" }
+  ]
+}

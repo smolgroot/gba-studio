@@ -113,7 +113,8 @@ describe('room generator', () => {
       }
     }
     expect(failures.length, failures.slice(0, 3).join('\n\n')).toBe(0)
-  })
+    // Hundreds of rooms: about 4.5 s alone, more beside the other tests.
+  }, 20_000)
 
   it('keeps the room closed except at its exits', () => {
     const room = generateRoom({ ...DEFAULT_ROOMGEN, width: 2, height: 2, exits: { left: false, right: false, top: false, bottom: false } }, env(16))

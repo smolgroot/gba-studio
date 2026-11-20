@@ -55,7 +55,7 @@ The AppImage and `.deb` are written to `desktop/release/`.
 
 Opening a folder that is already open shows its tab. Starting the app again with a folder adds it to the window that is already running. The tabs that were open come back the next time the app starts.
 
-Each project runs on its own: its undo history, build and emulator are separate from the others. A build keeps running while you work in another tab, and a dot on the tab shows whether it is running, succeeded or failed. The game in Play pauses while its tab is hidden.
+Each project runs on its own: its undo history, build and emulator are separate from the others. A build keeps running while you work in another tab, and a dot on the tab shows whether it is running, succeeded or failed. At the right of the tab row, the current project's errors and warnings and its [ROM state](./build-and-play#rom-state-in-the-top-bar) are shown, as the top bar does in the browser. The game in Play pauses while its tab is hidden.
 
 Closing a tab writes any edit not yet saved. Closing a tab that is building asks first, because it stops the build.
 

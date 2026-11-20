@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Audio, MultiKind, Project, Room, Sprite, Tileset, World } from '@pecten-studio/core'
 import { api, watchFiles } from './api.ts'
 import { toolName } from './tools.ts'
-import type { AgentMessage, BuildMessage, BuildStatus, Bundle } from './api.ts'
+import type { AgentMessage, BuildMessage, BuildStatus, Bundle, RomStatus } from './api.ts'
 
 /** What is open in the document area and described in Properties. */
 export interface Selection {
@@ -88,6 +88,8 @@ const pendingSaves = new Map<string, () => Promise<void>>()
 const runningSaves = new Set<Promise<void>>()
 /** Counts finished writes: a project load that started before one may be out of date. */
 let writes = 0
+// ROM status answers can arrive out of order; only the latest question's is kept.
+let romQuestions = 0
 
 /** Writes every edit now and waits until they are on disk, for when the page is about to go away. */
 export async function flushSaves(): Promise<void> {
@@ -108,6 +110,10 @@ interface StudioState {
   revision: number
   selection: Selection
   build: BuildStatus | null
+  /** Whether the built ROM matches the project, for the top bar. */
+  rom: RomStatus | null
+  /** Asks the server again; the answer to the latest question wins. */
+  refreshRom: () => void
   /** The last thing a coding agent did through the studio, for the top bar. */
   agent: { tool: string; summary: string; failed: boolean; at: number } | null
   /** Runs a build and streams its output into `build.log`. */
@@ -185,6 +191,14 @@ export const useStudio = create<StudioState>((set, get) => {
     selection: selectionFromHash(),
     history: {},
     build: null,
+    rom: null,
+    refreshRom: () => {
+      const asked = ++romQuestions
+      api.romStatus().then(
+        (rom) => asked === romQuestions && set({ rom }),
+        () => undefined,
+      )
+    },
     agent: null,
     runBuild: async (mode) => {
       try {
@@ -250,6 +264,7 @@ export const useStudio = create<StudioState>((set, get) => {
         () => {
           set((state) => ({ revision: state.revision + 1 }))
           void get().load()
+          get().refreshRom()
         },
         (connected) => {
           set({ connected })
@@ -257,6 +272,7 @@ export const useStudio = create<StudioState>((set, get) => {
           if (connected) {
             void get().load()
             void api.buildStatus().then((build) => set({ build })).catch(() => undefined)
+            get().refreshRom()
           }
         },
         (message: BuildMessage | AgentMessage) => {
@@ -268,6 +284,7 @@ export const useStudio = create<StudioState>((set, get) => {
           } else if (message.type === 'build-started') set({ build: { running: true, mode: message.mode, command: message.command, exitCode: null, stopped: false, seconds: null, log: [], roms: build?.roms ?? {} } })
           else if (message.type === 'build-log') set({ build: build && { ...build, log: [...build.log, ...message.lines].slice(-5000) } })
           else set({ build: message.status })
+          if (message.type === 'build-started' || message.type === 'build-finished' || message.type === 'rom-patched') get().refreshRom()
         },
       ),
     commit: (kind, id, doc) => {

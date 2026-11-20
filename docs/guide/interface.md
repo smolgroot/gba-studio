@@ -16,7 +16,7 @@ Panels are dockable: drag them, tab them together and split them.
 | **Tiles & Layers** | In a room: its layers, the entity types to place and the collision classes. |
 | **Problems** and **Build** | Below the editor. Problems lists what is wrong; Build runs and streams the build. |
 
-The top bar shows the project name and, on the right, the number of errors and warnings. In the [desktop app](./desktop), a row of project tabs sits above it.
+The top bar shows the project name and, on the right, whether the built ROM is up to date and the number of errors and warnings. When a change needs a build, it says why and offers **Build dev**; see [ROM state in the top bar](./build-and-play#rom-state-in-the-top-bar). In the [desktop app](./desktop), the project tabs take the top bar's place and show the same on their right.
 
 ## The Project panel
 

@@ -647,7 +647,7 @@ export function PropertiesPanel() {
     const tool = TOOLS.find((t) => t.id === id)
     body = tool ? <Empty>{tool.description}</Empty> : <Empty>{TOOLS.length} {TOOLS.length === 1 ? 'tool' : 'tools'}. Click a card to open one in the main area.</Empty>
   } else if (kind === 'play') {
-    body = <Empty>Plays the ROM from the last build. Rebuilds restart it while “Restart on rebuild” is on, and saved edits to rooms, entities and physics are patched into it while “Patch on change” is on.</Empty>
+    body = <Empty>Plays the ROM from the last build. Rebuilds restart it while “Restart on rebuild” is on, and saved edits to rooms, entities and physics are patched into it while “Patch on change” is on. With “Live apply” on, a patch goes into the game that is running and the player stays where they are; otherwise the game restarts.</Empty>
   } else if (kind === 'audio' && docs.audio) {
     body = (
       <Fields>

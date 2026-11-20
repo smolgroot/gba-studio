@@ -69,6 +69,50 @@ let mut found = Collected::<ENTITY_WORDS>::new();
 - **Collectibles:** `Body::overlaps` tests the player against a box, `Collected` keeps a bit for every entity that has been taken, and `SpriteSheet::hitbox_at` gives a placed entity's box.
 - **`gfx`** (behind the `agb` feature): `WorldView` draws every room that shares a tileset as one scrolling space, streaming tiles in as the camera moves; `RoomView` draws a single room; `SpriteSheet` and `AnimPlayer` animate sprites, and `Animation::frame_at` animates many entities off one clock.
 - **Backgrounds:** a view draws a room's pictures behind everything, each scrolled by its share of the camera's movement. Call `view.set_backgrounds(room, &graphics)` when the player enters another room.
+- **`debug`:** `debug::publish` copies the game's state (frame count, room, camera, player, collected bits) to one place in RAM, where tools reading the emulator's memory find it through the [debug map](../reference/debug-map). Call it once a frame, after everything has moved:
+
+  ```rust
+  use pecten_studio_rt::debug::{self, GameState};
+
+  let mut shown = GameState::new();
+  shown.collected(&found);
+  loop {
+      // ... move everything ...
+      shown.frame = clock;
+      shown.room = room as u32;
+      (shown.camera_x, shown.camera_y) = camera;
+      shown.player = body;
+      debug::publish(&shown);
+  }
+  ```
+
+  It costs 64 bytes of EWRAM and a few word writes a frame in dev builds, and nothing in release builds, where `publish` does nothing.
+
+  `debug::Live` lets the Play panel's [Live apply](./build-and-play#live-apply) put level data changes into the running game. Poll it once a frame. When it reports a change, the level data's tables may have moved, so make the world again with `data::world()` and give the new one to the view; nothing may read the old `World` after that. Keep the player, the camera and the score as they are:
+
+  ```rust
+  use pecten_studio_rt::debug::Live;
+
+  let mut live = Live::new();
+  loop {
+      if let Some(changes) = live.poll() {
+          world = data::world();
+          physics = world.physics();
+          if changes.rooms() {
+              // Rooms resized, moved or given another tileset: a new view.
+              view = WorldView::new(&world, gfx::ART, room, &mut graphics);
+              view.load(camera.0, camera.1);
+          } else if changes.tiles() {
+              view.redraw(&world, camera.0, camera.1);
+          } else {
+              view.set_world(&world);
+          }
+      }
+      // ... move everything ...
+  }
+  ```
+
+  `changes.physics()` and `changes.entities()` say whether those changed too; the studio has already respawned changed entities by clearing their collected bits. `poll` costs one read and a compare a frame, and 12 bytes of EWRAM, in dev builds. In a release build it always returns `None`. A game that does not poll is restarted on each change instead. The sample's `src/main.rs` shows it in full, with the player's room found again after the change.
 
 ## The sample game
 

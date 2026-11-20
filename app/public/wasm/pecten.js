@@ -94,6 +94,34 @@ export class WasmEmulator {
         return this;
     }
     /**
+     * Replaces bytes of the running cartridge at a ROM offset (0 is 0x08000000).
+     * @param {number} offset
+     * @param {Uint8Array} data
+     */
+    patch_rom(offset, data) {
+        const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmemulator_patch_rom(this.__wbg_ptr, offset, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * Reads `len` bytes of EWRAM or IWRAM at `addr`, for a debugger.
+     * @param {number} addr
+     * @param {number} len
+     * @returns {Uint8Array}
+     */
+    read_ram(addr, len) {
+        const ret = wasm.wasmemulator_read_ram(this.__wbg_ptr, addr, len);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
      * Snapshot of the machine for `load_state`; see `GbaCore::save_state` for what it covers.
      * @returns {Uint8Array}
      */
@@ -141,6 +169,19 @@ export class WasmEmulator {
     take_backup_dirty() {
         const ret = wasm.wasmemulator_take_backup_dirty(this.__wbg_ptr);
         return ret !== 0;
+    }
+    /**
+     * Writes bytes to EWRAM or IWRAM at `addr`, for a debugger.
+     * @param {number} addr
+     * @param {Uint8Array} data
+     */
+    write_ram(addr, data) {
+        const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmemulator_write_ram(this.__wbg_ptr, addr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
     }
 }
 if (Symbol.dispose) WasmEmulator.prototype[Symbol.dispose] = WasmEmulator.prototype.free;

@@ -264,7 +264,9 @@ impl TopDownController {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+/// `repr(C)` so tools can read it from the game's memory: see [`crate::debug`].
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Body {
     /// Top-left corner in the room's pixels.
     pub x: i32,

@@ -38,6 +38,12 @@ export type PatchResult =
   | { status: 'needs-build'; rom: string | null; reasons: string[] }
   | { status: 'invalid'; rom: string | null; problems: string[] }
 
+/** Whether the built ROM matches the project: see server/src/patch.ts and design/US-004.md. */
+export type RomStatus =
+  | { state: 'none' | 'building'; mode: 'dev' | 'release' }
+  | { state: 'up-to-date' | 'patched' | 'can-patch'; mode: 'dev' | 'release'; rom: string }
+  | { state: 'needs-build'; mode: 'dev' | 'release'; rom: string; reasons: string[] }
+
 /** What the server pushes while a build runs. */
 export type BuildMessage =
   | { type: 'build-started'; mode: 'dev' | 'release'; command: string }
@@ -70,6 +76,7 @@ export const api = {
   buildStatus: () => request<BuildStatus>('/api/build'),
   build: (mode: 'dev' | 'release') => request<BuildStatus>('/api/build', json('POST', { mode })),
   stopBuild: () => request<{ ok: true }>('/api/build/stop', json('POST', {})),
+  romStatus: () => request<RomStatus>('/api/rom-status'),
   patch: (mode: 'dev' | 'release') => request<PatchResult>('/api/patch', json('POST', { mode })),
   toolchain: () => request<ToolchainReport>('/api/toolchain'),
   setupCrate: () => request<{ written: string[] }>('/api/setup-crate', json('POST', {})),

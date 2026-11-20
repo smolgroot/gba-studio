@@ -7,6 +7,8 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { applyLive, liveTaken, planLiveApply } from '@pecten-studio/core'
+import type { DebugMap } from '@pecten-studio/core'
 import { api, fileUrl } from '../api.ts'
 import type { PatchResult, RomInfo, ToolchainReport } from '../api.ts'
 import { Checkbox } from '../fields.tsx'
@@ -137,8 +139,14 @@ interface Emulator {
   set_pressed_keys: (keys: number) => void
   take_audio_samples: () => Int16Array
   audio_sample_rate: () => number
+  read_ram: (addr: number, len: number) => Uint8Array
+  write_ram: (addr: number, data: Uint8Array) => void
+  patch_rom: (offset: number, data: Uint8Array) => void
   free: () => void
 }
+
+/** Frames a game has to take a live change before it is restarted with the new ROM instead. */
+const LIVE_PATIENCE = 30
 type PectenModule = { default: () => Promise<unknown>; WasmEmulator: new (rom: Uint8Array, bootIntro: boolean) => Emulator }
 
 let pecten: Promise<PectenModule> | undefined
@@ -170,7 +178,11 @@ function TouchButton({ label, bit, keys, update, round }: { label: string; bit: 
   )
 }
 
-/** The emulator: runs a ROM from the game folder, restarting it when the file is rebuilt. */
+/**
+ * The emulator: runs a ROM from the game folder, restarting it when the file is
+ * rebuilt. When only level data changed (a patch), Live apply puts it into the game
+ * that is running instead: see design/US-003.md.
+ */
 export function PlayView() {
   const build = useStudio((s) => s.build)
   const roms = build?.roms ?? {}
@@ -186,6 +198,13 @@ export function PlayView() {
   const [restarts, setRestarts] = useState(0)
   const [autoRestart, setAutoRestart] = useState(true)
   const [patchOnChange, setPatchOnChange] = useState(true)
+  const [liveApply, setLiveApply] = useState(true)
+  /** What became of the last ROM change: applied live, or why the game restarted. */
+  const [applied, setApplied] = useState<string | null>(null)
+  /** The ROM the emulator is running, as live apply changed it. */
+  const loadedBytes = useRef<Uint8Array | null>(null)
+  /** A live change the game has not taken yet, and the frames it has left to. */
+  const pendingLive = useRef<{ map: DebugMap; generation: number; frames: number; rom: RomInfo } | null>(null)
   const [patch, setPatch] = useState<PatchResult | null>(null)
   const patchedRevision = useRef(revision)
   const building = build?.running ?? false
@@ -202,6 +221,8 @@ export function PlayView() {
       const bytes = new Uint8Array(await response.arrayBuffer())
       emulator.current?.free()
       emulator.current = new mod.WasmEmulator(bytes, false)
+      loadedBytes.current = bytes
+      pendingLive.current = null
       loadedModified.current = info.modified
       setRunning(true)
     } catch (e) {
@@ -209,11 +230,37 @@ export function PlayView() {
       setRunning(false)
     }
   }, [])
+  // A changed ROM goes into the running game when only its level data changed;
+  // anything else restarts it. Runs between frames, as every callback here does.
+  const update = useCallback(async (info: RomInfo) => {
+    const core = emulator.current
+    const running = loadedBytes.current
+    if (!core || !running) return start(info)
+    try {
+      loadedModified.current = info.modified
+      const response = await fetch(fileUrl(info.path, info.modified))
+      if (!response.ok) throw new Error(`cannot read ${info.path}`)
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      if (emulator.current !== core) return
+      const plan = planLiveApply(running, bytes)
+      if (plan.kind === 'same') return
+      if (plan.kind === 'restart') {
+        setApplied(`Restarted: ${plan.reason}.`)
+        return start(info)
+      }
+      const generation = applyLive(core, plan)
+      loadedBytes.current = bytes
+      pendingLive.current = { map: plan.map, generation, frames: LIVE_PATIENCE, rom: info }
+      setApplied(null)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }, [start])
   const romPath = rom?.path
   const romModified = rom?.modified
   useEffect(() => {
-    if (running && autoRestart && rom && rom.modified !== loadedModified.current) void start(rom)
-  }, [rom, running, autoRestart, start, revision])
+    if (running && autoRestart && rom && rom.modified !== loadedModified.current) void (liveApply ? update(rom) : start(rom))
+  }, [rom, running, autoRestart, liveApply, start, update, revision])
 
   // While the game runs, each saved change puts the level data into the ROM, which
   // restarts it as above. What cannot go in that way says why and offers a build.
@@ -245,6 +292,20 @@ export function PlayView() {
           for (let n = 0; n < 4 && now >= next - 2; n++) {
             core.set_pressed_keys(keys.current)
             const pixels = core.step_frame()
+            const pending = pendingLive.current
+            if (pending) {
+              if (liveTaken(core, pending.map, pending.generation)) {
+                pendingLive.current = null
+                setApplied('Applied live.')
+              } else if (--pending.frames <= 0) {
+                // The game does not read its inbox (made before live apply, or it does
+                // not call debug::Live::poll): it would go on with the old data.
+                pendingLive.current = null
+                setApplied('Restarted: the game did not take the change live.')
+                void start(pending.rom)
+                break
+              }
+            }
             context2d.putImageData(new ImageData(new Uint8ClampedArray(pixels), 240, 160), 0, 0)
             const samples = core.take_audio_samples()
             if (audio.current && samples.length) {
@@ -324,11 +385,12 @@ export function PlayView() {
         <Button variant="outlined" disabled={!running || sound} onClick={() => void enableSound()}>{sound ? 'Sound on' : 'Sound'}</Button>
         <Checkbox checked={autoRestart} onChange={setAutoRestart}>Restart on rebuild</Checkbox>
         <Checkbox checked={patchOnChange} onChange={setPatchOnChange}>Patch on change</Checkbox>
+        <Checkbox checked={liveApply} onChange={setLiveApply}>Live apply</Checkbox>
       </Box>
       <Typography variant="body2" color="text.secondary">{romPath} · {(rom.size / 1024).toFixed(0)} KB · built {new Date(romModified ?? 0).toLocaleTimeString()}</Typography>
       {error && <Typography color="error" role="alert">{error}</Typography>}
       {patch?.status === 'patched' && (
-        <Typography variant="body2" color="text.secondary">Patched in {patch.ms} ms · level data {patch.used.toLocaleString()} of {patch.capacity.toLocaleString()} bytes</Typography>
+        <Typography variant="body2" color="text.secondary">Patched in {patch.ms} ms · level data {patch.used.toLocaleString()} of {patch.capacity.toLocaleString()} bytes{applied ? ` · ${applied}` : ''}</Typography>
       )}
       {patch?.status === 'needs-build' && (
         <Box role="status" sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>

@@ -21,6 +21,8 @@ export interface PageStatus {
   agent: { tool: string; summary: string; failed: boolean } | null
   /** Why the folder on disk is not being followed, when it is not. */
   offline: string | null
+  /** Whether the built ROM matches the project: up to date, patched or needs build. */
+  rom: { text: string; detail: string; tone: 'ok' | 'warning' | 'quiet' } | null
 }
 /** The one desktop ability a project page gets, as `window.pectenPage`. */
 export interface PageBridge {

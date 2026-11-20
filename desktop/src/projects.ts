@@ -36,6 +36,8 @@ function readPageStatus(value: unknown): PageStatus | null {
   if (!value || typeof value !== 'object') return null
   const status = value as Record<string, unknown>
   const agent = status.agent && typeof status.agent === 'object' ? (status.agent as Record<string, unknown>) : null
+  const rom = status.rom && typeof status.rom === 'object' ? (status.rom as Record<string, unknown>) : null
+  const tone = rom?.tone === 'ok' || rom?.tone === 'warning' ? rom.tone : 'quiet'
   return {
     initialised: status.initialised === true,
     errors: count(status.errors),
@@ -43,6 +45,7 @@ function readPageStatus(value: unknown): PageStatus | null {
     saveError: text(status.saveError),
     agent: agent ? { tool: text(agent.tool, 100) ?? '', summary: text(agent.summary) ?? '', failed: agent.failed === true } : null,
     offline: text(status.offline, 100),
+    rom: rom ? { text: text(rom.text, 200) ?? '', detail: text(rom.detail, 2000) ?? '', tone } : null,
   }
 }
 

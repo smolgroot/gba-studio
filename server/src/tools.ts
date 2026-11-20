@@ -7,7 +7,7 @@ import { Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MULTI_DOCS, PropertyDe
 import type { DocKind, Documents, Problem, Room } from '@pecten-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
-import { describePatch, patchRom } from './patch.ts'
+import { describePatch, patchRom, romStatus, staleNote } from './patch.ts'
 import { HttpError } from './project.ts'
 import type { ProjectFolder } from './project.ts'
 import { effectiveCollision, encodePng, loadPng, renderRoom, renderSheet, renderTileset, roomCells, scale } from './render.ts'
@@ -621,7 +621,9 @@ export const TOOLS: Tool[] = [
       if (!rom) throw new HttpError(409, `there is no ${mode} ROM yet; run the build tool first`)
       const screens = await runRom(await readFile(context.project.resolve(rom.path)), steps)
       const lines = steps.map((step, i) => `${i + 1}. ${step.frames} frames holding ${step.keys.join(' + ') || 'nothing'}`)
-      return { text: `Ran ${rom.path}. One picture per step, enlarged 2x:\n${lines.join('\n')}`, images: screens.map((screen) => encodePng(scale(screen, 2))) }
+      // So a game that does not show the last edit is not taken for one that ignores it.
+      const note = staleNote(await romStatus(context.project, context.builder, mode).catch(() => ({ state: 'none' as const, mode })))
+      return { text: `Ran ${rom.path}. One picture per step, enlarged 2x:\n${lines.join('\n')}${note ? `\n\n${note}` : ''}`, images: screens.map((screen) => encodePng(scale(screen, 2))) }
     },
   ),
 ]

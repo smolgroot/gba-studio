@@ -166,16 +166,21 @@ any size in `assets/sprites/`, `assets/tilesets/` or `assets/backgrounds/`.
 
 - **Build panel:** run the project's dev or release build (commands are set in
   Project settings), with the output streamed live; stop a running build. Failed
-  builds are marked and the exit code shown.
+  builds are marked and the exit code shown. A dev build also writes a debug map
+  beside the ROM: where the game's state is in RAM, for tools reading the emulator.
 - **Play panel:** runs the built ROM on the
   [Pecten](https://github.com/smolgroot/pecten) emulator core in the browser at the
   console's frame rate, with sound (enable it with a click, as browsers require) and
   on-screen buttons on touch devices. It restarts the game by itself when the ROM is
   rebuilt, if you leave that on. While the game runs, saved changes to tiles,
   collision, entities, world placement and physics are patched into the ROM in a
-  fraction of a second, without a build (**Patch on change**); changes that need a
-  build say why and offer one. Keyboard: arrows, `X` is A, `Z` is B, `Enter` is
+  fraction of a second, without a build (**Patch on change**), and go into the
+  running game with the player where they are (**Live apply**, for games that poll
+  for it); changes that need a build say why and offer one. Keyboard: arrows, `X` is A, `Z` is B, `Enter` is
   Start, `Shift` is Select, `A` and `S` are L and R.
+- **ROM state in the top bar:** up to date, patched, or needs build with the
+  reason (`Rust source changed: src/main.rs`, `new sprite "bat"`,
+  `assets/hero.png changed`), and a button that builds or patches.
 
 ### Importing files
 
@@ -472,7 +477,8 @@ Honest list of what does not work yet:
 
 ## Roadmap
 
-Roughly in order. Each item is useful on its own.
+Roughly in order. Each item is useful on its own. The full, prioritised list is in
+[`UserStories.md`](UserStories.md).
 
 ### Agents, still to do
 
@@ -520,7 +526,5 @@ for PNGs as it is redrawn.
 
 ### Left out on purpose
 
-- A pixel editor. Draw in Aseprite, LibreSprite or anything else; the studio picks
-  the files up as they change.
 - A music sequencer. Compose in a DAW or tracker.
 - Visual scripting of game logic. Behaviour is Rust in your game.

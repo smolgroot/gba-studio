@@ -15,6 +15,7 @@ import { BuildPanel } from './panels/play.tsx'
 import { PalettePanel } from './panels/room.tsx'
 import { BAR } from './theme.ts'
 import { api } from './api.ts'
+import type { RomStatus } from './api.ts'
 import { useSidebar } from './sidebar.ts'
 import { useEditor } from './editor.ts'
 import { selectionFromHash, selectionKey, selectionTitle, useStudio } from './store.ts'
@@ -106,12 +107,55 @@ function Centre({ children }: { children: React.ReactNode }) {
 /** Set when the page runs as a tab of the desktop app (see desktop/src/page-preload.ts). */
 const desktop = (window as unknown as { pectenPage?: { status: (status: unknown) => void } }).pectenPage
 
+/** The ROM's state in a few words, the reasons in full, and what would bring it up to date. */
+export function romLabel(rom: RomStatus): { text: string; detail: string; tone: 'ok' | 'warning' | 'quiet'; action: 'build' | 'patch' | null } {
+  const name = rom.mode === 'release' ? 'Release ROM' : 'ROM'
+  switch (rom.state) {
+    case 'none':
+      return { text: 'Not built', detail: `There is no ${rom.mode} ROM yet.`, tone: 'quiet', action: 'build' }
+    case 'building':
+      return { text: 'Building…', detail: `A ${rom.mode} build is running.`, tone: 'quiet', action: null }
+    case 'up-to-date':
+      return { text: `${name} up to date`, detail: `${rom.rom} is what a build would make now.`, tone: 'ok', action: null }
+    case 'patched':
+      return { text: `${name} patched`, detail: `${rom.rom} has the latest level data, patched in without a build.`, tone: 'ok', action: null }
+    case 'can-patch':
+      return { text: 'Level data not patched in', detail: `Only level data changed since ${rom.rom} was made: a patch brings it up to date in under a second.`, tone: 'warning', action: 'patch' }
+    case 'needs-build': {
+      const more = rom.reasons.length > 1 ? ` (+${rom.reasons.length - 1})` : ''
+      return { text: `Needs build: ${rom.reasons[0]}${more}`, detail: `Only a build brings ${rom.rom} up to date:\n${rom.reasons.map((r) => `• ${r}`).join('\n')}`, tone: 'warning', action: 'build' }
+    }
+  }
+}
+
+/** Up to date, patched or needs build, with the button that fixes it. */
+function RomState({ rom }: { rom: RomStatus }) {
+  const runBuild = useStudio((s) => s.runBuild)
+  const label = romLabel(rom)
+  const [patching, setPatching] = useState(false)
+  const patch = () => {
+    setPatching(true)
+    void api.patch(rom.mode).catch(() => undefined).finally(() => setPatching(false))
+  }
+  return (
+    // At phone width the project's name needs the room; the Build tab is a tap away.
+    <Box role="status" aria-label={label.text} sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1, minWidth: 0 }}>
+      <Typography variant="body2" noWrap title={label.detail} color={label.tone === 'ok' ? 'success.main' : label.tone === 'warning' ? 'warning.main' : 'text.secondary'} sx={{ maxWidth: '32vw' }}>
+        {label.text}
+      </Typography>
+      {label.action === 'build' && <Button size="small" variant="outlined" onClick={() => void runBuild(rom.mode)}>Build {rom.mode}</Button>}
+      {label.action === 'patch' && <Button size="small" variant="outlined" disabled={patching} onClick={patch}>Patch</Button>}
+    </Box>
+  )
+}
+
 function TopBar() {
   const bundle = useStudio((s) => s.bundle)
   const connected = useStudio((s) => s.connected)
   const error = useStudio((s) => s.error)
   const saveError = useStudio((s) => s.saveError)
   const agent = useStudio((s) => s.agent)
+  const rom = useStudio((s) => s.rom)
   // What an agent just did stays up for a few seconds.
   const [agentShown, setAgentShown] = useState(false)
   useEffect(() => {
@@ -134,8 +178,9 @@ function TopBar() {
       saveError: saveError ?? null,
       agent: shownAgent && { tool: shownAgent.tool, summary: shownAgent.summary, failed: !!shownAgent.failed },
       offline,
+      rom: rom && bundle?.initialised ? (({ text, detail, tone }) => ({ text, detail, tone }))(romLabel(rom)) : null,
     })
-  }, [bundle?.initialised, errors, warnings, saveError, shownAgent, offline])
+  }, [bundle?.initialised, errors, warnings, saveError, shownAgent, offline, rom])
   if (desktop) return null
 
   return (
@@ -160,6 +205,7 @@ function TopBar() {
             Not saved: {saveError}
           </Typography>
         )}
+        {bundle?.initialised && rom && <RomState rom={rom} />}
         {bundle?.initialised && (
           <>
             <Count icon={<ErrorOutlineIcon />} count={errors} colour="error.main" label="errors" />

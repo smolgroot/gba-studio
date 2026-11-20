@@ -12,6 +12,8 @@ publish = false
 agb = ["dep:agb"]
 # Writing data sections, for the build helper. Needs `alloc`.
 write = []
+# The debug map in builds without debug assertions too: see src/debug.rs.
+debug-map = []
 
 [dependencies]
 agb = { version = "0.25.0", optional = true }

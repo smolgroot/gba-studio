@@ -3,6 +3,8 @@ import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import { Project, docPath } from '@pecten-studio/core'
+import { writeDebugMap } from './debugmap.ts'
+import { hashInputs, writeRecord } from './freshness.ts'
 import { HttpError } from './project.ts'
 import type { ProjectFolder } from './project.ts'
 
@@ -32,6 +34,8 @@ const MAX_LOG_LINES = 5000
 
 export class Builder {
   private child: ChildProcess | null = null
+  /** Set while the inputs are hashed, before the command starts. */
+  private starting = false
   private state: Omit<BuildStatus, 'roms'> = { running: false, mode: null, command: null, exitCode: null, stopped: false, seconds: null, log: [] }
   private project: ProjectFolder
   private broadcast: (message: unknown) => void
@@ -66,8 +70,21 @@ export class Builder {
 
   async start(mode: BuildMode): Promise<void> {
     if (mode !== 'dev' && mode !== 'release') throw new HttpError(400, 'build mode is "dev" or "release"')
-    if (this.child) throw new HttpError(409, 'a build is already running')
-    const command = (await this.settings())[mode]
+    if (this.child || this.starting) throw new HttpError(409, 'a build is already running')
+    this.starting = true
+    let command: string
+    let inputs: Record<string, string> | null
+    try {
+      const settings = await this.settings()
+      command = settings[mode]
+      // Taken before the command runs: an edit made during the build is then a change after it.
+      inputs = await this.project
+        .load()
+        .then((bundle) => hashInputs(this.project, bundle.docs))
+        .catch(() => null)
+    } finally {
+      this.starting = false
+    }
     const started = Date.now()
     this.state = { running: true, mode, command, exitCode: null, stopped: false, seconds: null, log: [] }
     // Its own process group, so stopping it also stops what it started (cargo, rustc).
@@ -107,8 +124,13 @@ export class Builder {
       this.child = null
       clearTimeout(timer)
       if (problem) pending.push(problem)
+      const succeeded = !this.state.stopped && exitCode === 0
+      const built = succeeded ? (await this.status()).roms[mode] : undefined
+      if (built) pending.push(await writeDebugMap(this.project, built.path).catch((error: Error) => `no debug map: ${error.message}`))
       flush()
       this.state = { ...this.state, running: false, exitCode: this.state.stopped ? null : exitCode, seconds: Math.round((Date.now() - started) / 100) / 10 }
+      const rom = (await this.status()).roms[mode]
+      if (this.state.exitCode === 0 && inputs && rom) await writeRecord(this.project, rom.path, { version: 1, modified: rom.modified, patched: false, inputs }).catch(() => undefined)
       this.broadcast({ type: 'build-finished', status: await this.status() })
     }
     child.on('error', (error) => void finish(null, `could not run the build command: ${error.message}`))
@@ -137,7 +159,7 @@ export class Builder {
 
   /** Whether a build is running now. */
   get running(): boolean {
-    return this.child !== null
+    return this.child !== null || this.starting
   }
 
   /** Tells the studio's pages that a ROM was rewritten without a build, so Play restarts it. */

@@ -31,6 +31,7 @@ use agb::input::{Button, ButtonController};
 use agb::sound::mixer::{Frequency, Mixer, SoundChannel};
 use pecten_studio_rt::{
     data::{Collected, CollisionKind, SCREEN_H, SCREEN_W, World},
+    debug::{self, GameState, Live},
     gfx::{AnimPlayer, WorldView},
     physics::{Body, PhysicsMode, PlatformerController, PlatformerInput, TopDownController},
 };
@@ -157,8 +158,8 @@ fn main(mut gba: agb::Gba) -> ! {
     let jump = hero.animation("jump").unwrap_or(idle);
 
     // Rooms, entities and physics, read from the ROM's data section.
-    let world = data::world();
-    let physics = world.physics();
+    let mut world = data::world();
+    let mut physics = world.physics();
 
     // The hero lives in world pixels; `room` is the one its middle is in.
     let (mut room, mut body) = start(&world);
@@ -176,10 +177,15 @@ fn main(mut gba: agb::Gba) -> ! {
     let mut score = 0u32;
     // Ticks since the game began: every placed entity animates off this one clock.
     let mut clock = 0u32;
-    let top_down = physics.mode == PhysicsMode::TopDown;
-    let walls = world.enclosed();
+    let mut top_down = physics.mode == PhysicsMode::TopDown;
     let mut platformer = PlatformerController::new();
     let mut walker = TopDownController::new();
+    // What the studio's debug map shows of the game, copied out once a frame. Dev
+    // builds only: in a release build `publish` does nothing.
+    let mut shown = GameState::new();
+    shown.collected(&found);
+    // Level data the studio changes while the game runs (Live apply in the Play panel).
+    let mut live = Live::new();
     #[cfg(feature = "measure")]
     let timers = gba.timers.timers();
     #[cfg(feature = "measure")]
@@ -188,12 +194,30 @@ fn main(mut gba: agb::Gba) -> ! {
     loop {
         #[cfg(feature = "measure")]
         stopwatch.start();
+        // The studio changed the level data in the ROM: read it again, keeping the
+        // hero, the camera and the score. Its tables may have moved, so the old world
+        // is not read again, even by the view.
+        if let Some(changes) = live.poll() {
+            world = data::world();
+            physics = world.physics();
+            top_down = physics.mode == PhysicsMode::TopDown;
+            let (x, y) = focus(&body);
+            room = world.room_at(x, y).unwrap_or(room.min(world.room_count().saturating_sub(1)));
+            if changes.rooms() {
+                view = WorldView::new(&world, gfx::ART, room, &mut graphics);
+                view.load(camera.0, camera.1);
+            } else if changes.tiles() {
+                view.redraw(&world, camera.0, camera.1);
+            } else {
+                view.set_world(&world);
+            }
+        }
         input.update();
         let direction = input.x_tri() as i32;
         let before = body;
         if top_down {
             let vertical = input.is_pressed(Button::Down) as i32 - input.is_pressed(Button::Up) as i32;
-            walker.update(&mut body, &walls, &physics.top_down, direction, vertical);
+            walker.update(&mut body, &world.enclosed(), &physics.top_down, direction, vertical);
             if body.vx != 0 {
                 faces_left = body.vx < 0;
             }
@@ -325,6 +349,11 @@ fn main(mut gba: agb::Gba) -> ! {
             show_number(&mut frame, stopwatch.worst / 100, 4, 4);
             show_number(&mut frame, (stopwatch.total / stopwatch.frames.max(1) as u64 / 100) as u32, 4, 14);
         }
+        shown.frame = clock;
+        shown.room = room as u32;
+        (shown.camera_x, shown.camera_y) = camera;
+        shown.player = body;
+        debug::publish(&shown);
         // Mixing is the last work of the frame, just before the wait for the next one.
         mixer.frame();
         #[cfg(feature = "measure")]

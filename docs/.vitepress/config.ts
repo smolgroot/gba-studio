@@ -55,6 +55,7 @@ export default defineConfig({
         items: [
           { text: 'Project format', link: '/reference/project-format' },
           { text: 'Data section', link: '/reference/data-section' },
+          { text: 'Debug map', link: '/reference/debug-map' },
           { text: 'Keyboard shortcuts', link: '/reference/shortcuts' },
           { text: 'Known limits', link: '/reference/limits' },
         ],
@@ -63,6 +64,6 @@ export default defineConfig({
     socialLinks: [{ icon: 'github', link: 'https://github.com/smolgroot/gba-studio' }],
     search: { provider: 'local' },
     outline: [2, 3],
-    footer: { message: 'Screenshots show the Diamond Hands project open in the studio.' },
+    footer: { message: 'Screenshots show the Diamond Hands project open in the studio; the ones about patching show the sample game, as Diamond Hands does not read its level data from the ROM.' },
   },
 })
