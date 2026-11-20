@@ -1,0 +1,21 @@
+{
+  "project": "sample",
+  "defaultViewport": { "width": 1440, "height": 900 },
+  "shots": [
+    { "name": "studio-overview", "description": "Dockable panels on a wide screen", "route": "room:entry" },
+    { "name": "room-editor", "description": "The map editor with a room open", "route": "room:entry" },
+    { "name": "room-collision", "description": "A room with the collision overlay shown", "route": "room:entry", "manual": true },
+    { "name": "room-trenches", "description": "A second room in the map editor", "route": "room:shaft" },
+    { "name": "world-map", "description": "Rooms arranged on the world map", "route": "world" },
+    { "name": "tileset", "description": "The tileset editor with collision classes", "route": "tileset:tiles" },
+    { "name": "new-tileset", "description": "Importing a tileset from a PNG", "route": "world", "manual": true },
+    { "name": "sprite", "description": "The sprite editor with the live preview and animations", "route": "sprite:hero" },
+    { "name": "pixel-editor", "description": "The pixel editor drawing on a sprite sheet", "route": "asset:assets/hero.png" },
+    { "name": "new-image", "description": "Making a new blank image", "route": "world", "manual": true },
+    { "name": "audio", "description": "The Audio page listing tracks and sound effects", "route": "audio" },
+    { "name": "project-settings", "description": "Project settings with build commands and entity types", "route": "project" },
+    { "name": "build-panel", "description": "The Build panel after a build", "route": "room:entry", "manual": true },
+    { "name": "play", "description": "The game running in the Play panel", "route": "play", "waitFor": "canvas", "delay": 3000 },
+    { "name": "mobile", "description": "The studio at phone width", "route": "room:entry", "viewport": { "width": 390, "height": 844 } }
+  ]
+}

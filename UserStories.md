@@ -1,0 +1,1122 @@
+# User stories
+
+The backlog for Pecten-Studio, written spec first: every piece of work starts as a
+story here, with acceptance criteria that say when it is done, before any code is
+written. The goal is a studio that is to the GBA what Godot or Unity is to the PC:
+one place where a game's content, objects, behaviour, play and debugging come
+together, with the console's limits shown rather than discovered.
+
+## How to use this file
+
+1. **Specify.** A new piece of work gets a story in the right epic, with an ID, a
+   priority, the user it serves, and acceptance criteria. Open questions go under
+   the story, not in code.
+2. **Plan.** When a story is picked up, its status becomes `Planned` and a short
+   design note is added in `design/US-NNN.md`: data format changes, crates and
+   packages touched, tests to write.
+3. **Build.** Status `In progress`. Each acceptance criterion becomes at least one
+   test where it can be tested (`pnpm test`, `cargo test`, or a headless run on the
+   Pecten core).
+4. **Verify.** Status `Done` only when every criterion passes, the docs in `docs/`
+   say how to use it, and `README.md` and `docs/reference/limits.md` no longer list
+   it as missing.
+
+A story is small enough to finish in one branch. If it is not, split it and give
+the parts their own IDs (`US-031a`, `US-031b`).
+
+### Priorities
+
+| Priority | Meaning |
+| --- | --- |
+| **P0** | Needed for the studio to feel like an engine rather than a toolchain. Do these first. |
+| **P1** | Expected of any engine; a real game will miss it quickly. |
+| **P2** | Makes the studio pleasant and broad. |
+| **P3** | Nice to have, or waiting on something else. |
+
+### Status
+
+`Proposed` → `Planned` → `In progress` → `Done`. Also `Blocked` (say on what) and
+`Dropped` (say why).
+
+### Size
+
+`S` a day or two, `M` up to a week, `L` more than a week (consider splitting).
+
+### Users
+
+- **Author:** makes a game in the studio: art, levels, music, entity setup.
+- **Programmer:** writes the game's Rust on agb and the runtime.
+- **Player:** plays the ROM, on hardware, in an emulator, or in a browser.
+- **Contributor:** works on the studio itself.
+- **Agent:** a coding agent driving the CLI or MCP server for an author.
+
+### Story template
+
+```md
+#### US-000 · Title
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** core, app, codegen, runtime, server, sample, docs
+
+As a <user>, I want <capability>, so that <benefit>.
+
+Acceptance criteria
+- [ ] Given <state>, when <action>, then <result>.
+
+Notes / open questions
+```
+
+## Summary
+
+| ID | Title | Epic | Priority | Status | Size |
+| --- | --- | --- | --- | --- | --- |
+| US-001 | Fixed-layout data section in the ROM | E1 | P0 | Proposed | L |
+| US-002 | Patch level data into a built ROM without compiling | E1 | P0 | Proposed | M |
+| US-003 | Live-apply edits to the running game | E1 | P0 | Proposed | L |
+| US-004 | Say when a change needs a full build | E1 | P0 | Proposed | S |
+| US-005 | Play from the room and spot under the cursor | E1 | P1 | Proposed | M |
+| US-010 | Behaviour library in the runtime | E2 | P0 | Proposed | L |
+| US-011 | Behaviours declare their properties to codegen | E2 | P0 | Proposed | M |
+| US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Proposed | M |
+| US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Proposed | M |
+| US-014 | Prefabs with per-instance overrides | E2 | P1 | Proposed | M |
+| US-015 | Edit collision classes in the interface | E2 | P1 | Proposed | S |
+| US-016 | Edit entity property definitions in the interface | E2 | P1 | Proposed | S |
+| US-017 | Entity references between entities | E2 | P1 | Proposed | M |
+| US-018 | Custom behaviours written in the game | E2 | P1 | Proposed | M |
+| US-020 | Symbol map of game state | E3 | P0 | Proposed | M |
+| US-021 | Live entity inspector in the Play panel | E3 | P0 | Proposed | L |
+| US-022 | Debug overlays on the game screen | E3 | P0 | Proposed | M |
+| US-023 | Pause, step a frame, rewind | E3 | P1 | Proposed | M |
+| US-024 | VRAM, palette and OAM viewers | E3 | P1 | Proposed | M |
+| US-025 | Game log in the studio | E3 | P1 | Proposed | S |
+| US-026 | Frame time and CPU readout | E3 | P2 | Proposed | M |
+| US-030 | Palette and tile budgets while painting | E4 | P0 | Proposed | M |
+| US-031 | Sprite and OAM budget per room | E4 | P1 | Proposed | M |
+| US-032 | ROM size breakdown | E4 | P1 | Proposed | S |
+| US-033 | Build messages shown on the item they are about | E4 | P1 | Proposed | M |
+| US-034 | Audio size estimate | E4 | P2 | Proposed | S |
+| US-040 | Rectangular selection, copy, paste, flip | E5 | P1 | Proposed | M |
+| US-041 | Autotile brushes | E5 | P1 | Proposed | L |
+| US-042 | Room templates | E5 | P2 | Proposed | S |
+| US-043 | Moving backgrounds in the map editor | E5 | P2 | Proposed | S |
+| US-044 | Undo for deleting rooms, tilesets and sprites | E5 | P1 | Proposed | S |
+| US-045 | Pinch zoom and finger painting | E5 | P3 | Proposed | M |
+| US-050 | Font import and text drawing | E6 | P1 | Proposed | M |
+| US-051 | Dialogue boxes and a dialogue file format | E6 | P1 | Proposed | L |
+| US-052 | HUD layout editor | E6 | P2 | Proposed | L |
+| US-053 | Menus | E6 | P2 | Proposed | M |
+| US-060 | Save data for collected and opened things | E7 | P1 | Proposed | M |
+| US-061 | Game states: title, play, pause, game over | E7 | P1 | Proposed | M |
+| US-062 | Doors and ability gates | E7 | P1 | Proposed | M |
+| US-063 | Camera helpers: bounds, transitions, shake | E7 | P1 | Proposed | M |
+| US-064 | Entity activation near the camera | E7 | P1 | Proposed | S |
+| US-070 | Hear MIDI, XM and MOD in the studio | E8 | P1 | Proposed | L |
+| US-071 | Aseprite preview and conversion, tags as animations | E8 | P1 | Proposed | M |
+| US-072 | Import Tiled maps | E8 | P2 | Proposed | M |
+| US-073 | Import Diamond Hands ASCII levels | E8 | P1 | Proposed | M |
+| US-080 | Project templates by genre | E9 | P1 | Proposed | L |
+| US-081 | Affine and Mode 7 backgrounds | E9 | P2 | Proposed | L |
+| US-082 | 8 bits per pixel tilesets | E9 | P3 | Proposed | M |
+| US-090 | Reachability check on the runtime physics | E10 | P1 | Proposed | L |
+| US-091 | Headless game tests from the project | E10 | P1 | Proposed | M |
+| US-092 | Agent-visible selection in the map | E10 | P2 | Proposed | S |
+| US-093 | Tune tool descriptions on a real game | E10 | P2 | Proposed | M |
+| US-100 | Publish runtime and build helper as crates | E11 | P1 | Proposed | M |
+| US-101 | `npx pecten-studio` | E11 | P1 | Proposed | S |
+| US-102 | Desktop app on macOS and Windows | E11 | P1 | Proposed | M |
+| US-103 | Export: flashcart ROM, web player, itch.io | E11 | P1 | Proposed | M |
+| US-104 | Plugin API for panels and build steps | E11 | P2 | Proposed | L |
+| US-105 | Tutorials from an empty folder to a game | E11 | P1 | Proposed | M |
+| US-106 | Test on more browsers, touch and large projects | E11 | P2 | Proposed | M |
+| US-107 | Fix the README's "left out on purpose" list | E11 | P0 | Proposed | S |
+| US-108 | Scripted documentation screenshots | E11 | P1 | In progress | S |
+| US-110 | Game flags and variables | E12 | P1 | Proposed | M |
+| US-111 | Trigger zones | E12 | P1 | Proposed | S |
+| US-112 | Rule format: event, conditions, actions | E12 | P1 | Proposed | M |
+| US-113 | Rules compiled to tables and run by the runtime | E12 | P1 | Proposed | L |
+| US-114 | Built-in events, conditions and actions | E12 | P1 | Proposed | L |
+| US-115 | Rule editor in the studio | E12 | P1 | Proposed | L |
+| US-116 | Rules checked as problems | E12 | P1 | Proposed | M |
+| US-117 | Flags and fired rules in the live inspector | E12 | P2 | Proposed | M |
+| US-118 | Custom events, conditions and actions from Rust | E12 | P2 | Proposed | M |
+| US-119 | Rule tools for agents | E12 | P2 | Proposed | S |
+| US-120 | Template games built with rules only | E12 | P1 | Proposed | M |
+
+---
+
+## E1 · Fast iteration
+
+Godot and Unity feel immediate because a change shows up in the running game in a
+moment. Here every change goes through a nightly `cargo build`. Most edits are to
+data, not code, and the studio owns the emulator, so data edits should not need a
+compile at all.
+
+#### US-001 · Fixed-layout data section in the ROM
+**Priority** P0 · **Status** Proposed · **Size** L · **Depends on** —
+**Touches** codegen, runtime
+
+As a programmer, I want level, entity and physics data to live in a ROM section
+with a known, versioned layout instead of being baked into Rust constants, so that
+tools can find and replace it without recompiling.
+
+Acceptance criteria
+- [ ] Given a project, when it is built, then rooms, collision cells, entities,
+  entity properties, world placement and physics settings are in one section that
+  starts with a magic number, a format version and a table of offsets.
+- [ ] Given that section, when the runtime starts, then it reads everything from it
+  and the sample plays exactly as before.
+- [ ] The section has room to grow (a configurable reserve) so a patched project
+  that is a little larger still fits.
+- [ ] Reading data costs no more frames than today on the sample (measured).
+- [ ] The layout is documented in `docs/reference/`.
+
+Notes / open questions
+- Graphics (tiles, palettes) may stay compiled at first; decide in the design note
+  whether tile data joins the section in this story or in US-002.
+
+#### US-002 · Patch level data into a built ROM without compiling
+**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-001
+**Touches** codegen (as wasm or TS port), server, app
+
+As an author, I want the Play panel to pick up a room edit in about a second,
+so that trying a jump or a layout does not mean waiting for a build.
+
+Acceptance criteria
+- [ ] Given a built ROM, when I change tiles, collision, entities, entity
+  properties, world placement or physics, then the studio rewrites the data
+  section and restarts the game in under 2 seconds on the sample.
+- [ ] The patched ROM is byte-for-byte what a full build would produce for the same
+  data section.
+- [ ] If the new data does not fit the reserve, the studio says so and offers a
+  full build.
+- [ ] The patch step is available from the CLI (`pecten-studio patch <folder>`) and
+  MCP (`patch_rom`).
+
+#### US-003 · Live-apply edits to the running game
+**Priority** P0 · **Status** Proposed · **Size** L · **Depends on** US-002, US-020
+**Touches** runtime, app (Play panel), Pecten core
+
+As an author, I want an edit to appear in the game that is already running, with
+the player where they are, so that I can tune a room while standing in it.
+
+Acceptance criteria
+- [ ] Given the game running in the Play panel, when I paint tiles in the current
+  room, then they appear on screen within a few frames and the player keeps their
+  position and state.
+- [ ] Physics settings changes take effect on the next frame.
+- [ ] Entity edits respawn only the entities that changed.
+- [ ] A toggle turns live apply off; restart-on-change still works without it.
+
+Notes / open questions
+- Needs a small runtime hook the studio can signal through emulator memory (a
+  "data changed" flag and the dirty ranges).
+
+#### US-004 · Say when a change needs a full build
+**Priority** P0 · **Status** Proposed · **Size** S · **Depends on** US-002
+**Touches** app, server
+
+As an author, I want the studio to tell me which changes it can patch and which
+need a build, so that I am never playing a stale ROM without knowing it.
+
+Acceptance criteria
+- [ ] The top bar shows one of: up to date, patched, needs build (with the reason,
+  for example "Rust source changed" or "new sprite").
+- [ ] Changing a `.rs` file or a sprite sheet sets "needs build".
+
+#### US-005 · Play from the room and spot under the cursor
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-002
+**Touches** runtime, app
+
+As an author, I want to start the game in the room I am editing, at the tile I
+right-click, so that I do not walk from the start to test a late room.
+
+Acceptance criteria
+- [ ] The map editor has "Play from here"; the game starts with the player at that
+  point.
+- [ ] The start override is a debug-only setting that release builds ignore.
+
+---
+
+## E2 · Objects and behaviour
+
+Godot has nodes with scripts, Unity has game objects with components. Here entities
+are typed property bags and the game matches on `EntityKind` by hand. Behaviour
+stays Rust, as the studio intends, but common behaviour should come ready-made and
+be attached in the studio.
+
+#### US-010 · Behaviour library in the runtime
+**Priority** P0 · **Status** Proposed · **Size** L · **Depends on** —
+**Touches** runtime, sample
+
+As a programmer, I want the common Metroidvania behaviours in the runtime, so that
+a game only writes what is special about it.
+
+Acceptance criteria
+- [ ] The runtime has, each with host unit tests: patrol, collectible, hazard,
+  projectile and shooter, moving platform, door, checkpoint, pickup that grants an
+  ability, and spawner.
+- [ ] Each behaviour is a plain struct with an update function taking the entity,
+  the world and a small context (player body, clock, input).
+- [ ] The sample's sentry bot and collectibles use the library and `main.rs` gets
+  shorter.
+
+#### US-011 · Behaviours declare their properties to codegen
+**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-010
+**Touches** runtime, codegen, core (schema)
+
+As a programmer, I want each behaviour to declare the properties it reads, with
+types, defaults and ranges, so that the studio can build an editor for them and
+the build can check them.
+
+Acceptance criteria
+- [ ] Declarations are written once (for example a `behaviour!` macro or a
+  `behaviours.json` the crate ships) and exported as JSON Schema the studio reads.
+- [ ] A missing or wrong-typed property is a problem in the Problems panel, not a
+  runtime surprise.
+
+#### US-012 · Attach behaviours to entity types in the studio
+**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-011
+**Touches** app, core, server (MCP tools)
+
+As an author, I want to give an entity type one or more behaviours and fill in
+their properties in Properties, so that I can make a new enemy without opening
+Rust.
+
+Acceptance criteria
+- [ ] Project settings lists behaviours to add to an entity type; each shows a form
+  generated from its declaration.
+- [ ] Placed entities show the behaviour properties and can override them.
+- [ ] MCP has `entity_type_add_behaviour` and `entity_type_remove_behaviour`.
+- [ ] A new patrolling enemy can be made from a PNG with no Rust change, and plays.
+
+#### US-013 · Generated entity dispatch, no hand-written match
+**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-012
+**Touches** codegen, runtime, sample
+
+As a programmer, I want codegen to write the loop that updates every live entity
+with its behaviours, so that adding a type never means editing a `match`.
+
+Acceptance criteria
+- [ ] `include_data!()` gives an `update_entities` (or similar) that calls each
+  entity's behaviours.
+- [ ] A game can still handle a kind itself before or instead of the generated code.
+
+#### US-014 · Prefabs with per-instance overrides
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-012
+**Touches** core, app
+
+As an author, I want entity types to act as prefabs whose placed copies only store
+what they change, so that changing the type's default updates every copy that
+kept it.
+
+Acceptance criteria
+- [ ] Room files store only overridden properties.
+- [ ] Properties marks overridden values and has "reset to type default".
+
+#### US-015 · Edit collision classes in the interface
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** app, core
+
+As an author, I want to add, rename, recolour and set the kind of collision
+classes in Project settings, so that I do not edit `project.json` by hand.
+
+Acceptance criteria
+- [ ] Every field in the collision class schema can be edited, with undo.
+- [ ] Deleting a class in use asks first and says which tilesets and rooms use it.
+
+#### US-016 · Edit entity property definitions in the interface
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** app, core
+
+As an author, I want to add and change an entity type's properties (name, type,
+default, range) in Project settings, so that the whole entity setup is in the
+studio.
+
+Acceptance criteria
+- [ ] Every property type in the schema can be defined from the interface.
+- [ ] Changing a property's type reports the placed entities whose values no
+  longer fit.
+
+#### US-017 · Entity references between entities
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-016
+**Touches** core, app, codegen
+
+As an author, I want a property that points at another placed entity (a switch to
+its door, a door to its destination), picked by clicking it on the map, so that
+connections are not typed by hand.
+
+Acceptance criteria
+- [ ] A `ref` property type, optionally limited to some entity types.
+- [ ] The map draws a line from an entity to what it refers to.
+- [ ] A reference to a deleted entity is a problem.
+
+#### US-018 · Custom behaviours written in the game
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-011
+**Touches** runtime, codegen, app
+
+As a programmer, I want behaviours I write in my game crate to show up in the
+studio like the built-in ones, so that my game's own objects are edited the same
+way.
+
+Acceptance criteria
+- [ ] A behaviour declared in the game crate is listed in Project settings after a
+  build.
+- [ ] Documented with an example in `sample/`.
+
+---
+
+## E3 · Debugging the running game
+
+Unity's inspector during play is the feature people miss most elsewhere. The studio
+runs the game on its own emulator, so it can see everything.
+
+#### US-020 · Symbol map of game state
+**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** codegen, runtime
+
+As a contributor, I want the build to write where the runtime keeps its state
+(entity table, player body, camera, current room), so that the studio can read it
+from emulator memory.
+
+Acceptance criteria
+- [ ] Each build writes a `debug.json` next to the ROM with addresses and layouts.
+- [ ] Release builds can leave it out.
+
+#### US-021 · Live entity inspector in the Play panel
+**Priority** P0 · **Status** Proposed · **Size** L · **Depends on** US-020
+**Touches** app, Pecten core
+
+As an author, I want to see the live entities, their positions, velocities and
+properties while the game runs, and change a value, so that I can find out why
+something behaves wrongly.
+
+Acceptance criteria
+- [ ] A panel lists live entities, updated every frame, with the player first.
+- [ ] Clicking one on the game screen selects it in the list.
+- [ ] Editing a number writes it to memory and the game uses it on the next frame.
+
+#### US-022 · Debug overlays on the game screen
+**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-020
+**Touches** app
+
+As an author, I want hitboxes, collision cells, the camera target and room borders
+drawn over the game screen, so that I can see what the physics sees.
+
+Acceptance criteria
+- [ ] Each overlay has its own toggle and draws at the game's scale.
+- [ ] Overlays are drawn by the studio, not the ROM, so they cost the game nothing.
+
+#### US-023 · Pause, step a frame, rewind
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** app, Pecten core
+
+As an author, I want to pause, step one frame and rewind a few seconds, so that I
+can study a jump or a collision frame by frame.
+
+Acceptance criteria
+- [ ] Pause and step buttons and shortcuts in the Play panel.
+- [ ] Rewind at least 10 seconds using emulator save states.
+
+#### US-024 · VRAM, palette and OAM viewers
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** app, Pecten core
+
+As a programmer, I want to see tile memory, the 32 palettes, the four background
+maps and the 128 sprites the game is using now, so that I can find graphics bugs.
+
+Acceptance criteria
+- [ ] One view per kind, updated while the game runs or paused.
+- [ ] Hovering a tile or sprite shows its index, palette and which asset it came
+  from where the debug map knows.
+
+#### US-025 · Game log in the studio
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** runtime, app
+
+As a programmer, I want `log!` lines from the game (mGBA debug output) to appear in
+a Log panel, so that I can print-debug without another emulator.
+
+Acceptance criteria
+- [ ] Messages show with the frame number; the panel can filter and clear.
+- [ ] The headless `run_rom` tool returns the log too.
+
+#### US-026 · Frame time and CPU readout
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** US-020
+**Touches** app, runtime
+
+As a programmer, I want to see how much of each frame the game uses, so that I
+know before hardware tells me.
+
+Acceptance criteria
+- [ ] A graph of scanlines used per frame, with dropped frames marked.
+
+---
+
+## E4 · Budgets while editing
+
+On the GBA the limits are the engine settings. They should be visible while
+working, not only when the build fails.
+
+#### US-030 · Palette and tile budgets while painting
+**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** core, app
+
+As an author, I want to see palettes and tiles used against the 16 palettes and
+1024 tiles, for a tileset and for each room with its backgrounds, as I paint, so
+that I stay inside them.
+
+Acceptance criteria
+- [ ] A readout in tileset, pixel and room editors updates within a second of a
+  change.
+- [ ] Results match the build helper's for the same input (shared test fixtures).
+- [ ] Going over turns the readout red and adds a problem pointing at the item.
+
+#### US-031 · Sprite and OAM budget per room
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** core, app
+
+As an author, I want to see how much sprite tile memory and how many of the 128
+sprites a room's entities need, so that a crowded room does not break.
+
+Acceptance criteria
+- [ ] Per-room readout, counting each sprite sheet once.
+
+#### US-032 · ROM size breakdown
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** codegen, app
+
+As an author, I want to see how much of the ROM goes to graphics, levels, music
+and code, so that I know what to cut.
+
+Acceptance criteria
+- [ ] The Build panel shows a breakdown after each build.
+
+#### US-033 · Build messages shown on the item they are about
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** codegen, server, app
+
+As an author, I want a build error such as "tile 37 has 17 colours" to show up in
+Problems and on that tile, so that I do not read build output to find it.
+
+Acceptance criteria
+- [ ] The build helper writes machine-readable diagnostics with the document and
+  position.
+- [ ] Problems lists them; clicking opens the item at the spot.
+
+#### US-034 · Audio size estimate
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** core, app
+
+As an author, I want each track and effect to show its size in the ROM, so that
+music does not take the space by surprise.
+
+Acceptance criteria
+- [ ] The Audio list shows an estimate per item and a total.
+
+---
+
+## E5 · Level editing
+
+#### US-040 · Rectangular selection, copy, paste, flip
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** app
+
+As an author, I want to select an area of a room, copy it, paste it elsewhere or in
+another room, and flip it, so that I can reuse pieces of level.
+
+Acceptance criteria
+- [ ] Select tool (`M`), `Ctrl+C`, `Ctrl+X`, `Ctrl+V`, flip horizontally and
+  vertically.
+- [ ] A selection carries all tile layers, collision overrides and, optionally,
+  entities.
+
+#### US-041 · Autotile brushes
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** —
+**Touches** core, app
+
+As an author, I want to paint "ground" and have edges and corners chosen for me,
+so that drawing rooms is fast.
+
+Acceptance criteria
+- [ ] A tileset can define terrain sets (47-tile blob and 16-tile simple).
+- [ ] The brush updates neighbours as it paints and erases.
+
+#### US-042 · Room templates
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-040
+**Touches** core, app
+
+As an author, I want to save a room or a selection as a template and start new
+rooms from it.
+
+Acceptance criteria
+- [ ] Templates are files in `studio/templates/` and appear in the New room dialog.
+
+#### US-043 · Moving backgrounds in the map editor
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** app
+
+As an author, I want backgrounds in the map editor to scroll with parallax as I
+pan, so that I see the room as the game will.
+
+Acceptance criteria
+- [ ] Panning moves each background by its parallax share.
+
+#### US-044 · Undo for deleting rooms, tilesets and sprites
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** app, server
+
+As an author, I want to undo deleting a document, so that a slip costs nothing.
+
+Acceptance criteria
+- [ ] Deleted documents go to a project trash and undo restores them.
+
+#### US-045 · Pinch zoom and finger painting
+**Priority** P3 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** app
+
+As an author on a tablet, I want pinch zoom, two-finger pan and painting with a
+finger or pen.
+
+Acceptance criteria
+- [ ] Tested on an iPad and an Android tablet.
+
+---
+
+## E6 · Text and interface
+
+#### US-050 · Font import and text drawing
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** core, codegen, runtime, app
+
+As an author, I want to import a pixel font from a PNG and draw text with it, so
+that the game can show words.
+
+Acceptance criteria
+- [ ] Fonts are a document kind with glyph size, character set and spacing.
+- [ ] The runtime draws text on a background layer or with sprites.
+- [ ] Accented Latin characters supported (French, Spanish).
+
+#### US-051 · Dialogue boxes and a dialogue file format
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** US-050
+**Touches** core, app, codegen, runtime
+
+As an author, I want to write dialogue in the studio and attach it to an entity,
+so that characters can talk.
+
+Acceptance criteria
+- [ ] A dialogue document with lines, speaker and simple choices.
+- [ ] A runtime box that types text out, waits for A and pages.
+- [ ] Text that does not fit the box is a problem.
+
+#### US-052 · HUD layout editor
+**Priority** P2 · **Status** Proposed · **Size** L · **Depends on** US-050
+**Touches** app, codegen, runtime
+
+As an author, I want to place counters, bars and icons on a 240x160 HUD, so that
+the HUD is not positioned in code.
+
+Acceptance criteria
+- [ ] HUD elements bound to named game values the game sets each frame.
+
+#### US-053 · Menus
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** US-050
+**Touches** runtime
+
+As a programmer, I want a menu helper (list, cursor, sounds), so that title and
+pause menus are quick.
+
+Acceptance criteria
+- [ ] Used by the sample's title and pause screens.
+
+---
+
+## E7 · Game systems
+
+#### US-060 · Save data for collected and opened things
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** runtime, sample
+
+As a player, I want my progress kept when I turn the console off.
+
+Acceptance criteria
+- [ ] Runtime saves `Collected`, abilities, current room and position to SRAM or
+  flash, with a version and checksum.
+- [ ] A save from an older project version loads, or is refused cleanly.
+
+#### US-061 · Game states: title, play, pause, game over
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** runtime, sample
+
+As a programmer, I want a small state machine for game screens with fades between
+them.
+
+Acceptance criteria
+- [ ] The sample has a title screen, pause and game over.
+
+#### US-062 · Doors and ability gates
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-010, US-017
+**Touches** runtime, sample
+
+As an author, I want doors that lead to another room or spot, and gates that open
+with an ability or a key, so that I can build the Metroidvania loop.
+
+Acceptance criteria
+- [ ] Door and gate behaviours, configured in the studio.
+- [ ] Opened gates are saved (US-060).
+
+#### US-063 · Camera helpers: bounds, transitions, shake
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** runtime
+
+As a programmer, I want camera zones, a cut or slide between rooms that do not
+touch, and shake, so that the camera is not rewritten per game.
+
+Acceptance criteria
+- [ ] Each one has a host test and is used in the sample.
+
+#### US-064 · Entity activation near the camera
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** US-013
+**Touches** runtime
+
+As a programmer, I want entities to wake when they come near the screen and sleep
+when far, so that large worlds stay within the CPU and sprite limits.
+
+Acceptance criteria
+- [ ] Margin configurable per entity type.
+
+---
+
+## E8 · Asset pipeline
+
+#### US-070 · Hear MIDI, XM and MOD in the studio
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** —
+**Touches** app
+
+As an author, I want to play music in the Audio list as the GBA will sound, so
+that I do not build to hear a track.
+
+Acceptance criteria
+- [ ] XM and MOD play through a browser tracker player at the GBA mixer's rate.
+- [ ] MIDI plays with its SF2 soundfont.
+
+#### US-071 · Aseprite preview and conversion, tags as animations
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** core, codegen, app
+
+As an author, I want `.aseprite` files previewed and converted, with tags becoming
+animations and frame durations kept.
+
+Acceptance criteria
+- [ ] Preview in the sprite editor; the build converts them.
+- [ ] Tags become animations unless the sprite document overrides them.
+
+#### US-072 · Import Tiled maps
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** core, app, server
+
+As an author coming from Tiled, I want to import `.tmx` and `.tmj` maps as rooms.
+
+Acceptance criteria
+- [ ] Tile layers, object layers (as entities) and the tileset come across.
+- [ ] What cannot be imported is listed.
+
+#### US-073 · Import Diamond Hands ASCII levels
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** scripts, core
+
+As the author of Diamond Hands, I want its ASCII levels imported as rooms, so that
+the game can move to the studio one piece at a time.
+
+Acceptance criteria
+- [ ] A script maps characters to tiles, collision and entities from a small config.
+- [ ] The game builds and plays from the imported rooms.
+
+---
+
+## E9 · Beyond one genre
+
+#### US-080 · Project templates by genre
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** US-010
+**Touches** server (scaffold), sample
+
+As an author, I want to start from a platformer, top-down adventure, shoot 'em up
+or puzzle template, so that the studio is for GBA games, not one kind of game.
+
+Acceptance criteria
+- [ ] The New project dialog offers templates; each builds and plays.
+- [ ] Each template has a short guide in `docs/`.
+
+#### US-081 · Affine and Mode 7 backgrounds
+**Priority** P2 · **Status** Proposed · **Size** L · **Depends on** —
+**Touches** core, codegen, runtime, app
+
+As an author, I want rotating and scaling backgrounds, so that I can make racing,
+world maps and boss effects.
+
+Acceptance criteria
+- [ ] An affine background kind with its 8bpp and 256-tile limits checked.
+
+#### US-082 · 8 bits per pixel tilesets
+**Priority** P3 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** codegen, runtime
+
+As an author, I want a tileset to use one 256-colour palette, for art that needs
+more than 15 colours in a tile.
+
+Acceptance criteria
+- [ ] Per-tileset setting; budgets account for double tile size.
+
+---
+
+## E10 · Agents and automated checks
+
+#### US-090 · Reachability check on the runtime physics
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** —
+**Touches** runtime, server, app
+
+As an author, I want to ask whether the player can get from one point to another
+with given abilities, so that I find soft locks before players do.
+
+Acceptance criteria
+- [ ] A search over the runtime's physics (compiled to wasm) answers yes with a
+  path or no.
+- [ ] Shown as a path on the map; available as an MCP tool.
+
+#### US-091 · Headless game tests from the project
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-020
+**Touches** server, runtime
+
+As a programmer, I want tests that run the ROM on the Pecten core with scripted
+input and check game state, so that CI catches broken rooms.
+
+Acceptance criteria
+- [ ] `pecten-studio test <folder>` runs test files and fails on a failed check.
+- [ ] Runs in GitHub Actions.
+
+#### US-092 · Agent-visible selection in the map
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-040
+**Touches** app, server
+
+As an author working with an agent, I want the area I select to be reported by
+`studio_view`, so that "fill this" needs no coordinates.
+
+Acceptance criteria
+- [ ] `studio_view` includes the selection rectangle and room.
+
+#### US-093 · Tune tool descriptions on a real game
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** US-073
+**Touches** server
+
+As a contributor, I want the MCP tools tried on a real project and their
+descriptions fixed from what goes wrong.
+
+Acceptance criteria
+- [ ] A written list of failures and the changes made for each.
+
+---
+
+## E11 · Distribution, ecosystem and docs
+
+#### US-100 · Publish runtime and build helper as crates
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-001
+**Touches** runtime, codegen
+
+As a programmer, I want `pecten_studio_rt` and `pecten_studio_build` on crates.io,
+so that a game does not need a path to this repository.
+
+Acceptance criteria
+- [ ] Published with semver; the data format version is checked against the
+  studio's.
+
+#### US-101 · `npx pecten-studio`
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** server, app
+
+As an author, I want to run the studio with one command and no checkout.
+
+Acceptance criteria
+- [ ] `npx pecten-studio <folder>` serves the studio; `pecten-studio` CLI included.
+
+#### US-102 · Desktop app on macOS and Windows
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** desktop, .github
+
+As an author, I want the desktop app on my system, with the CLI included.
+
+Acceptance criteria
+- [ ] Release builds for macOS (arm64, x64) and Windows x64.
+- [ ] The packaged app includes the `pecten-studio` command.
+
+#### US-103 · Export: flashcart ROM, web player, itch.io
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** server, app
+
+As an author, I want one button to make a release ROM with a correct header and a
+web page that plays it, so that I can share my game.
+
+Acceptance criteria
+- [ ] Export writes the `.gba` (fixed with gbafix) and a zip with a web player on
+  the Pecten core, ready for itch.io.
+- [ ] Title, game code and save type set in Project settings.
+
+#### US-104 · Plugin API for panels and build steps
+**Priority** P2 · **Status** Proposed · **Size** L · **Depends on** —
+**Touches** app, server, core
+
+As a contributor, I want to add a panel, a document kind or a build step from a
+package, without forking the studio.
+
+Acceptance criteria
+- [ ] Documented extension points; one plugin in the repo as an example.
+
+#### US-105 · Tutorials from an empty folder to a game
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-012
+**Touches** docs
+
+As a new author, I want a tutorial that takes me from nothing to a small game with
+enemies, collectibles and a door.
+
+Acceptance criteria
+- [ ] Each step has a screenshot and the finished project is in the repo.
+
+#### US-106 · Test on more browsers, touch and large projects
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** app
+
+As an author, I want the studio to work in Firefox and Safari and on a project
+with a hundred rooms.
+
+Acceptance criteria
+- [ ] Browser tests in CI for Chromium, Firefox and WebKit.
+- [ ] A generated 100-room project opens and paints without lag.
+
+#### US-107 · Fix the README's "left out on purpose" list
+**Priority** P0 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** README.md
+
+As a reader, I want the README to match the studio, which now has a pixel editor.
+
+Acceptance criteria
+- [ ] The pixel editor is removed from "Left out on purpose".
+- [ ] The roadmap points to this file.
+
+#### US-108 · Scripted documentation screenshots
+**Priority** P1 · **Status** In progress · **Size** S · **Depends on** —
+**Touches** scripts, docs, package.json
+
+As a contributor, I want the docs' screenshots taken by a script from a list, so
+that every new feature can be documented with up-to-date pictures without taking
+them by hand.
+
+Acceptance criteria
+- [x] `docs/screenshots.json` lists every picture in `docs/public/screenshots/`,
+  with its route, viewport and the steps to reach the state shown.
+- [x] `node scripts/screenshots.ts <name>...` starts the studio on a project, takes
+  the named shots and writes them; `--all` takes every shot not marked manual;
+  `--list` lists them. With no names and no `--all` it refuses, so hand-taken
+  pictures are not replaced by accident.
+- [ ] Playwright is a dev dependency in the lockfile and the script runs on a clean
+  checkout after `pnpm install`, `pnpm exec playwright install chromium` and
+  `pnpm build`.
+- [ ] Every non-manual shot in the list is taken successfully on `sample/`.
+- [ ] The shots marked manual (collision overlay, new tileset, new image, Build
+  panel) get the actions that make them scriptable, or a note saying why not.
+- [ ] Decide which project the published pictures come from (the docs footer says
+  Diamond Hands, the list defaults to `sample/`) and make the footer match.
+
+Notes / open questions
+- The `play` shot needs a built ROM in the project first.
+
+---
+
+## E12 · Triggers and game rules
+
+Behaviours (E2) say what an object does on its own. Rules say how a game hangs
+together: "when the player touches the lever, open the gate", "when all three gems
+are taken, start the boss music", "if the player has the double jump, hide this
+hint". With rules, a game that fits a template needs no Rust at all.
+
+This is not visual scripting. A rule is one event, a list of conditions and a list
+of actions, edited as a form, stored as JSON and compiled to tables. There are no
+loops, no expressions beyond comparisons, and nothing that runs every frame unless
+an event fires. Anything that needs more is a behaviour written in Rust (US-018),
+which rules can then call (US-118).
+
+#### US-110 · Game flags and variables
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-060
+**Touches** core (schema), codegen, runtime, app
+
+As an author, I want to declare named flags (on/off) and small counters in the
+project, so that rules and behaviours can remember what has happened.
+
+Acceptance criteria
+- [ ] Flags and counters are declared in `studio/project.json` with a name, a
+  scope (game, room) and, for counters, a range; they get constants in
+  `include_data!()`.
+- [ ] Game-scope values are saved with the rest of the save data (US-060); room
+  scope is reset on leaving the room.
+- [ ] Codegen packs them into bits and the smallest integers that hold their range,
+  and reports the total size.
+- [ ] Project settings lists, adds, renames and removes them; renaming updates every
+  rule that uses them.
+
+#### US-111 · Trigger zones
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** core, app, codegen, runtime
+
+As an author, I want to draw a rectangle in a room that fires an event when the
+player enters, stays in or leaves it, so that places can start things.
+
+Acceptance criteria
+- [ ] A zone tool in the map editor; zones have an id, a size in pixels and are
+  shown in their own colour.
+- [ ] Zones are entities of a built-in kind, so they can be referenced (US-017).
+- [ ] The runtime reports enter and leave once each, not every frame.
+
+#### US-112 · Rule format: event, conditions, actions
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-110
+**Touches** core (schema), docs
+
+As an author, I want rules stored as plain JSON next to the rooms, so that they
+diff well in git and agents can read them.
+
+Acceptance criteria
+- [ ] Rules live in `studio/rules/<id>.json` (game-wide) and in a room's file
+  (that room only).
+- [ ] A rule has an event, zero or more conditions (all must hold), one or more
+  actions run in order, and an option to fire once.
+- [ ] Actions can wait a number of frames between steps (for cutscenes) without
+  blocking the game.
+- [ ] The format is in the JSON Schema output and in `docs/reference/`.
+
+```json
+{
+  "on": { "event": "touch", "entity": "lever-1" },
+  "if": [{ "flag": "gate-open", "is": false }],
+  "do": [
+    { "action": "set_flag", "flag": "gate-open", "to": true },
+    { "action": "play_sound", "sound": "clunk" },
+    { "action": "wait", "frames": 20 },
+    { "action": "open", "entity": "gate-1" }
+  ],
+  "once": true
+}
+```
+
+#### US-113 · Rules compiled to tables and run by the runtime
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** US-112, US-001
+**Touches** codegen, runtime, sample
+
+As a programmer, I want codegen to turn rules into compact tables and the runtime
+to run them, so that rules cost little ROM and almost no CPU.
+
+Acceptance criteria
+- [ ] Rules are indexed by event, so a frame with no events does no rule work.
+- [ ] Each rule is a few bytes of opcodes with no allocation at run time.
+- [ ] The rule tables are part of the patchable data section (US-001), so editing a
+  rule needs no compile (US-002).
+- [ ] Host unit tests cover every condition and action; a bench on hardware speed
+  shows 100 rules firing in one frame stay inside a frame.
+
+#### US-114 · Built-in events, conditions and actions
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** US-113, US-010
+**Touches** runtime, codegen
+
+As an author, I want enough built-in pieces to make a whole game, so that I only
+reach for Rust for something truly new.
+
+Acceptance criteria
+- [ ] **Events:** game start, room enter and leave, zone enter and leave, touch
+  entity, entity taken, entity destroyed, button pressed near an entity, flag or
+  counter changed, timer done, player hurt, player died, dialogue choice made.
+- [ ] **Conditions:** flag is, counter compared to a number, player has ability,
+  entity is alive or taken, player in room or zone, button held.
+- [ ] **Actions:** set flag, add to or set counter, give or remove ability, open or
+  close a door or gate, spawn, destroy, show or hide an entity, move an entity to a
+  point, play sound, change music, start dialogue (US-051), move the player to a
+  room and point, camera shake or pan to a point (US-063), start a timer, save the
+  game, fade, wait, end the game.
+- [ ] Each piece declares its parameters like behaviours do (US-011), so the
+  studio builds its form from the same data.
+
+#### US-115 · Rule editor in the studio
+**Priority** P1 · **Status** Proposed · **Size** L · **Depends on** US-114
+**Touches** app
+
+As an author, I want to make and edit rules with forms and by picking things on the
+map, so that I never write the JSON by hand.
+
+Acceptance criteria
+- [ ] A Rules panel lists rules for the game and for the open room, with search.
+- [ ] Each rule reads as a sentence ("When the player touches Lever 1, if Gate open
+  is off: set Gate open, play Clunk, wait 20 frames, open Gate 1").
+- [ ] Entity, zone, room, sound and flag parameters are picked from lists or by
+  clicking on the map.
+- [ ] Selecting an entity shows the rules that mention it; the map draws arrows from
+  a rule's trigger to the things it acts on.
+- [ ] Undo and redo, like other documents.
+
+#### US-116 · Rules checked as problems
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-112
+**Touches** core (validate), app
+
+As an author, I want mistakes in rules to show in the Problems panel, so that I
+find them before playing.
+
+Acceptance criteria
+- [ ] Unknown or deleted entities, zones, rooms, sounds, flags and abilities are
+  errors.
+- [ ] A flag that is read but never set, or set but never read, is a warning.
+- [ ] Two rules on the same event that set the same flag to different values are a
+  warning.
+- [ ] Clicking a problem opens the rule at the step at fault.
+
+#### US-117 · Flags and fired rules in the live inspector
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** US-113, US-021
+**Touches** app, codegen
+
+As an author, I want to see flags and counters live while playing, change them, and
+see which rules fired, so that I can find out why a door did not open.
+
+Acceptance criteria
+- [ ] The Play panel lists flags and counters, updated every frame, and editable.
+- [ ] A log lists each rule that fired with its frame, and each rule whose event
+  came but whose conditions failed, with the condition that failed.
+- [ ] Clicking a log line opens the rule.
+
+#### US-118 · Custom events, conditions and actions from Rust
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** US-113, US-018
+**Touches** runtime, codegen, app
+
+As a programmer, I want to add my own events, conditions and actions in the game
+crate, so that authors can use my game's special mechanics from rules.
+
+Acceptance criteria
+- [ ] A custom piece is declared like a behaviour, with typed parameters, and shows
+  in the rule editor after a build.
+- [ ] Documented with an example in `sample/` (for example a "boss phase" event).
+
+#### US-119 · Rule tools for agents
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-112
+**Touches** server
+
+As an agent, I want tools to list, add, change and remove rules and flags, checked
+against the schema, so that I can wire up a level for an author.
+
+Acceptance criteria
+- [ ] MCP tools `rule_list`, `rule_set`, `rule_remove`, `flag_set`, `flag_remove`.
+- [ ] Writes answer with the problems they left, like other tools.
+
+#### US-120 · Template games built with rules only
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-114, US-080
+**Touches** server (scaffold), sample, docs
+
+As an author, I want the genre templates to use rules for their doors, gates,
+pickups and story beats, so that I can see that a whole game needs no Rust.
+
+Acceptance criteria
+- [ ] The Metroidvania template has a lever and gate, an ability gate, a locked
+  room opened by collecting items, and an ending, all done with rules and built-in
+  behaviours.
+- [ ] Its `main.rs` is not edited by the author at any point in the tutorial
+  (US-105).
