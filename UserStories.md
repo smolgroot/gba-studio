@@ -12,7 +12,7 @@ together, with the console's limits shown rather than discovered.
    priority, the user it serves, and acceptance criteria. Open questions go under
    the story, not in code.
 2. **Plan.** When a story is picked up, its status becomes `Planned` and a short
-   design note is added (or linked from `docs/`): data format changes, crates and
+   design note is added in `design/US-NNN.md`: data format changes, crates and
    packages touched, tests to write.
 3. **Build.** Status `In progress`. Each acceptance criterion becomes at least one
    test where it can be tested (`pnpm test`, `cargo test`, or a headless run on the
