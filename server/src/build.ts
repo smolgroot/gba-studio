@@ -135,6 +135,16 @@ export class Builder {
     })
   }
 
+  /** Whether a build is running now. */
+  get running(): boolean {
+    return this.child !== null
+  }
+
+  /** Tells the studio's pages that a ROM was rewritten without a build, so Play restarts it. */
+  async romPatched(): Promise<void> {
+    this.broadcast({ type: 'rom-patched', status: await this.status() })
+  }
+
   stop(): void {
     const child = this.child
     if (!child?.pid) return

@@ -21,7 +21,7 @@ pub const H_CAPACITY: usize = 16;
 
 /// Sections in the table, each `{ offset u32, length u32 }`, in this order. A later
 /// version may add sections after these; a reader skips those it does not know.
-pub const SECTIONS: usize = 7;
+pub const SECTIONS: usize = 8;
 pub const S_STRINGS: usize = 0;
 pub const S_CLASSES: usize = 1;
 pub const S_ROOMS: usize = 2;
@@ -29,6 +29,7 @@ pub const S_ENTITIES: usize = 3;
 pub const S_PROPS: usize = 4;
 pub const S_CELLS: usize = 5;
 pub const S_GLOBALS: usize = 6;
+pub const S_MANIFEST: usize = 7;
 
 /// Where the first section may start: after the header and the table.
 pub const fn table_end(sections: usize) -> usize {
@@ -130,3 +131,19 @@ pub const fn default_reserve(used: usize) -> usize {
     let quarter = (used / 4).next_multiple_of(1024);
     if quarter < 4096 { 4096 } else { quarter }
 }
+
+/// The manifest: what the game compiled from the project, beside the section, so a
+/// tool can tell whether a new section still fits the game or it must be rebuilt.
+/// The game itself does not read it.
+///
+/// Four counts (u32 each): entity types, tilesets, pictures, tracks. Then the records,
+/// in that order:
+/// - entity type, [`M_ENTITY_TYPE`] bytes: id (string), sprite id (string, empty for none);
+/// - tileset, [`M_ART`] bytes: id (string), tiles (u32), palettes (u32);
+/// - picture, [`M_ART`] bytes: file path (string), distinct tiles (u32), palettes (u32);
+/// - track, [`STR`] bytes: id (string).
+///
+/// Collision class and room ids, which also become code, are in their own sections.
+pub const M_COUNTS: usize = 16;
+pub const M_ENTITY_TYPE: usize = 16;
+pub const M_ART: usize = 16;

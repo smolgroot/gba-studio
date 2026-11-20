@@ -786,7 +786,7 @@ impl Cells for Enclosed<'_> {
 
 /// Which entities are gone for good: coins picked up, doors opened. A bit per entity,
 /// numbered by [`World::entity_index`]; `WORDS` of 32 bits each, so size it with
-/// `data::ENTITY_COUNT.div_ceil(32)`. The words are plain data a game can save.
+/// `data::ENTITY_SLOTS.div_ceil(32)`. The words are plain data a game can save.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Collected<const WORDS: usize> {
     pub words: [u32; WORDS],

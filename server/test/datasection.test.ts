@@ -13,7 +13,7 @@ const MAGIC = Buffer.from('PECTDATA')
 
 /** The layout of runtime/src/data/layout.rs and docs/reference/data-section.md. */
 const HEADER = 20
-const SECTIONS = 7
+const SECTIONS = 8
 const GLOBALS = 6
 const PHYSICS = 8
 /** Physics fields are i32s after the globals' first 8 bytes; this is the jump speed. */

@@ -164,6 +164,25 @@
       "x": 24,
       "y": 136,
       "props": {}
+    },
+    {
+      "type": "sign",
+      "x": 64,
+      "y": 136,
+      "props": {
+        "text": "Café ahead",
+        "lit": true
+      }
+    },
+    {
+      "type": "sign",
+      "x": 96,
+      "y": 136,
+      "props": {
+        "weight": 70000,
+        "style": "stone"
+      }
     }
-  ]
+  ],
+  "music": "theme"
 }

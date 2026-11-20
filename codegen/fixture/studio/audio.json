@@ -1,5 +1,12 @@
 {
   "version": 1,
-  "tracks": [],
+  "tracks": [
+    {
+      "id": "theme",
+      "name": "Theme",
+      "file": "assets/theme.xm",
+      "format": "xm"
+    }
+  ],
   "sfx": []
 }

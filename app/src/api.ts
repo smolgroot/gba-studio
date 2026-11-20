@@ -32,11 +32,19 @@ export interface ToolchainReport {
   canSetUp: boolean
   items: Array<{ name: string; ok: boolean; install?: string }>
 }
+/** What a patch of the level data into the built ROM did: see server/src/patch.ts. */
+export type PatchResult =
+  | { status: 'patched' | 'unchanged'; rom: string; used: number; capacity: number; ms: number }
+  | { status: 'needs-build'; rom: string | null; reasons: string[] }
+  | { status: 'invalid'; rom: string | null; problems: string[] }
+
 /** What the server pushes while a build runs. */
 export type BuildMessage =
   | { type: 'build-started'; mode: 'dev' | 'release'; command: string }
   | { type: 'build-log'; lines: string[] }
   | { type: 'build-finished'; status: BuildStatus }
+  /** Level data was written into a ROM without a build. */
+  | { type: 'rom-patched'; status: BuildStatus }
 /** What a coding agent did through the studio's MCP endpoint, or asks the page to show. */
 export type AgentMessage =
   | { type: 'agent'; tool: string; summary: string; failed: boolean }
@@ -62,6 +70,7 @@ export const api = {
   buildStatus: () => request<BuildStatus>('/api/build'),
   build: (mode: 'dev' | 'release') => request<BuildStatus>('/api/build', json('POST', { mode })),
   stopBuild: () => request<{ ok: true }>('/api/build/stop', json('POST', {})),
+  patch: (mode: 'dev' | 'release') => request<PatchResult>('/api/patch', json('POST', { mode })),
   toolchain: () => request<ToolchainReport>('/api/toolchain'),
   setupCrate: () => request<{ written: string[] }>('/api/setup-crate', json('POST', {})),
   context: (view: unknown) => request<{ ok: true }>('/api/context', json('POST', view)),

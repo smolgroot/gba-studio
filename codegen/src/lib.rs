@@ -26,7 +26,8 @@ use std::{
 use pecten_studio_rt::{
     data::{
         Background, CollisionClass, CollisionKind, Prop,
-        write::{ClassData, EntityData, RoomData, WorldData},
+        layout::ENTITY,
+        write::{ArtData, ClassData, EntityData, Manifest, RoomData, WorldData},
     },
     physics::{Movement, Physics, PhysicsMode, PlatformerPhysics, TopDownPhysics},
 };
@@ -597,9 +598,14 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
         rooms,
         start,
         physics: physics_of(&docs.project.physics),
+        manifest: Manifest {
+            entity_types: types.iter().map(|t| (t.id.as_str(), t.sprite.as_deref())).collect(),
+            tilesets: tileset_ids.iter().enumerate().map(|(n, id)| ArtData { id, tiles: tile_counts[n] as u32, palettes: tileset_palettes[n] as u32 }).collect(),
+            pictures: pictures.iter().map(|(file, (_, cost))| ArtData { id: file, tiles: cost.map_or(0, |c| c.0 as u32), palettes: cost.map_or(0, |c| c.1 as u32) }).collect(),
+            tracks: docs.audio.tracks.iter().map(|t| t.id.as_str()).collect(),
+        },
     };
     let (section, used) = pecten_studio_rt::data::write::write(&world, docs.project.build.data_reserve.map(|bytes| bytes as usize));
-    let entity_count: usize = world.rooms.iter().map(|room| room.entities.len()).sum();
     summary.push(format!("data section: {used} bytes, {} more reserved", section.len() - used));
     write("studio_data.bin", &section, &mut problems);
     let data = format!(
@@ -619,8 +625,9 @@ pub mod data {{
     /// What the compiled half of the game holds, which the section may name.
     pub const LIMITS: Limits = Limits {{ entity_kinds: {kind_count}, tilesets: {tileset_count}, backgrounds: {background_count}, tracks: {track_count} }};
 
-    /// Entities in the project when it was built: size `Collected` with it.
-    pub const ENTITY_COUNT: usize = {entity_count};
+    /// The most entities the section has room for: size `Collected` with it, so that
+    /// entities added to a patched ROM can be collected too.
+    pub const ENTITY_SLOTS: usize = {entity_slots};
 
     /// The world as the ROM holds it now. Call it once, at the start.
     ///
@@ -660,6 +667,7 @@ pub mod data {{
 }}
 "#,
         section_len = section.len(),
+        entity_slots = section.len() / ENTITY,
         section_file = out_file("studio_data.bin"),
         tileset_count = tileset_rows.len(),
         background_count = pictures.len(),
@@ -787,12 +795,22 @@ mod tests {
         assert!(data.contains("pub const SOLID: u8 = 1;"));
         assert!(data.contains("PlayerStart,"));
         assert!(data.contains("pub const ENTRY: usize = 0;"));
-        assert!(data.contains("pub const ENTITY_COUNT: usize = "), "{data}");
+        assert!(data.contains("pub const ENTITY_SLOTS: usize = "), "{data}");
         assert!(data.contains("Limits { entity_kinds: "), "{data}");
         assert!(!data.contains("pub static ROOMS"), "rooms are in the section, not in code: {data}");
 
         // Everything else is in the data section, which the runtime reads back.
         let section = fs::read(out.join("studio_data.bin")).unwrap();
+        // The studio's TypeScript port writes sections too (core/src/datasection.ts) and
+        // is tested against this same file, so the two cannot drift apart. Set
+        // PECTEN_STUDIO_UPDATE_FIXTURE=1 to rewrite it after a deliberate change.
+        let expected = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixture/expected/studio_data.bin");
+        if std::env::var_os("PECTEN_STUDIO_UPDATE_FIXTURE").is_some() {
+            fs::create_dir_all(expected.parent().unwrap()).unwrap();
+            fs::write(&expected, &section).unwrap();
+        }
+        assert!(fs::read(&expected).is_ok_and(|bytes| bytes == section), "the section differs from {}; rerun with PECTEN_STUDIO_UPDATE_FIXTURE=1 if that is meant", expected.display());
+        assert!(data.contains(&format!("ENTITY_SLOTS: usize = {};", section.len() / 12)), "{data}");
         assert!(data.contains(&format!("Aligned<[u8; {}]>", section.len())), "{data}");
         let world = World::new(&section, &Limits::ANY).unwrap_or_else(|error| panic!("{error:?}"));
         assert_eq!(world.start(), Some(0));

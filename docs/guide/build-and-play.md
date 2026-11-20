@@ -37,8 +37,34 @@ Open **Play** in the Project panel. It runs the built ROM on the [Pecten](https:
 | **Reset** | Restart the game. |
 | **Sound** | Turn sound on. Browsers require a click first. |
 | **Restart on rebuild** | Restart by itself when the ROM is rebuilt. |
+| **Patch on change** | While the game runs, put each saved change to the level data into the ROM without a build. On by default. |
 
 The panel names the ROM, its size and when it was built. On touch devices, on-screen buttons appear.
+
+### Patch on change
+
+While the game runs, each change you save to tiles, collision, entities and their properties, where rooms sit on the [world map](./world-map), or [physics](./physics) is written into the built ROM's level data in a fraction of a second, and the game restarts with it. Nothing is compiled. Below the buttons the panel says how long it took and how much of the room for level data is used, as "Patched in N ms · level data X of Y bytes".
+
+![The Play panel after a change was patched into the running game](/screenshots/play-patched.png)
+
+Some changes are compiled into the game, so only a build brings them in. The panel then shows "Needs a build:" with the reasons, and a **Build dev** button (**Build release** when the release ROM is shown). These need a build:
+
+- an entity type added or removed, or an entity type's sprite changed;
+- rooms or collision classes added, removed or put in a different order;
+- tilesets, or the number of tiles in one;
+- background pictures;
+- music tracks;
+- level data larger than the room the last build left for it. That room is set by `build.dataReserve` in `studio/project.json`; see [Data section](../reference/data-section#room-to-grow).
+
+![The Play panel saying a change needs a build, with the Build dev button](/screenshots/play-needs-build.png)
+
+::: warning Art and code need a build
+Patching does not notice changes to the pixels of a PNG or to the game's Rust code yet, so the game keeps the old ones. After changing either, press **Build dev**.
+:::
+
+Only the ROM at the project's dev ROM path (or release ROM path, when that one is shown) is patched. It must have been built once with this version of the studio. A project with errors is not patched: the panel lists them, as the [Problems panel](./interface#problems) does.
+
+The same patch can be run from the command line or by an agent; see [Command line and MCP](./agents).
 
 ### Keyboard
 

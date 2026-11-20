@@ -41,14 +41,17 @@ up with a skill and the server entry. Begin with
 run-length encoded and easy to corrupt. Tilesets, sprites, animations, entity types
 and audio have tools of their own (\`tileset_set_collision\`, \`sprite_set_animation\`,
 \`entity_type_set\`, \`audio_add\` and others). \`build\` and \`run_rom\` build the game and
-return pictures of it running. If the studio is open, it shows your changes as you
-make them.
+return pictures of it running. After a change to level data only (tiles, collision,
+entities, properties, room placement, physics), \`patch_rom\` puts it into the built
+ROM in under a second instead of a build; it says when a build is needed. If the
+studio is open, it shows your changes as you make them.
 
 Without MCP, these commands print JSON:
 
 \`\`\`sh
 pecten-studio validate . --json     # every problem in the project
 pecten-studio build . --json        # run the dev build; add --release for the release one
+pecten-studio patch . --json        # put changed level data into the built ROM; exit 3 if it needs a build
 pecten-studio schema                # JSON Schema of every document kind
 \`\`\`
 
@@ -76,7 +79,7 @@ Run \`validate\` after changing anything under \`studio/\`.
 ## In the game code
 
 \`\`\`rust
-pecten_studio_rt::include_data!();   // data::world(), EntityKind, ENTITY_COUNT, room and class constants
+pecten_studio_rt::include_data!();   // data::world(), EntityKind, ENTITY_SLOTS, room and class constants
 pecten_studio_rt::include_gfx!();    // gfx::ART, TILESETS, BACKGROUNDS, SPRITE_<NAME>, ENTITY_SPRITES
 pecten_studio_rt::include_audio!();  // audio::TRACKS, SFX (needs agb_tracker)
 \`\`\`
@@ -146,7 +149,8 @@ A working order that avoids mistakes:
    \`validate\` at the end. Render the room again and look at it.
 5. **Show.** \`studio_open\` puts what you changed in front of the author. Their
    Ctrl+Z in the studio undoes your change to a document.
-6. **Run.** \`build\`, then \`run_rom\` with steps of frames and held buttons; it returns
+6. **Run.** \`build\` (or \`patch_rom\` when only level data changed since the last
+   build), then \`run_rom\` with steps of frames and held buttons; it returns
    a picture after each step. The game starts from power-on every time, so script
    the whole path to what you want to see.
 

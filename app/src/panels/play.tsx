@@ -8,7 +8,7 @@ import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, fileUrl } from '../api.ts'
-import type { RomInfo, ToolchainReport } from '../api.ts'
+import type { PatchResult, RomInfo, ToolchainReport } from '../api.ts'
 import { Checkbox } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { ui } from '../theme.ts'
@@ -185,6 +185,10 @@ export function PlayView() {
   const [running, setRunning] = useState(false)
   const [restarts, setRestarts] = useState(0)
   const [autoRestart, setAutoRestart] = useState(true)
+  const [patchOnChange, setPatchOnChange] = useState(true)
+  const [patch, setPatch] = useState<PatchResult | null>(null)
+  const patchedRevision = useRef(revision)
+  const building = build?.running ?? false
   const [sound, setSound] = useState(false)
   const loadedModified = useRef(0)
   const touch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
@@ -210,6 +214,23 @@ export function PlayView() {
   useEffect(() => {
     if (running && autoRestart && rom && rom.modified !== loadedModified.current) void start(rom)
   }, [rom, running, autoRestart, start, revision])
+
+  // While the game runs, each saved change puts the level data into the ROM, which
+  // restarts it as above. What cannot go in that way says why and offers a build.
+  useEffect(() => {
+    if (!running || !patchOnChange || building || revision === patchedRevision.current) return
+    const timer = setTimeout(() => {
+      patchedRevision.current = revision
+      api.patch(mode).then(
+        (result) => setPatch((last) => (result.status === 'unchanged' && last?.status === 'patched' ? last : result)),
+        (e: Error) => setError(e.message),
+      )
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [revision, running, patchOnChange, building, mode])
+  useEffect(() => {
+    if (building) setPatch(null)
+  }, [building])
 
   // The frame loop, paced by the display clock at the console's 59.73 Hz.
   useEffect(() => {
@@ -302,9 +323,20 @@ export function PlayView() {
         )}
         <Button variant="outlined" disabled={!running || sound} onClick={() => void enableSound()}>{sound ? 'Sound on' : 'Sound'}</Button>
         <Checkbox checked={autoRestart} onChange={setAutoRestart}>Restart on rebuild</Checkbox>
+        <Checkbox checked={patchOnChange} onChange={setPatchOnChange}>Patch on change</Checkbox>
       </Box>
       <Typography variant="body2" color="text.secondary">{romPath} · {(rom.size / 1024).toFixed(0)} KB · built {new Date(romModified ?? 0).toLocaleTimeString()}</Typography>
       {error && <Typography color="error" role="alert">{error}</Typography>}
+      {patch?.status === 'patched' && (
+        <Typography variant="body2" color="text.secondary">Patched in {patch.ms} ms · level data {patch.used.toLocaleString()} of {patch.capacity.toLocaleString()} bytes</Typography>
+      )}
+      {patch?.status === 'needs-build' && (
+        <Box role="status" sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Typography variant="body2" color="warning.main">Needs a build: {patch.reasons.join('; ')}.</Typography>
+          <Button size="small" variant="contained" disabled={building} onClick={() => void api.build(mode).catch((e: Error) => setError(e.message))}>Build {mode}</Button>
+        </Box>
+      )}
+      {patch?.status === 'invalid' && <Typography variant="body2" color="error" role="alert">Not patched: {patch.problems.join('; ')}</Typography>}
       <Box sx={{ width: 'min(100%, 720px)', aspectRatio: '3 / 2', bgcolor: '#000', border: '1px solid #333' }}>
         <canvas ref={canvas} width={240} height={160} className="pixelated" style={{ width: '100%', height: '100%', display: 'block' }} />
       </Box>

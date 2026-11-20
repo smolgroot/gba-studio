@@ -28,7 +28,7 @@ A background is cut into 8x8 tiles like a tileset and keeps one of each tile tha
 
 | Macro | Gives | Needs |
 | --- | --- | --- |
-| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_COUNT` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum | nothing |
+| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_SLOTS` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum | nothing |
 | `include_gfx!()` | `gfx::TILESETS`, `BACKGROUNDS`, `ART` (both together, for the views), one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
 | `include_audio!()` | `audio::TRACKS`, `SFX` and index constants | `agb_tracker` in the game |
 
@@ -52,12 +52,12 @@ for entity in world.room(room).entities() {
 
 Nothing is copied into RAM: the `World` reads straight from the ROM. `data::world()` stops the game with a message if the section cannot be read, which only happens if it was replaced by one the game was not built for.
 
-The section has room to grow after the data, so a project that becomes a little larger still fits. By default the reserve is a quarter of the data, at least 4 KiB. Set `build.dataReserve` in `studio/project.json` to choose it in bytes. You still build the game for a change to reach the ROM.
+The section has room to grow after the data, so a project that becomes a little larger still fits. By default the reserve is a quarter of the data, at least 4 KiB. Set `build.dataReserve` in `studio/project.json` to choose it in bytes. While that room lasts, the studio can replace the level data in a built ROM without compiling: see [Patch on change](./build-and-play#patch-on-change).
 
-`data::ENTITY_COUNT` is the number of entities in the project when it was built. Size `Collected` with it, one bit per entity in 32-bit words:
+`data::ENTITY_SLOTS` is the number of entities the data section has room for, so it also covers entities added later without a build. Size `Collected` with it, one bit per entity in 32-bit words:
 
 ```rust
-const ENTITY_WORDS: usize = data::ENTITY_COUNT.div_ceil(32);
+const ENTITY_WORDS: usize = data::ENTITY_SLOTS.div_ceil(32);
 let mut found = Collected::<ENTITY_WORDS>::new();
 ```
 

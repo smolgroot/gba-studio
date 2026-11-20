@@ -12,6 +12,7 @@ import { WebSocketServer } from 'ws'
 import { Builder } from './build.ts'
 import type { BuildMode } from './build.ts'
 import { handle } from './mcp.ts'
+import { patchRom } from './patch.ts'
 import { HttpError, ProjectFolder } from './project.ts'
 import { checkToolchain, setupGameCrate } from './scaffold.ts'
 import type { StudioView, ToolContext } from './tools.ts'
@@ -144,6 +145,8 @@ export async function startServer(options: ServerOptions): Promise<{ app: Fastif
     await builder.start(request.body?.mode as BuildMode)
     return builder.status()
   })
+  // Level data into the built ROM without a build, when only data changed.
+  app.post<{ Body: { mode?: unknown } }>('/api/patch', (request) => patchRom(project, builder, request.body?.mode === 'release' ? 'release' : 'dev'))
   app.post('/api/build/stop', async () => {
     builder.stop()
     return { ok: true }

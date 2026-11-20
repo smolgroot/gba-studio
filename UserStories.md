@@ -70,7 +70,7 @@ Notes / open questions
 | ID | Title | Epic | Priority | Status | Size |
 | --- | --- | --- | --- | --- | --- |
 | US-001 | Fixed-layout data section in the ROM | E1 | P0 | Done | L |
-| US-002 | Patch level data into a built ROM without compiling | E1 | P0 | Proposed | M |
+| US-002 | Patch level data into a built ROM without compiling | E1 | P0 | Done | M |
 | US-003 | Live-apply edits to the running game | E1 | P0 | Proposed | L |
 | US-004 | Say when a change needs a full build | E1 | P0 | Proposed | S |
 | US-005 | Play from the room and spot under the cursor | E1 | P1 | Proposed | M |
@@ -178,21 +178,21 @@ Notes / open questions
   stay compiled (see `design/US-001.md`).
 
 #### US-002 · Patch level data into a built ROM without compiling
-**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-001
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-001
 **Touches** codegen (as wasm or TS port), server, app
 
 As an author, I want the Play panel to pick up a room edit in about a second,
 so that trying a jump or a layout does not mean waiting for a build.
 
 Acceptance criteria
-- [ ] Given a built ROM, when I change tiles, collision, entities, entity
+- [x] Given a built ROM, when I change tiles, collision, entities, entity
   properties, world placement or physics, then the studio rewrites the data
   section and restarts the game in under 2 seconds on the sample.
-- [ ] The patched ROM is byte-for-byte what a full build would produce for the same
+- [x] The patched ROM is byte-for-byte what a full build would produce for the same
   data section.
-- [ ] If the new data does not fit the reserve, the studio says so and offers a
+- [x] If the new data does not fit the reserve, the studio says so and offers a
   full build.
-- [ ] The patch step is available from the CLI (`pecten-studio patch <folder>`) and
+- [x] The patch step is available from the CLI (`pecten-studio patch <folder>`) and
   MCP (`patch_rom`).
 
 #### US-003 · Live-apply edits to the running game

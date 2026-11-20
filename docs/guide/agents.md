@@ -5,12 +5,28 @@ The studio's project code is also a command line and an MCP server, so an agent 
 ```sh
 pecten-studio validate <folder> [--json]            # every problem; exit 1 on errors
 pecten-studio build <folder> [--release] [--json]   # run the project's build command
+pecten-studio patch <folder> [--release] [--json]   # put changed level data into the built ROM; exit 3 if it needs a build
 pecten-studio schema                                # JSON Schema of every document kind
 pecten-studio agents <folder> [--claude]            # write AGENTS.md; --claude also sets up Claude Code
 pecten-studio mcp <folder>                          # MCP server over stdio
 ```
 
 From a checkout, `pecten-studio` is `node <this repo>/server/src/cli.ts`.
+
+## Patching the ROM
+
+`pecten-studio patch` does what **Patch on change** does in the [Play panel](./build-and-play#patch-on-change): it writes the project's current level data (tiles, collision, entities and their properties, world placement, physics) into the built dev ROM without compiling. Add `--release` to patch the release ROM instead. The ROM must have been built once with this version of the studio.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | Patched, or the ROM already holds this level data. |
+| 1 | The project has errors; nothing was written. |
+| 2 | The command was used wrongly, or could not run (for example, the folder cannot be read). |
+| 3 | The change needs a build. The reasons are printed. |
+
+With `--json` it prints an object with `ok` and `status` (`patched`, `unchanged`, `needs-build` or `invalid`), the `rom` path, and then `used` and `capacity` (bytes of level data, and the room the build left for it) and `ms`, or `reasons` for a build, or `problems`.
+
+The MCP tool `patch_rom` does the same, with `mode` set to `dev` (the default) or `release`, and answers in one line like the command.
 
 ## Setting up Claude Code
 
@@ -58,7 +74,7 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 | `sprite_create`, `sprite_set_animation`, `sprite_remove_animation`, `sprite_set_geometry` | Sprites from a sheet in the folder, their animations, anchor and hitbox |
 | `audio_add` | Add a WAV, XM, MOD or MIDI file in the folder as a sound effect or track |
 | `render_room`, `render_tileset`, `render_sprite` | Pictures: a room (optionally tinted by collision), a tileset or sprite sheet with its grid |
-| `build`, `run_rom` | Build the ROM; run it headless for given frames and held buttons and get a picture after each step |
+| `build`, `patch_rom`, `run_rom` | Build the ROM; put changed level data into the built ROM without a build; run it headless for given frames and held buttons and get a picture after each step |
 | `studio_view`, `studio_open` | What the author has open; put an item in front of them (studio endpoint only) |
 
 Every write is validated and answered with the problems it left in that file. Errors inside a tool come back as text the agent can act on ("the tileset has 16 tiles, numbered 0 to 15; there is no tile 99").

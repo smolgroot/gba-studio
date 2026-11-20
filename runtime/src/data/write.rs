@@ -38,6 +38,25 @@ pub struct RoomData<'a> {
     pub entities: Vec<EntityData<'a>>,
 }
 
+/// A tileset or a picture as the game compiled it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArtData<'a> {
+    /// A tileset's id, or a picture's file path.
+    pub id: &'a str,
+    pub tiles: u32,
+    pub palettes: u32,
+}
+
+/// What the game compiled from the project: see [`S_MANIFEST`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Manifest<'a> {
+    /// Each entity type's id and its sprite's, in project order.
+    pub entity_types: Vec<(&'a str, Option<&'a str>)>,
+    pub tilesets: Vec<ArtData<'a>>,
+    pub pictures: Vec<ArtData<'a>>,
+    pub tracks: Vec<&'a str>,
+}
+
 /// Everything a section holds.
 #[derive(Clone, Debug)]
 pub struct WorldData<'a> {
@@ -45,6 +64,7 @@ pub struct WorldData<'a> {
     pub rooms: Vec<RoomData<'a>>,
     pub start: Option<u16>,
     pub physics: Physics,
+    pub manifest: Manifest<'a>,
 }
 
 /// Strings, each kept once.
@@ -171,6 +191,23 @@ pub fn write(world: &WorldData, reserve: Option<usize>) -> (Vec<u8>, usize) {
     ];
     for field in fields {
         globals.extend_from_slice(&field.to_le_bytes());
+    }
+    let manifest = &world.manifest;
+    let out = &mut sections[S_MANIFEST];
+    for count in [manifest.entity_types.len(), manifest.tilesets.len(), manifest.pictures.len(), manifest.tracks.len()] {
+        out.extend_from_slice(&(count as u32).to_le_bytes());
+    }
+    for (id, sprite) in &manifest.entity_types {
+        strings.put(out, id);
+        strings.put(out, sprite.unwrap_or(""));
+    }
+    for art in manifest.tilesets.iter().chain(&manifest.pictures) {
+        strings.put(out, art.id);
+        out.extend_from_slice(&art.tiles.to_le_bytes());
+        out.extend_from_slice(&art.palettes.to_le_bytes());
+    }
+    for track in &manifest.tracks {
+        strings.put(out, track);
     }
     sections[S_STRINGS] = strings.bytes;
 

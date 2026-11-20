@@ -46,7 +46,7 @@ Only cells of kind `solid` stop a character seen from above. Hazards work as the
 
 ## In the game's code
 
-The build puts these numbers in the ROM's [data section](../reference/data-section) with the rest of the level data, so a change needs a build to reach the ROM. The game reads them once, at the start, and the runtime's controllers apply them:
+The build puts these numbers in the ROM's [data section](../reference/data-section) with the rest of the level data. While the game runs in the [Play panel](./build-and-play#patch-on-change), a change is patched into the ROM and the game restarts with it, without a build. The game reads them once, at the start, and the runtime's controllers apply them:
 
 ```rust
 use pecten_studio_rt::physics::{PlatformerController, PlatformerInput};

@@ -16,6 +16,8 @@
     { "name": "project-settings", "description": "Project settings with build commands and entity types", "route": "project" },
     { "name": "build-panel", "description": "The Build panel after a build", "route": "room:entry", "manual": true },
     { "name": "play", "description": "The game running in the Play panel", "route": "play", "waitFor": "canvas", "delay": 3000 },
+    { "name": "play-patched", "description": "The Play panel after a change was patched into the running game", "route": "play", "waitFor": "canvas", "delay": 3000, "manual": true },
+    { "name": "play-needs-build", "description": "The Play panel saying a change needs a build, with the Build dev button", "route": "play", "waitFor": "canvas", "delay": 3000, "manual": true },
     { "name": "mobile", "description": "The studio at phone width", "route": "room:entry", "viewport": { "width": 390, "height": 844 } }
   ]
 }

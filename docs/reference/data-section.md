@@ -8,7 +8,9 @@ audio are compiled into the game and are not in the section; the section refers 
 them by number.
 
 Because the layout is fixed and versioned, a tool can find the section in a `.gba`
-file and replace it without compiling the game, as long as the new data fits.
+file and replace it without compiling the game, as long as the new data fits. The
+studio does this when you edit while the game runs, and with `pecten-studio patch`
+(see [Build and Play](../guide/build-and-play)).
 
 This page is for tools that read or write the section. A game does not need it: it
 calls `data::world()` and uses the runtime's `World`.
@@ -26,9 +28,14 @@ can be as large as the capacity. The reserve is set by `build.dataReserve` in
 data, rounded up to a KiB, and at least 4 KiB.
 
 The game also has a fixed list of entity types, tilesets, background pictures and
-tracks. A section that names more than the game was built with is refused when the
-game starts. So is a section with more entities than the game was built with if the
-game sizes its save data with `data::ENTITY_COUNT`.
+tracks, and the ids of rooms and collision classes become names in its code. The
+section's manifest records them, so a tool can tell when a new section no longer
+fits the game and it must be rebuilt. A section that names more than the game was
+built with is refused when the game starts.
+
+A game sizes what it remembers about entities (`Collected`) with
+`data::ENTITY_SLOTS`, the number of entities the capacity could hold, so entities
+added by a patch are remembered too.
 
 ## Layout
 
@@ -42,7 +49,7 @@ they point into. Every part starts on a 4-byte boundary.
 | --- | --- | --- |
 | 0 | 8 | `PECTDATA` |
 | 8 | 2 | Layout version: 1. A game refuses any other. |
-| 10 | 2 | Entries in the table: 7. A later version may add parts after these; a reader skips those it does not know. |
+| 10 | 2 | Entries in the table: 8. A later version may add parts after these; a reader skips those it does not know. |
 | 12 | 4 | Bytes used, header included. |
 | 16 | 4 | Capacity: bytes the section takes in the ROM, at least the bytes used. |
 | 20 | 8 each | The table: `{ offset u32, length u32 }` for each part below, in this order. |
@@ -56,6 +63,7 @@ they point into. Every part starts on a 4-byte boundary.
 | 4 props | Entity properties, 20 bytes each. |
 | 5 cells | Collision cells and tile layer cells. |
 | 6 globals | The start room, the entity count and the physics, 92 bytes. |
+| 7 manifest | What the game compiled from the project. The game does not read it. |
 
 ### Collision class
 
@@ -145,6 +153,26 @@ The physics numbers, in order, in the units of the [Physics](../guide/physics) t
 | 8 | jump speed | 19 | corner slide |
 | 9 | jump cut | 20 | grid size |
 | 10 | air jumps, 0 to 255 | | |
+
+### Manifest
+
+Four counts (`u32` each): entity types, tilesets, pictures, tracks. Then, in that
+order:
+
+| Record | Size | Fields |
+| --- | --- | --- |
+| Entity type | 16 | id (string), sprite id (string, empty for none) |
+| Tileset | 16 | id (string), tiles (`u32`), palettes (`u32`) |
+| Picture | 16 | file path (string), distinct tiles (`u32`), palettes (`u32`) |
+| Track | 8 | id (string) |
+
+Tilesets and pictures are in the order the rooms number them: tilesets by id,
+pictures by path. The tile and palette counts let a tool check the GBA's video
+memory limits for a room without converting the pictures again.
+
+A new section can replace the old one without a build while the project's entity
+types (and their sprites), collision class ids, room ids, tilesets and their tile
+counts, background pictures and tracks are the same as these, in the same order.
 
 ## What the game checks
 

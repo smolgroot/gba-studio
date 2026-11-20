@@ -48,6 +48,7 @@ pub(crate) fn world_data(rooms: Vec<RoomData<'static>>) -> WorldData<'static> {
         rooms,
         start: Some(0),
         physics: Physics { mode: PhysicsMode::Platformer, platformer: PlatformerPhysics::DEFAULT, top_down: TopDownPhysics::DEFAULT },
+        manifest: Default::default(),
     }
 }
 

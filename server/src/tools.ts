@@ -7,6 +7,7 @@ import { Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MULTI_DOCS, PropertyDe
 import type { DocKind, Documents, Problem, Room } from '@pecten-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
+import { describePatch, patchRom } from './patch.ts'
 import { HttpError } from './project.ts'
 import type { ProjectFolder } from './project.ts'
 import { effectiveCollision, encodePng, loadPng, renderRoom, renderSheet, renderTileset, roomCells, scale } from './render.ts'
@@ -591,6 +592,16 @@ export const TOOLS: Tool[] = [
       return {
         text: `${status.exitCode === 0 ? 'Build succeeded' : `Build failed with exit code ${status.exitCode}`} in ${status.seconds}s.\n${rom ? `ROM: ${rom.path} (${rom.size} bytes)` : 'No ROM was produced.'}\n\n$ ${status.command}\n${status.log.slice(-80).join('\n')}`,
       }
+    },
+  ),
+
+  tool(
+    'patch_rom',
+    'Puts the project\'s current level data (tiles, collision, entities and their properties, room placement, physics) into the built ROM without compiling, in well under a second. Says when a build is needed instead: new entity types, rooms, sprites, tilesets, pictures or tracks, or more data than the ROM has room for. Then run the build tool.',
+    z.object({ mode: z.enum(['dev', 'release']).default('dev') }),
+    async ({ mode }, context) => {
+      const result = await patchRom(context.project, context.builder, mode)
+      return { text: describePatch(result) }
     },
   ),
 

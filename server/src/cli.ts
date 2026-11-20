@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { Builder } from './build.ts'
 import { serveMcp } from './mcp.ts'
+import { describePatch, patchRom } from './patch.ts'
 import { ProjectFolder } from './project.ts'
 import { startServer } from './server.ts'
 import { documentSchemas } from './tools.ts'
@@ -13,6 +14,8 @@ const USAGE = `Usage:
   pecten-studio <game-folder> [--port 4517] [--lan]    open the studio on a game folder
   pecten-studio validate <game-folder> [--json]        check the project; exit 1 if it has errors
   pecten-studio build <game-folder> [--release] [--json]  run the project's build command
+  pecten-studio patch <game-folder> [--release] [--json]  put changed level data into the built ROM
+                                                    without a build; exit 3 if it needs a build
   pecten-studio mcp <game-folder>                      serve the project to a coding agent (MCP over stdio)
   pecten-studio agents <game-folder> [--claude] [--force]  write AGENTS.md, the note for coding agents;
                                                     --claude also adds a Claude Code skill and .mcp.json
@@ -45,7 +48,7 @@ function folderArgument(value: string | undefined): string {
   return value
 }
 
-const COMMANDS = ['validate', 'build', 'mcp', 'agents', 'schema']
+const COMMANDS = ['validate', 'build', 'patch', 'mcp', 'agents', 'schema']
 // A folder that happens to be called like a command is still opened as a folder.
 const command = COMMANDS.includes(positionals[0] ?? '') && (positionals.length > 1 || positionals[0] === 'schema') ? positionals[0] : 'serve'
 
@@ -78,6 +81,11 @@ if (values.help || positionals.length === 0) {
     console.log(status.exitCode === 0 ? `Built ${rom ? `${rom.path} (${rom.size} bytes)` : 'with no ROM at the configured path'} in ${status.seconds}s` : `Build failed with exit code ${status.exitCode}`)
   }
   process.exit(status.exitCode === 0 ? 0 : 1)
+} else if (command === 'patch') {
+  const project = new ProjectFolder(folderArgument(positionals[1]))
+  const result = await patchRom(project, new Builder(project, () => undefined), values.release ? 'release' : 'dev').catch((error: Error) => fail(error.message))
+  console.log(values.json ? JSON.stringify({ ok: result.status === 'patched' || result.status === 'unchanged', ...result }, null, 2) : describePatch(result))
+  process.exit({ patched: 0, unchanged: 0, 'needs-build': 3, invalid: 1 }[result.status])
 } else if (command === 'mcp') {
   await serveMcp(folderArgument(positionals[1]))
 } else if (command === 'agents') {

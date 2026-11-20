@@ -171,7 +171,10 @@ any size in `assets/sprites/`, `assets/tilesets/` or `assets/backgrounds/`.
   [Pecten](https://github.com/smolgroot/pecten) emulator core in the browser at the
   console's frame rate, with sound (enable it with a click, as browsers require) and
   on-screen buttons on touch devices. It restarts the game by itself when the ROM is
-  rebuilt, if you leave that on. Keyboard: arrows, `X` is A, `Z` is B, `Enter` is
+  rebuilt, if you leave that on. While the game runs, saved changes to tiles,
+  collision, entities, world placement and physics are patched into the ROM in a
+  fraction of a second, without a build (**Patch on change**); changes that need a
+  build say why and offer one. Keyboard: arrows, `X` is A, `Z` is B, `Enter` is
   Start, `Shift` is Select, `A` and `S` are L and R.
 
 ### Importing files
@@ -224,6 +227,7 @@ art, music and levels.
 ```sh
 pecten-studio validate <folder> [--json]            # every problem; exit 1 on errors
 pecten-studio build <folder> [--release] [--json]   # run the project's build command
+pecten-studio patch <folder> [--release] [--json]   # put changed level data into the built ROM; exit 3 if it needs a build
 pecten-studio schema                                # JSON Schema of every document kind
 pecten-studio agents <folder> [--claude]            # write AGENTS.md; --claude also sets up Claude Code
 pecten-studio mcp <folder>                          # MCP server over stdio
@@ -280,7 +284,7 @@ The endpoint refuses requests from other web pages, like the rest of the server.
 | `sprite_create`, `sprite_set_animation`, `sprite_remove_animation`, `sprite_set_geometry` | Sprites from a sheet in the folder, their animations, anchor and hitbox |
 | `audio_add` | Add a WAV, XM, MOD or MIDI file in the folder as a sound effect or track |
 | `render_room`, `render_tileset`, `render_sprite` | Pictures: a room (optionally tinted by collision), a tileset or sprite sheet with its grid |
-| `build`, `run_rom` | Build the ROM; run it headless for given frames and held buttons and get a picture after each step |
+| `build`, `patch_rom`, `run_rom` | Build the ROM; put changed level data into the built ROM without a build; run it headless for given frames and held buttons and get a picture after each step |
 | `studio_view`, `studio_open` | What the author has open; put an item in front of them (studio endpoint only) |
 
 Every write is validated and answered with the problems it left in that file. Errors
@@ -324,7 +328,7 @@ The game brings the result in with three macros:
 
 | Macro | Gives | Needs |
 | --- | --- | --- |
-| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_COUNT` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum | nothing |
+| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_SLOTS` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum | nothing |
 | `include_gfx!()` | `gfx::TILESETS`, `BACKGROUNDS`, `ART` (both together, for the views), one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
 | `include_audio!()` | `audio::TRACKS`, `SFX` and index constants | `agb_tracker` in the game |
 

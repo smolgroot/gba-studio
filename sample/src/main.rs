@@ -49,7 +49,7 @@ const CAMERA_SPEED: i32 = 6;
 const SENTRY_PACE: u32 = 2;
 
 /// Words of 32 bits that hold one bit for every entity of the project.
-const ENTITY_WORDS: usize = data::ENTITY_COUNT.div_ceil(32);
+const ENTITY_WORDS: usize = data::ENTITY_SLOTS.div_ceil(32);
 /// The count in the corner shows this many digits at most.
 const DIGITS: usize = 4;
 
