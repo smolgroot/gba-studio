@@ -46,25 +46,27 @@ Only cells of kind `solid` stop a character seen from above. Hazards work as the
 
 ## In the game's code
 
-The build gives the game these numbers as `data::PHYSICS`, so a change needs a rebuild to reach the ROM. The runtime's controllers apply them:
+The build puts these numbers in the ROM's [data section](../reference/data-section) with the rest of the level data, so a change needs a build to reach the ROM. The game reads them once, at the start, and the runtime's controllers apply them:
 
 ```rust
 use pecten_studio_rt::physics::{PlatformerController, PlatformerInput};
 
+let world = data::world();
+let physics = world.physics();
 let mut control = PlatformerController::new();
 // every frame:
 let buttons = PlatformerInput { direction, jump_pressed, jump_held };
-let jumped = control.update(&mut body, &data::PHYSICS.platformer, buttons);
-body.step(&data::WORLD, drop_through);
+let jumped = control.update(&mut body, &physics.platformer, buttons);
+body.step(&world, drop_through);
 ```
 
 ```rust
 use pecten_studio_rt::physics::TopDownController;
 
-let walls = data::WORLD.enclosed(); // the edges of the map are walls
+let walls = world.enclosed(); // the edges of the map are walls
 let mut control = TopDownController::new();
 // every frame, with dx and dy of -1, 0 or 1:
-control.update(&mut body, &walls, &data::PHYSICS.top_down, dx, dy);
+control.update(&mut body, &walls, &physics.top_down, dx, dy);
 ```
 
-The sample game uses both and picks one from `data::PHYSICS.mode`. The starter code of a new game only shows its first room, so it ignores these settings until it has a player.
+The sample game uses both and picks one from `physics.mode`. The starter code of a new game only shows its first room, so it ignores these settings until it has a player.

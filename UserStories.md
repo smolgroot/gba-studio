@@ -69,11 +69,12 @@ Notes / open questions
 
 | ID | Title | Epic | Priority | Status | Size |
 | --- | --- | --- | --- | --- | --- |
-| US-001 | Fixed-layout data section in the ROM | E1 | P0 | Proposed | L |
+| US-001 | Fixed-layout data section in the ROM | E1 | P0 | Done | L |
 | US-002 | Patch level data into a built ROM without compiling | E1 | P0 | Proposed | M |
 | US-003 | Live-apply edits to the running game | E1 | P0 | Proposed | L |
 | US-004 | Say when a change needs a full build | E1 | P0 | Proposed | S |
 | US-005 | Play from the room and spot under the cursor | E1 | P1 | Proposed | M |
+| US-006 | Data reserve and section use in Project settings | E1 | P2 | Proposed | S |
 | US-010 | Behaviour library in the runtime | E2 | P0 | Proposed | L |
 | US-011 | Behaviours declare their properties to codegen | E2 | P0 | Proposed | M |
 | US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Proposed | M |
@@ -152,7 +153,7 @@ data, not code, and the studio owns the emulator, so data edits should not need 
 compile at all.
 
 #### US-001 · Fixed-layout data section in the ROM
-**Priority** P0 · **Status** Proposed · **Size** L · **Depends on** —
+**Priority** P0 · **Status** Done · **Size** L · **Depends on** —
 **Touches** codegen, runtime
 
 As a programmer, I want level, entity and physics data to live in a ROM section
@@ -160,19 +161,21 @@ with a known, versioned layout instead of being baked into Rust constants, so th
 tools can find and replace it without recompiling.
 
 Acceptance criteria
-- [ ] Given a project, when it is built, then rooms, collision cells, entities,
+- [x] Given a project, when it is built, then rooms, collision cells, entities,
   entity properties, world placement and physics settings are in one section that
   starts with a magic number, a format version and a table of offsets.
-- [ ] Given that section, when the runtime starts, then it reads everything from it
+- [x] Given that section, when the runtime starts, then it reads everything from it
   and the sample plays exactly as before.
-- [ ] The section has room to grow (a configurable reserve) so a patched project
+- [x] The section has room to grow (a configurable reserve) so a patched project
   that is a little larger still fits.
-- [ ] Reading data costs no more frames than today on the sample (measured).
-- [ ] The layout is documented in `docs/reference/`.
+- [x] Reading data costs no more frames than today on the sample (measured).
+- [x] The layout is documented in `docs/reference/`.
 
 Notes / open questions
 - Graphics (tiles, palettes) may stay compiled at first; decide in the design note
-  whether tile data joins the section in this story or in US-002.
+  whether tile data joins the section in this story or in US-002. Decided: tile
+  layers are in the section; tile and picture pixels, palettes, sprites and audio
+  stay compiled (see `design/US-001.md`).
 
 #### US-002 · Patch level data into a built ROM without compiling
 **Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-001
@@ -234,6 +237,18 @@ Acceptance criteria
 - [ ] The map editor has "Play from here"; the game starts with the player at that
   point.
 - [ ] The start override is a debug-only setting that release builds ignore.
+
+#### US-006 · Data reserve and section use in Project settings
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-001
+**Touches** app, server
+
+As an author, I want to see how much of the ROM's level data space my project uses
+and set the reserve in Project settings, so that I know when an edit will need a
+full build without editing JSON.
+
+Acceptance criteria
+- [ ] Project settings has a field for `build.dataReserve`, empty for the default.
+- [ ] After a build, the Build panel shows the section's bytes used and capacity.
 
 ---
 

@@ -4,7 +4,7 @@
 //! with other needs reads [`Room::class_index`] and writes its own.
 //!
 //! [`PlatformerController`] and [`TopDownController`] turn buttons into movement with the
-//! numbers set in the studio's Physics tab, which a game gets as `data::PHYSICS`.
+//! numbers set in the studio's Physics tab, which a game gets from `World::physics`.
 //! `core/src/physics.ts` is the same logic for the tab's preview: change them together.
 
 use crate::data::{Cells, CollisionKind, TILE};
@@ -82,7 +82,7 @@ pub enum PhysicsMode {
     TopDown,
 }
 
-/// What the studio's Physics tab holds. The project's own is `data::PHYSICS`.
+/// What the studio's Physics tab holds. The project's own is `World::physics`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Physics {
     pub mode: PhysicsMode,
@@ -538,41 +538,13 @@ impl Body {
 mod tests {
     extern crate std;
     use super::*;
-    use crate::data::{CollisionClass, Room, World};
-    use std::{boxed::Box, vec::Vec};
+    use crate::data::tests::{CLASSES, room, world_of};
+    use crate::data::{CollisionClass, World};
+    use std::{vec, vec::Vec};
 
-    static CLASSES: [CollisionClass; 5] = [
-        CollisionClass { id: "empty", kind: CollisionKind::Empty, slope: (0, 0) },
-        CollisionClass { id: "solid", kind: CollisionKind::Solid, slope: (0, 0) },
-        CollisionClass { id: "oneway", kind: CollisionKind::OneWay, slope: (0, 0) },
-        CollisionClass { id: "up", kind: CollisionKind::Slope, slope: (0, 8) },
-        CollisionClass { id: "down", kind: CollisionKind::Slope, slope: (8, 0) },
-    ];
-
-    /// A world of one room drawn in text: `#` solid, `=` one-way, `/` and `\` slopes.
-    fn world(map: &[&str]) -> World {
-        let cells: Vec<u8> = map
-            .iter()
-            .flat_map(|row| row.bytes())
-            .map(|c| match c {
-                b'#' => 1,
-                b'=' => 2,
-                b'/' => 3,
-                b'\\' => 4,
-                _ => 0,
-            })
-            .collect();
-        let room = Room {
-            id: "test",
-            name: "Test",
-            cols: map[0].len() as u16,
-            rows: map.len() as u16,
-            collision: Box::leak(cells.into_boxed_slice()),
-            entities: &[],
-            world: Some((0, 0)),
-            music: None,
-        };
-        World { rooms: Box::leak(Box::new([room])), classes: &CLASSES, start: Some(0) }
+    /// A world of one room drawn in text: `#` solid, `=` one-way, `/` and `\\` slopes.
+    fn world(map: &[&str]) -> World<'static> {
+        world_of(vec![room(map, Some((0, 0)))])
     }
 
     fn run(world: &World, body: &mut Body, frames: usize, vx: i32) {
@@ -604,10 +576,10 @@ mod tests {
     }
 
     /// Solid from a row down, for arcs that need no walls.
-    struct FlatFloor<'a>(&'a World, i32);
+    struct FlatFloor<'a>(&'a World<'a>, i32);
     impl Cells for FlatFloor<'_> {
-        fn class(&self, _col: i32, row: i32) -> &CollisionClass {
-            &self.0.classes[usize::from(row >= self.1)]
+        fn class(&self, _col: i32, row: i32) -> CollisionClass {
+            self.0.collision_class(u8::from(row >= self.1))
         }
     }
 
@@ -797,7 +769,7 @@ mod tests {
     fn slope_heights_meet_without_a_step() {
         assert_eq!((0..8).map(|x| CLASSES[3].floor_height(x)).collect::<Vec<_>>(), [1, 2, 3, 4, 5, 6, 7, 8]);
         assert_eq!((0..8).map(|x| CLASSES[4].floor_height(x)).collect::<Vec<_>>(), [8, 7, 6, 5, 4, 3, 2, 1]);
-        let gentle = CollisionClass { id: "g", kind: CollisionKind::Slope, slope: (0, 4) };
+        let gentle = CollisionClass { kind: CollisionKind::Slope, slope: (0, 4) };
         assert_eq!((0..8).map(|x| gentle.floor_height(x)).collect::<Vec<_>>(), [0, 1, 1, 2, 2, 3, 3, 4]);
     }
 
@@ -889,10 +861,7 @@ mod tests {
         // Two one-screen rooms side by side, floor along the bottom row of both.
         let mut rows = [".............................."; 20];
         rows[19] = "##############################";
-        let mut w = world(&rows);
-        let mut rooms = w.rooms.to_vec();
-        rooms.push(Room { world: Some((1, 0)), ..rooms[0] });
-        w.rooms = Box::leak(rooms.into_boxed_slice());
+        let w = world_of(vec![room(&rows, Some((0, 0))), room(&rows, Some((1, 0)))]);
         let mut body = Body::standing_at(200, 152, 10, 14);
         for _ in 0..80 {
             body.vx = SUB;
@@ -909,11 +878,8 @@ mod tests {
     fn the_camera_stays_on_rooms() {
         // A 2x1 room at (0,1) and a 1x2 room at (2,0), as in the sample.
         let wide: [&str; 20] = ["............................................................"; 20];
-        let mut w = world(&wide);
-        let mut rooms = w.rooms.to_vec();
-        rooms[0].world = Some((0, 1));
-        rooms.push(Room { cols: 30, rows: 40, world: Some((2, 0)), ..rooms[0] });
-        w.rooms = Box::leak(rooms.into_boxed_slice());
+        let tall = [".............................."; 40];
+        let w = world_of(vec![room(&wide, Some((0, 1))), room(&tall, Some((2, 0)))]);
         let all = |_: usize| true;
         // In the wide room the camera cannot rise into the empty screens above it.
         assert_eq!(w.camera_target(0, 100, 200, all), (0, 160));
@@ -927,11 +893,8 @@ mod tests {
 
     #[test]
     fn rooms_connect_on_the_world_grid() {
-        let mut w = world(&["."; 20].map(|_| "..............................").as_slice());
-        let mut rooms = w.rooms.to_vec();
-        rooms.push(Room { world: Some((1, 0)), ..rooms[0] });
-        rooms.push(Room { world: None, ..rooms[0] });
-        w.rooms = Box::leak(rooms.into_boxed_slice());
+        let screen = [".............................."; 20];
+        let w = world_of(vec![room(&screen, Some((0, 0))), room(&screen, Some((1, 0))), room(&screen, None)]);
         assert_eq!(w.cross(0, 245, 50), Some((1, 5, 50)));
         assert_eq!(w.cross(1, -3, 50), Some((0, 237, 50)));
         assert_eq!(w.cross(0, -3, 50), None);

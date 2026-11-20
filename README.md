@@ -324,9 +324,19 @@ The game brings the result in with three macros:
 
 | Macro | Gives | Needs |
 | --- | --- | --- |
-| `include_data!()` | `data::WORLD`, `ROOMS`, `CLASSES`, constants for room and collision class indices, an `EntityKind` enum, and each room's collision cells and entities | nothing |
-| `include_gfx!()` | `gfx::TILESETS`, `ROOMS` (tile layers and backgrounds), `BACKGROUNDS`, one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
+| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_COUNT` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum | nothing |
+| `include_gfx!()` | `gfx::TILESETS`, `BACKGROUNDS`, `ART` (both together, for the views), one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
 | `include_audio!()` | `audio::TRACKS`, `SFX` and index constants | `agb_tracker` in the game |
+
+Level data (rooms, tile layers, collision cells, entities and their properties, world
+placement, the start room and physics) is in one data section in the ROM, with a
+fixed, versioned layout and room to grow after it (`build.dataReserve` in
+`project.json`; by default a quarter of the data, at least 4 KiB). Graphics, sprites
+and audio stay compiled. The game reads the section once at start with
+`let world = data::world();` and passes `&world` to what needs it: `world.physics()`,
+`body.step(&world, ...)`, `WorldView::new(&world, gfx::ART, room, &mut graphics)`,
+`world.room(i).entities()`. The layout is in
+[`docs/reference/data-section.md`](docs/reference/data-section.md).
 
 **The runtime** (`runtime/`):
 
@@ -359,7 +369,7 @@ respawns on spikes, walks from one room into the next while the camera scrolls
 across in front of a sky and hills that drift at a quarter and half of its speed,
 collects coins and diamonds that add to a count in the corner, and is sent back to
 where it entered the room by a patrolling sentry bot. Its `src/main.rs` is
-about 250 lines.
+about 330 lines.
 
 A collectible is an entity type with a sprite and an integer `value` property: the
 sample takes any such entity the hero touches. To add another kind (a ruby, a key),
@@ -371,6 +381,10 @@ changes. It builds from its own folder, with the nightly toolchain pinned in
 ```sh
 cd sample && cargo build        # or press Build dev in the studio
 ```
+
+Built with `--features measure`, it shows each frame's cost in place of the score:
+the worst frame on top and the average below, in hundreds of CPU cycles (a frame has
+about 2808).
 
 Its art is flat-colour placeholders. Regenerate the sample project with
 `node scripts/make-sample-assets.ts` and `node scripts/make-sample-project.ts`

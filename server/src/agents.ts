@@ -76,20 +76,23 @@ Run \`validate\` after changing anything under \`studio/\`.
 ## In the game code
 
 \`\`\`rust
-pecten_studio_rt::include_data!();   // data::WORLD, ROOMS, CLASSES, EntityKind, room and class constants
-pecten_studio_rt::include_gfx!();    // gfx::ROOMS, TILESETS, SPRITE_<NAME>, ENTITY_SPRITES
+pecten_studio_rt::include_data!();   // data::world(), EntityKind, ENTITY_COUNT, room and class constants
+pecten_studio_rt::include_gfx!();    // gfx::ART, TILESETS, BACKGROUNDS, SPRITE_<NAME>, ENTITY_SPRITES
 pecten_studio_rt::include_audio!();  // audio::TRACKS, SFX (needs agb_tracker)
 \`\`\`
 
-\`pecten_studio_rt::physics::Body\` moves a box through the collision cells of the whole
-world (\`body.step(&data::WORLD, drop_through)\`), and \`pecten_studio_rt::gfx::WorldView\`
+Rooms, collision, entities, world placement and physics are read from a data
+section in the ROM: call \`let world = data::world();\` once at the start and pass
+\`&world\` around. \`pecten_studio_rt::physics::Body\` moves a box through the collision
+cells of the whole world (\`body.step(&world, drop_through)\`), and
+\`WorldView::new(&world, gfx::ART, room, &mut graphics)\`
 draws the rooms around a camera, with the backgrounds of one room behind them: call
 \`view.set_backgrounds(room, &graphics)\` when the player enters a room. The data
 and physics half of the runtime has no dependencies and runs on the host, so rules
 can be unit tested with \`cargo test\`.
 
 The Physics tab of the studio saves \`physics\` in \`studio/project.json\`: the game type
-(\`platformer\` or \`topdown\`) and how it moves. The game gets it as \`data::PHYSICS\`.
+(\`platformer\` or \`topdown\`) and how it moves. The game gets it from \`world.physics()\`.
 \`physics::PlatformerController\` and \`physics::TopDownController\` apply it, so use
 them rather than hard-coding gravity or speeds.
 `
@@ -161,12 +164,13 @@ A working order that avoids mistakes:
 
 Behaviour is Rust in \`src/\`, on agb and \`pecten_studio_rt\`:
 
-- \`data::WORLD\`, \`data::ROOMS\`, \`data::EntityKind\`, \`data::class::*\` come from
-  \`include_data!()\`. Match on \`EntityKind::of(entity)\` to give a type its behaviour;
+- \`data::world()\`, \`data::EntityKind\`, \`data::class::*\` come from
+  \`include_data!()\`. Read the world once at the start; \`world.room(i)\` and
+  \`room.entities()\` give rooms and entities. Match on \`EntityKind::of(&entity)\` to give a type its behaviour;
   read its typed properties with \`entity.int("name")\`, \`.bool\`, \`.str\`.
-- \`physics::Body\` moves through \`&data::WORLD\` in world pixels: walls, one-way
+- \`physics::Body\` moves through \`&world\` in world pixels: walls, one-way
   platforms, slopes. \`gfx::WorldView\` draws the rooms; \`gfx::AnimPlayer\` plays a
-  sprite's animations by name. \`data::PHYSICS\` holds the Physics tab's numbers, for
+  sprite's animations by name. \`world.physics()\` holds the Physics tab's numbers, for
   \`physics::PlatformerController\` and \`physics::TopDownController\`.
 - Adding an entity type is two steps: \`entity_type_set\` in the project, then its
   behaviour in code. After a project change, rebuild before relying on new

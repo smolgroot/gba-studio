@@ -67,6 +67,8 @@ describe('setting up a game crate', () => {
     expect(written).toContain('Cargo.toml')
     expect(existsSync(path.join(folder, 'vendor/pecten_studio_rt/Cargo.toml'))).toBe(true)
     expect(existsSync(path.join(folder, 'vendor/pecten_studio_build/fixture'))).toBe(false)
+    // The build helper finds the runtime it shares the data layout with.
+    expect(readFileSync(path.join(folder, 'vendor/pecten_studio_build/Cargo.toml'), 'utf8')).toContain('path = "../pecten_studio_rt"')
     const { build } = JSON.parse(readFileSync(path.join(folder, 'studio/project.json'), 'utf8')) as { build: { dev: string } }
     expect(build.dev).toContain('agb-gbafix')
   })

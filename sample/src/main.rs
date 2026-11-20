@@ -20,13 +20,17 @@
 //!
 //! Sound effects are the project's audio list, played by id: `jump`, `coin`, `diamond`
 //! and `damage`.
+//!
+//! Built with `--features measure`, the corner shows how long each frame's work takes
+//! instead of the score: the worst frame so far on top, the average below, both in
+//! hundreds of CPU cycles. A frame has 2808 of them.
 #![no_std]
 #![no_main]
 
 use agb::input::{Button, ButtonController};
 use agb::sound::mixer::{Frequency, Mixer, SoundChannel};
 use pecten_studio_rt::{
-    data::{Collected, CollisionKind, SCREEN_H, SCREEN_W},
+    data::{Collected, CollisionKind, SCREEN_H, SCREEN_W, World},
     gfx::{AnimPlayer, WorldView},
     physics::{Body, PhysicsMode, PlatformerController, PlatformerInput, TopDownController},
 };
@@ -35,7 +39,7 @@ pecten_studio_rt::include_data!();
 pecten_studio_rt::include_gfx!();
 pecten_studio_rt::include_audio!();
 
-use data::{EntityKind, PHYSICS, WORLD};
+use data::EntityKind;
 
 /// The most the camera moves in a frame when the area it may show changes, so it
 /// glides to its new place. Following the hero never needs this much.
@@ -45,9 +49,67 @@ const CAMERA_SPEED: i32 = 6;
 const SENTRY_PACE: u32 = 2;
 
 /// Words of 32 bits that hold one bit for every entity of the project.
-const ENTITY_WORDS: usize = WORLD.entity_count().div_ceil(32);
+const ENTITY_WORDS: usize = data::ENTITY_COUNT.div_ceil(32);
 /// The count in the corner shows this many digits at most.
 const DIGITS: usize = 4;
+
+/// Draws a number with the digit sprites, its left edge at `x`.
+fn show_number(frame: &mut agb::display::GraphicsFrame, number: u32, x: i32, y: i32) {
+    let mut places = [0usize; DIGITS];
+    let mut rest = number.min(10u32.pow(DIGITS as u32) - 1);
+    let mut used = 0;
+    loop {
+        places[used] = (rest % 10) as usize;
+        rest /= 10;
+        used += 1;
+        if rest == 0 {
+            break;
+        }
+    }
+    for (place, digit) in places[..used].iter().rev().enumerate() {
+        gfx::SPRITE_DIGITS.object(*digit, x + place as i32 * 6, y, false).show(frame);
+    }
+}
+
+/// Counts CPU cycles with timers 2 and 3 chained into one 32-bit counter.
+#[cfg(feature = "measure")]
+struct Stopwatch {
+    low: agb::timer::Timer,
+    high: agb::timer::Timer,
+    started: u32,
+    worst: u32,
+    total: u64,
+    frames: u32,
+}
+
+#[cfg(feature = "measure")]
+impl Stopwatch {
+    fn new(timers: agb::timer::Timers<'_>) -> Self {
+        let (mut low, mut high) = (timers.timer2, timers.timer3);
+        high.set_cascade(true).set_enabled(true);
+        low.set_divider(agb::timer::Divider::Divider1).set_enabled(true);
+        Self { low, high, started: 0, worst: 0, total: 0, frames: 0 }
+    }
+    fn now(&self) -> u32 {
+        // Read the high half twice so a carry between the two reads is not missed.
+        loop {
+            let high = self.high.value();
+            let low = self.low.value();
+            if self.high.value() == high {
+                return (high as u32) << 16 | low as u32;
+            }
+        }
+    }
+    fn start(&mut self) {
+        self.started = self.now();
+    }
+    fn stop(&mut self) {
+        let took = self.now().wrapping_sub(self.started);
+        self.worst = self.worst.max(took);
+        self.total += took as u64;
+        self.frames += 1;
+    }
+}
 
 /// Plays a sound effect of the project. When every channel is busy it is dropped.
 fn play(mixer: &mut Mixer, sound: usize) {
@@ -74,11 +136,11 @@ fn hero_size() -> (i32, i32) {
 }
 
 /// Where a game starts, in world pixels: the player-start entity of the start room.
-fn start() -> (usize, Body) {
-    let room = WORLD.start.unwrap_or(0) as usize;
-    let (left, top) = WORLD.origin(room).unwrap_or((0, 0));
+fn start(world: &World) -> (usize, Body) {
+    let room = world.start().unwrap_or(0) as usize;
+    let (left, top) = world.origin(room).unwrap_or((0, 0));
     let (w, h) = hero_size();
-    let entity = WORLD.rooms[room].entities.iter().find(|e| EntityKind::of(e) == Some(EntityKind::PlayerStart));
+    let entity = world.room(room).entities().find(|e| EntityKind::of(e) == Some(EntityKind::PlayerStart));
     let (x, y) = entity.map_or((24, 24), |e| (e.x as i32, e.y as i32));
     (room, Body::standing_at(left + x, top + y, w, h))
 }
@@ -94,14 +156,18 @@ fn main(mut gba: agb::Gba) -> ! {
     let run = hero.animation("run").unwrap_or(idle);
     let jump = hero.animation("jump").unwrap_or(idle);
 
+    // Rooms, entities and physics, read from the ROM's data section.
+    let world = data::world();
+    let physics = world.physics();
+
     // The hero lives in world pixels; `room` is the one its middle is in.
-    let (mut room, mut body) = start();
+    let (mut room, mut body) = start(&world);
     // Where the hero comes back to after a hazard or a fall off the map: where it entered the room.
     let mut entry = body;
-    let mut view = WorldView::new(&gfx::ROOMS, room, &mut graphics);
+    let mut view = WorldView::new(&world, gfx::ART, room, &mut graphics);
     let focus = |body: &Body| (body.x + body.w / 2, body.y + body.h / 2);
     let (x, y) = focus(&body);
-    let mut camera = WORLD.camera_target(room, x, y, |other| view.shows(other));
+    let mut camera = world.camera_target(room, x, y, |other| view.shows(other));
     view.load(camera.0, camera.1);
     let mut animation = AnimPlayer::new(idle);
     let mut faces_left = false;
@@ -110,18 +176,24 @@ fn main(mut gba: agb::Gba) -> ! {
     let mut score = 0u32;
     // Ticks since the game began: every placed entity animates off this one clock.
     let mut clock = 0u32;
-    let top_down = PHYSICS.mode == PhysicsMode::TopDown;
-    let walls = WORLD.enclosed();
+    let top_down = physics.mode == PhysicsMode::TopDown;
+    let walls = world.enclosed();
     let mut platformer = PlatformerController::new();
     let mut walker = TopDownController::new();
+    #[cfg(feature = "measure")]
+    let timers = gba.timers.timers();
+    #[cfg(feature = "measure")]
+    let mut stopwatch = Stopwatch::new(timers);
 
     loop {
+        #[cfg(feature = "measure")]
+        stopwatch.start();
         input.update();
         let direction = input.x_tri() as i32;
         let before = body;
         if top_down {
             let vertical = input.is_pressed(Button::Down) as i32 - input.is_pressed(Button::Up) as i32;
-            walker.update(&mut body, &walls, &PHYSICS.top_down, direction, vertical);
+            walker.update(&mut body, &walls, &physics.top_down, direction, vertical);
             if body.vx != 0 {
                 faces_left = body.vx < 0;
             }
@@ -130,21 +202,21 @@ fn main(mut gba: agb::Gba) -> ! {
                 faces_left = direction < 0;
             }
             let buttons = PlatformerInput { direction, jump_pressed: input.is_just_pressed(Button::A), jump_held: input.is_pressed(Button::A) };
-            if platformer.update(&mut body, &PHYSICS.platformer, buttons) {
+            if platformer.update(&mut body, &physics.platformer, buttons) {
                 play(&mut mixer, audio::sfx::JUMP);
             }
-            body.step(&WORLD, input.is_pressed(Button::Down));
+            body.step(&world, input.is_pressed(Button::Down));
         }
 
         let (x, y) = focus(&body);
-        match WORLD.room_at(x, y) {
+        match world.room_at(x, y) {
             Some(next) if next != room => {
                 room = next;
                 entry = walker.settled(body);
                 // A room drawn with another tileset cannot share the screen: cut to it.
                 if !view.shows(room) {
-                    view = WorldView::new(&gfx::ROOMS, room, &mut graphics);
-                    camera = WORLD.camera_target(room, x, y, |other| view.shows(other));
+                    view = WorldView::new(&world, gfx::ART, room, &mut graphics);
+                    camera = world.camera_target(room, x, y, |other| view.shows(other));
                     view.load(camera.0, camera.1);
                 } else {
                     // The pictures behind the rooms are those of the room the hero is in.
@@ -153,7 +225,7 @@ fn main(mut gba: agb::Gba) -> ! {
             }
             Some(_) => {}
             // Off the map: its sides and top are walls, and below it is a pit.
-            None if WORLD.room_at(x, before.y + before.h / 2).is_none() && body.y > before.y => {
+            None if world.room_at(x, before.y + before.h / 2).is_none() && body.y > before.y => {
                 body = entry;
                 walker.stop();
                 play(&mut mixer, audio::sfx::DAMAGE);
@@ -163,7 +235,7 @@ fn main(mut gba: agb::Gba) -> ! {
                 body.y = body.y.max(before.y);
             }
         }
-        if body.touches(&WORLD, CollisionKind::Hazard) {
+        if body.touches(&world, CollisionKind::Hazard) {
             body = entry;
             walker.stop();
             play(&mut mixer, audio::sfx::DAMAGE);
@@ -181,7 +253,7 @@ fn main(mut gba: agb::Gba) -> ! {
         clock = clock.wrapping_add(1);
 
         let (x, y) = focus(&body);
-        let target = WORLD.camera_target(room, x, y, |other| view.shows(other));
+        let target = world.camera_target(room, x, y, |other| view.shows(other));
         // After a respawn the hero may be far away: cut. Otherwise glide.
         if (target.0 - camera.0).abs() >= SCREEN_W || (target.1 - camera.1).abs() >= SCREEN_H {
             camera = target;
@@ -201,17 +273,17 @@ fn main(mut gba: agb::Gba) -> ! {
         // `value` is a collectible: it is taken when the hero touches it. A sentry bot
         // patrols, and hurts the hero it touches.
         let mut hurt = false;
-        for (index, other) in WORLD.rooms.iter().enumerate() {
-            let Some((left, top)) = WORLD.origin(index).filter(|_| view.shows(index)) else { continue };
+        for (index, other) in world.rooms().enumerate() {
+            let Some((left, top)) = world.origin(index).filter(|_| view.shows(index)) else { continue };
             if left >= camera.0 + SCREEN_W || top >= camera.1 + SCREEN_H || left + other.width() <= camera.0 || top + other.height() <= camera.1 {
                 continue;
             }
-            for (number, entity) in other.entities.iter().enumerate() {
-                let taken = WORLD.entity_index(index, number);
-                if EntityKind::of(entity) == Some(EntityKind::PlayerStart) || found.has(taken) {
+            for (number, entity) in other.entities().enumerate() {
+                let taken = world.entity_index(index, number);
+                if EntityKind::of(&entity) == Some(EntityKind::PlayerStart) || found.has(taken) {
                     continue;
                 }
-                let sentry = EntityKind::of(entity) == Some(EntityKind::SentryBot);
+                let sentry = EntityKind::of(&entity) == Some(EntityKind::SentryBot);
                 let (walked, flip) = if sentry { patrol(entity.int("patrol").unwrap_or(0), clock) } else { (0, false) };
                 let (world_x, world_y) = (left + entity.x as i32 + walked, top + entity.y as i32);
                 let (x, y) = (world_x - camera.0, world_y - camera.1);
@@ -223,7 +295,7 @@ fn main(mut gba: agb::Gba) -> ! {
                         let (box_x, box_y, box_w, box_h) = sheet.hitbox_at(world_x, world_y);
                         if body.overlaps(box_x, box_y, box_w, box_h) && found.take(taken) {
                             score = score.saturating_add(value.max(0) as u32);
-                            let diamond = EntityKind::of(entity) == Some(EntityKind::Diamond);
+                            let diamond = EntityKind::of(&entity) == Some(EntityKind::Diamond);
                             play(&mut mixer, if diamond { audio::sfx::DIAMOND } else { audio::sfx::COIN });
                             continue;
                         }
@@ -243,23 +315,20 @@ fn main(mut gba: agb::Gba) -> ! {
             play(&mut mixer, audio::sfx::DAMAGE);
         }
         // The count: a coin and the score beside it, in the top-left corner.
-        gfx::SPRITE_COIN.object(0, 8, 12, false).show(&mut frame);
-        let mut places = [0usize; DIGITS];
-        let mut rest = score.min(10u32.pow(DIGITS as u32) - 1);
-        let mut used = 0;
-        loop {
-            places[used] = (rest % 10) as usize;
-            rest /= 10;
-            used += 1;
-            if rest == 0 {
-                break;
-            }
+        #[cfg(not(feature = "measure"))]
+        {
+            gfx::SPRITE_COIN.object(0, 8, 12, false).show(&mut frame);
+            show_number(&mut frame, score, 14, 4);
         }
-        for (place, digit) in places[..used].iter().rev().enumerate() {
-            gfx::SPRITE_DIGITS.object(*digit, 14 + place as i32 * 6, 4, false).show(&mut frame);
+        #[cfg(feature = "measure")]
+        {
+            show_number(&mut frame, stopwatch.worst / 100, 4, 4);
+            show_number(&mut frame, (stopwatch.total / stopwatch.frames.max(1) as u64 / 100) as u32, 4, 14);
         }
         // Mixing is the last work of the frame, just before the wait for the next one.
         mixer.frame();
+        #[cfg(feature = "measure")]
+        stopwatch.stop();
         frame.commit();
     }
 }

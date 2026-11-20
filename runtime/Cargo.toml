@@ -10,6 +10,8 @@ publish = false
 # The drawing half: scrolling rooms and sprite animation on agb. Without it the crate
 # is plain data and collision, usable in host-side game logic and tests.
 agb = ["dep:agb"]
+# Writing data sections, for the build helper. Needs `alloc`.
+write = []
 
 [dependencies]
 agb = { version = "0.25.0", optional = true }

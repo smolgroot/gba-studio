@@ -9,6 +9,10 @@
 //! result in with [`include_data!`] and [`include_gfx!`].
 #![no_std]
 
+// The data section's writer, for the build helper and tests, builds into a Vec.
+#[cfg(any(test, feature = "write"))]
+extern crate alloc;
+
 pub mod data;
 pub mod physics;
 

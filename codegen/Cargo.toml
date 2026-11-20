@@ -7,6 +7,8 @@ description = "Build-script helper that turns a Pecten-Studio project into data 
 publish = false
 
 [dependencies]
+# The data section's layout and writer, shared with the reader the game runs.
+pecten_studio_rt = { path = "../runtime", features = ["write"] }
 png = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

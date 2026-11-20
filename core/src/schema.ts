@@ -124,6 +124,11 @@ export const Project = z.object({
     /** Where each build leaves its ROM. */
     devRom: AssetPath,
     releaseRom: AssetPath,
+    /**
+     * Bytes kept free in the ROM after the level data, so a slightly larger project
+     * can be patched in without a build. Left out: a quarter of the data, at least 4 KiB.
+     */
+    dataReserve: z.number().int().min(0).max(1024 * 1024).optional(),
   }),
   collisionClasses: z.array(CollisionClass).min(1),
   entityTypes: z.array(EntityType).default([]),

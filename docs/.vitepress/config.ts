@@ -54,6 +54,7 @@ export default defineConfig({
         text: 'Reference',
         items: [
           { text: 'Project format', link: '/reference/project-format' },
+          { text: 'Data section', link: '/reference/data-section' },
           { text: 'Keyboard shortcuts', link: '/reference/shortcuts' },
           { text: 'Known limits', link: '/reference/limits' },
         ],

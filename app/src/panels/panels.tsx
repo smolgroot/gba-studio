@@ -488,7 +488,7 @@ function ProjectSettings() {
   const commit = useStudio((s) => s.commit)
   if (!project) return <Message>The project file is missing or has errors. See Problems.</Message>
   const update = (patch: Partial<Project>) => commit('project', undefined, { ...project, ...patch })
-  const build = (key: keyof Project['build'], label: string) => (
+  const build = (key: Exclude<keyof Project['build'], 'dataReserve'>, label: string) => (
     <Field label={label}><TextInput label={label} value={project.build[key]} onCommit={(value) => update({ build: { ...project.build, [key]: value } })} /></Field>
   )
   const setType = (index: number, patch: Partial<Project['entityTypes'][number]>) => update({ entityTypes: project.entityTypes.map((t, i) => (i === index ? { ...t, ...patch } : t)) })

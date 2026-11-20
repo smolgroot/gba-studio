@@ -71,19 +71,22 @@ Run `validate` after changing anything under `studio/`.
 ## In the game code
 
 ```rust
-pecten_studio_rt::include_data!();   // data::WORLD, ROOMS, CLASSES, EntityKind, room and class constants
-pecten_studio_rt::include_gfx!();    // gfx::ROOMS, TILESETS, SPRITE_<NAME>, ENTITY_SPRITES
+pecten_studio_rt::include_data!();   // data::world(), EntityKind, ENTITY_COUNT, room and class constants
+pecten_studio_rt::include_gfx!();    // gfx::ART, TILESETS, BACKGROUNDS, SPRITE_<NAME>, ENTITY_SPRITES
 pecten_studio_rt::include_audio!();  // audio::TRACKS, SFX (needs agb_tracker)
 ```
 
-`pecten_studio_rt::physics::Body` moves a box through the collision cells of the whole
-world (`body.step(&data::WORLD, drop_through)`), and `pecten_studio_rt::gfx::WorldView`
+Rooms, collision, entities, world placement and physics are read from a data
+section in the ROM: call `let world = data::world();` once at the start and pass
+`&world` around. `pecten_studio_rt::physics::Body` moves a box through the collision
+cells of the whole world (`body.step(&world, drop_through)`), and
+`WorldView::new(&world, gfx::ART, room, &mut graphics)`
 draws the rooms around a camera, with the backgrounds of one room behind them: call
 `view.set_backgrounds(room, &graphics)` when the player enters a room. The data
 and physics half of the runtime has no dependencies and runs on the host, so rules
 can be unit tested with `cargo test`.
 
 The Physics tab of the studio saves `physics` in `studio/project.json`: the game type
-(`platformer` or `topdown`) and how it moves. The game gets it as `data::PHYSICS`.
+(`platformer` or `topdown`) and how it moves. The game gets it from `world.physics()`.
 `physics::PlatformerController` and `physics::TopDownController` apply it, so use
 them rather than hard-coding gravity or speeds.

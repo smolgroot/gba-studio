@@ -79,18 +79,18 @@ use pecten_studio_rt::gfx::WorldView;
 pecten_studio_rt::include_data!();
 pecten_studio_rt::include_gfx!();
 
-use data::WORLD;
-
 #[agb::entry]
 fn main(mut gba: agb::Gba) -> ! {
     let mut graphics = gba.graphics.get();
-    let room = WORLD.start.unwrap_or(0) as usize;
+    // Rooms, entities and physics, read from the ROM's data section.
+    let world = data::world();
+    let room = world.start().unwrap_or(0) as usize;
 
     // A project with no rooms yet has a blank screen.
-    let view = (room < gfx::ROOMS.len()).then(|| {
-        let mut view = WorldView::new(&gfx::ROOMS, room, &mut graphics);
-        let (x, y) = WORLD.origin(room).unwrap_or((0, 0));
-        let camera = WORLD.camera_target(room, x, y, |other| view.shows(other));
+    let view = (room < world.room_count()).then(|| {
+        let mut view = WorldView::new(&world, gfx::ART, room, &mut graphics);
+        let (x, y) = world.origin(room).unwrap_or((0, 0));
+        let camera = world.camera_target(room, x, y, |other| view.shows(other));
         view.load(camera.0, camera.1);
         view
     });
@@ -145,6 +145,11 @@ export async function setupGameCrate(project: ProjectFolder, crates: string): Pr
     })
     written.push(to)
   }
+  // The build helper writes the runtime's data layout, so it depends on the runtime,
+  // which sits beside it here under another folder name than in the studio.
+  const helper = project.resolve('vendor/pecten_studio_build/Cargo.toml')
+  const manifest = await readFile(helper, 'utf8')
+  await writeFile(helper, manifest.replace('path = "../runtime"', 'path = "../pecten_studio_rt"'))
 
   // Only commands still at their first values are replaced: others are the author's.
   const { docs } = await project.load()

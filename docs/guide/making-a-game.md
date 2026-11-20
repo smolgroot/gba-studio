@@ -28,9 +28,38 @@ A background is cut into 8x8 tiles like a tileset and keeps one of each tile tha
 
 | Macro | Gives | Needs |
 | --- | --- | --- |
-| `include_data!()` | `data::WORLD`, `ROOMS`, `CLASSES`, constants for room and collision class indices, an `EntityKind` enum, and each room's collision cells and entities | nothing |
-| `include_gfx!()` | `gfx::TILESETS`, `ROOMS` (tile layers and backgrounds), `BACKGROUNDS`, one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
+| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_COUNT` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum | nothing |
+| `include_gfx!()` | `gfx::TILESETS`, `BACKGROUNDS`, `ART` (both together, for the views), one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
 | `include_audio!()` | `audio::TRACKS`, `SFX` and index constants | `agb_tracker` in the game |
+
+## Level data in the ROM
+
+The build puts the level data in one block of the ROM, the data section: rooms, their tile layers and collision cells, entities and their properties, where rooms sit on the world map, the start room and the physics. Graphics, sprites and audio are compiled into the game as before. The layout is on the [Data section](../reference/data-section) page.
+
+The game reads the section once, when it starts, and keeps the `World` it gets back:
+
+```rust
+pecten_studio_rt::include_data!();
+pecten_studio_rt::include_gfx!();
+
+let world = data::world();
+let physics = world.physics();
+let view = WorldView::new(&world, gfx::ART, room, &mut graphics);
+for entity in world.room(room).entities() {
+    // entity.kind, entity.x, entity.y, entity.int("value"), ...
+}
+```
+
+Nothing is copied into RAM: the `World` reads straight from the ROM. `data::world()` stops the game with a message if the section cannot be read, which only happens if it was replaced by one the game was not built for.
+
+The section has room to grow after the data, so a project that becomes a little larger still fits. By default the reserve is a quarter of the data, at least 4 KiB. Set `build.dataReserve` in `studio/project.json` to choose it in bytes. You still build the game for a change to reach the ROM.
+
+`data::ENTITY_COUNT` is the number of entities in the project when it was built. Size `Collected` with it, one bit per entity in 32-bit words:
+
+```rust
+const ENTITY_WORDS: usize = data::ENTITY_COUNT.div_ceil(32);
+let mut found = Collected::<ENTITY_WORDS>::new();
+```
 
 ## The runtime
 
@@ -43,10 +72,12 @@ A background is cut into 8x8 tiles like a tileset and keeps one of each tile tha
 
 ## The sample game
 
-`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp, respawns on spikes, walks from one room into the next while the camera scrolls, collects coins and diamonds, and is sent back by a patrolling sentry bot. Its `src/main.rs` is about 250 lines. It builds from its own folder, with the nightly toolchain pinned in `sample/rust-toolchain.toml` and `agb-gbafix` installed:
+`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp, respawns on spikes, walks from one room into the next while the camera scrolls, collects coins and diamonds, and is sent back by a patrolling sentry bot. Its `src/main.rs` is about 330 lines. It builds from its own folder, with the nightly toolchain pinned in `sample/rust-toolchain.toml` and `agb-gbafix` installed:
 
 ```sh
 cd sample && cargo build        # or press Build dev in the studio
 ```
+
+Built with `cargo build --features measure`, the sample shows how long each frame's work takes in place of the score: the worst frame so far on top and the average below, both in hundreds of CPU cycles. A frame at 60 frames a second has about 2808 of them, so a number near that means the game is about to drop frames.
 
 Its art is flat-colour placeholders. Regenerate the sample project with `node scripts/make-sample-assets.ts` and `node scripts/make-sample-project.ts` (the second refuses to overwrite an existing project unless given `--force`).

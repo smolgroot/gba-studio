@@ -21,6 +21,7 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, up to 2 backgr
 - An entity is a type, a position in pixels from the room's top-left, and the properties its type defines (integer, boolean, text or one of a list).
 - `physics` in `project.json` holds the game type and how it moves. Left out, it is the default platformer. See [Physics](../guide/physics).
 - Ids are lowercase letters, digits, `-` and `_`, and are also the file names.
+- `build.dataReserve` in `project.json`, optional, is how many bytes the ROM keeps free after the level data, so that a slightly larger project can replace it without a build. See [Data section](./data-section).
 
 ## Examples
 

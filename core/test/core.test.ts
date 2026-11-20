@@ -58,6 +58,16 @@ describe('schemas', () => {
     project.collisionClasses[1]!.slope = { left: 0, right: 8 }
     expect(Project.safeParse(project).success).toBe(false)
   })
+  it('takes an optional data reserve of 0 to 1 MiB', () => {
+    const { project } = newProject('X')
+    const reserve = (dataReserve: number) => Project.safeParse({ ...project, build: { ...project.build, dataReserve } }).success
+    expect(project.build.dataReserve).toBeUndefined()
+    expect(reserve(0)).toBe(true)
+    expect(reserve(8192)).toBe(true)
+    expect(reserve(-1)).toBe(false)
+    expect(reserve(1.5)).toBe(false)
+    expect(reserve(2 * 1024 * 1024)).toBe(false)
+  })
   it('wants a soundfont for MIDI only', () => {
     expect(Track.safeParse({ id: 'a', name: 'A', file: 'a.mid', format: 'midi' }).success).toBe(false)
     expect(Track.safeParse({ id: 'a', name: 'A', file: 'a.mid', format: 'midi', soundfont: 'a.sf2' }).success).toBe(true)

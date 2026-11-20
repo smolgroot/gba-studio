@@ -23,6 +23,13 @@ use std::{
     path::PathBuf,
 };
 
+use pecten_studio_rt::{
+    data::{
+        Background, CollisionClass, CollisionKind, Prop,
+        write::{ClassData, EntityData, RoomData, WorldData},
+    },
+    physics::{Movement, Physics, PhysicsMode, PlatformerPhysics, TopDownPhysics},
+};
 use serde_json::Value;
 
 pub struct Options {
@@ -135,34 +142,49 @@ fn palettes_source(palettes: &[[u16; 16]]) -> String {
     rows.join(",\n        ")
 }
 
-/// The project's physics as a Rust value.
-fn physics_source(physics: &model::Physics) -> String {
+/// The project's physics as the runtime holds it.
+fn physics_of(physics: &model::Physics) -> Physics {
     let p = &physics.platformer;
     let t = &physics.top_down;
-    format!(
-        "Physics {{\n        mode: PhysicsMode::{},\n        platformer: PlatformerPhysics {{ gravity: {}, fall_gravity: {}, max_fall_speed: {}, run_speed: {}, ground_acceleration: {}, ground_friction: {}, air_acceleration: {}, jump_speed: {}, jump_cut: {}, air_jumps: {}, coyote_frames: {}, jump_buffer_frames: {} }},\n        top_down: TopDownPhysics {{ movement: Movement::{}, speed: {}, acceleration: {}, friction: {}, directions: {}, normalize_diagonal: {}, corner_slide: {}, grid_size: {} }},\n    }}",
-        if physics.mode == model::PhysicsMode::Topdown { "TopDown" } else { "Platformer" },
-        p.gravity,
-        p.fall_gravity,
-        p.max_fall_speed,
-        p.run_speed,
-        p.ground_acceleration,
-        p.ground_friction,
-        p.air_acceleration,
-        p.jump_speed,
-        p.jump_cut,
-        p.air_jumps,
-        p.coyote_frames,
-        p.jump_buffer_frames,
-        if t.movement == model::Movement::Grid { "Grid" } else { "Free" },
-        t.speed,
-        t.acceleration,
-        t.friction,
-        t.directions,
-        t.normalize_diagonal,
-        t.corner_slide,
-        t.grid_size,
-    )
+    Physics {
+        mode: if physics.mode == model::PhysicsMode::Topdown { PhysicsMode::TopDown } else { PhysicsMode::Platformer },
+        platformer: PlatformerPhysics {
+            gravity: p.gravity,
+            fall_gravity: p.fall_gravity,
+            max_fall_speed: p.max_fall_speed,
+            run_speed: p.run_speed,
+            ground_acceleration: p.ground_acceleration,
+            ground_friction: p.ground_friction,
+            air_acceleration: p.air_acceleration,
+            jump_speed: p.jump_speed,
+            jump_cut: p.jump_cut,
+            air_jumps: p.air_jumps,
+            coyote_frames: p.coyote_frames,
+            jump_buffer_frames: p.jump_buffer_frames,
+        },
+        top_down: TopDownPhysics {
+            movement: if t.movement == model::Movement::Grid { Movement::Grid } else { Movement::Free },
+            speed: t.speed,
+            acceleration: t.acceleration,
+            friction: t.friction,
+            directions: t.directions,
+            normalize_diagonal: t.normalize_diagonal,
+            corner_slide: t.corner_slide,
+            grid_size: t.grid_size,
+        },
+    }
+}
+
+/// A collision class kind as the project names it.
+fn collision_kind(kind: &str) -> CollisionKind {
+    match kind {
+        "solid" => CollisionKind::Solid,
+        "oneway" => CollisionKind::OneWay,
+        "slope" => CollisionKind::Slope,
+        "hazard" => CollisionKind::Hazard,
+        "custom" => CollisionKind::Custom,
+        _ => CollisionKind::Empty,
+    }
 }
 
 pub fn generate(options: &Options) -> Result<Report, Error> {
@@ -293,9 +315,8 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
     // A failed picture leaves a gap in the numbering, and the build fails anyway.
     let picture_index = |file: &str| pictures.keys().position(|key| *key == file).unwrap_or(0);
 
-    // Rooms: collision and entities for the rules, tile layers for drawing.
-    let mut room_rows = Vec::new();
-    let mut room_gfx_rows = Vec::new();
+    // Rooms: collision, entities and tile layers, all for the data section.
+    let mut rooms: Vec<RoomData> = Vec::new();
     // What the rooms drawn with each tileset put on screen together: the tiles they
     // use, and the most tile layers any of them has.
     let mut used_tiles: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); tileset_ids.len()];
@@ -354,72 +375,60 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
                     .unwrap_or(0)
             })
             .collect();
-        write(&format!("room_{id}.collision"), &collision, &mut problems);
-
         let mut entities = Vec::new();
         for (n, entity) in room.entities.iter().enumerate() {
             let Some(kind) = types.iter().position(|t| t.id == entity.kind) else {
                 problems.push(format!("{file}: entity {n} has unknown type \"{}\"", entity.kind));
                 continue;
             };
-            let props: Vec<String> = types[kind]
+            let props: Vec<(&str, Prop)> = types[kind]
                 .props
                 .iter()
                 .filter_map(|def| {
                     let value = match entity.props.get(&def.name).unwrap_or(&def.default) {
-                        Value::Bool(b) => format!("Prop::Bool({b})"),
-                        Value::Number(number) => format!("Prop::Int({})", number.as_i64().unwrap_or(0) as i32),
-                        Value::String(text) => format!("Prop::Str({text:?})"),
+                        Value::Bool(b) => Prop::Bool(*b),
+                        Value::Number(number) => Prop::Int(number.as_i64().unwrap_or(0) as i32),
+                        Value::String(text) => Prop::Str(text),
                         other => {
                             problems.push(format!("{file}: entity {n}: property \"{}\" has a value that is not a number, a boolean or text: {other}", def.name));
                             return None;
                         }
                     };
-                    Some(format!("({:?}, {value})", def.name))
+                    Some((def.name.as_str(), value))
                 })
                 .collect();
-            entities.push(format!("Entity {{ kind: {kind}, x: {}, y: {}, props: &[{}] }}", entity.x, entity.y, props.join(", ")));
+            let (Ok(x), Ok(y)) = (i16::try_from(entity.x), i16::try_from(entity.y)) else {
+                problems.push(format!("{file}: entity {n} is at ({}, {}); positions run from -32768 to 32767", entity.x, entity.y));
+                continue;
+            };
+            entities.push(EntityData { kind: kind as u16, x, y, props });
         }
-        let world = docs.world.rooms.iter().find(|p| &p.room == id).map_or("None".to_string(), |p| format!("Some(({}, {}))", p.x, p.y));
-        let music = match &room.music {
-            None => "None".to_string(),
-            Some(track) => match docs.audio.tracks.iter().position(|t| &t.id == track) {
-                Some(index) => format!("Some({index})"),
-                None => {
-                    problems.push(format!("{file}: unknown music track \"{track}\""));
-                    "None".to_string()
-                }
-            },
-        };
-        room_rows.push(format!(
-            "        Room {{\n            id: {id:?},\n            name: {:?},\n            cols: {cols},\n            rows: {rows},\n            collision: include_bytes!({}),\n            entities: &[{}],\n            world: {world},\n            music: {music},\n        }},",
-            room.name,
-            out_file(&format!("room_{id}.collision")),
-            entities.iter().map(|e| format!("\n                {e},")).collect::<String>(),
-        ));
-
-        let mut layer_refs = Vec::new();
-        for (n, layer) in layers.iter().enumerate() {
-            let bytes: Vec<u8> = layer.iter().flat_map(|&cell| (cell as u16).to_le_bytes()).collect();
-            write(&format!("room_{id}.layer{n}"), &bytes, &mut problems);
-            let _ = writeln!(gfx, "    static ROOM_{}_LAYER_{n}: &Aligned<[u8]> = &Aligned(*include_bytes!({}));", constant(id), out_file(&format!("room_{id}.layer{n}")));
-            layer_refs.push(format!("&ROOM_{}_LAYER_{n}.0", constant(id)));
-        }
-        let backgrounds: Vec<String> = room
-            .backgrounds
-            .iter()
-            .map(|b| {
-                // Percent of the camera's speed, as the 256ths the runtime shifts by.
-                let speed = |percent: u32| (percent.min(100) * 256 + 50) / 100;
-                format!("BackgroundLayer {{ image: &BACKGROUNDS[{}], parallax: ({}, {}) }}", picture_index(&b.image), speed(b.parallax.x), speed(b.parallax.y))
-            })
-            .collect();
-        room_gfx_rows.push(format!(
-            "        RoomGfx {{ tileset: &TILESETS[{tileset}], cols: {cols}, rows: {rows}, layers: &[{}], world: {world}, backgrounds: &[{}] }},",
-            layer_refs.join(", "),
-            backgrounds.join(", ")
-        ));
+        let world = docs.world.rooms.iter().find(|p| &p.room == id).map(|p| (p.x as i16, p.y as i16));
+        let music = room.music.as_ref().and_then(|track| match docs.audio.tracks.iter().position(|t| &t.id == track) {
+            Some(index) => Some(index as u16),
+            None => {
+                problems.push(format!("{file}: unknown music track \"{track}\""));
+                None
+            }
+        });
+        // Percent of the camera's speed, as the 256ths the runtime shifts by.
+        let speed = |percent: u32| ((percent.min(100) * 256 + 50) / 100) as u16;
+        let backgrounds: Vec<Background> =
+            room.backgrounds.iter().map(|b| Background { image: picture_index(&b.image) as u16, parallax: (speed(b.parallax.x), speed(b.parallax.y)) }).collect();
         summary.push(format!("room {id}: {cols}x{rows} tiles, {} layers, {} backgrounds, {} entities", layers.len(), backgrounds.len(), entities.len()));
+        rooms.push(RoomData {
+            id,
+            name: &room.name,
+            cols: cols as u16,
+            rows: rows as u16,
+            world,
+            music,
+            tileset: tileset as u16,
+            collision,
+            layers: layers.iter().map(|layer| layer.iter().map(|&cell| cell as u16).collect()).collect(),
+            backgrounds,
+            entities,
+        });
     }
 
     // What a room's pictures share with the rooms on screen beside it: the console's
@@ -569,16 +578,13 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
     }
     let sfx_rows: Vec<String> = docs.audio.sfx.iter().map(|s| format!("agb::include_wav!({:?})", asset(&s.file, &mut inputs).to_string_lossy())).collect();
 
-    let start = match &docs.world.start {
-        None => "None".to_string(),
-        Some(room) => match room_ids.iter().position(|r| *r == room) {
-            Some(index) => format!("Some({index})"),
-            None => {
-                problems.push(format!("studio/world.json: start room \"{room}\" does not exist"));
-                "None".to_string()
-            }
-        },
-    };
+    let start = docs.world.start.as_ref().and_then(|room| match room_ids.iter().position(|r| *r == room) {
+        Some(index) => Some(index as u16),
+        None => {
+            problems.push(format!("studio/world.json: start room \"{room}\" does not exist"));
+            None
+        }
+    });
     if !problems.is_empty() {
         return Err(Error(problems));
     }
@@ -586,19 +592,52 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
     let header = format!("// @generated by pecten_studio_build from the studio project {:?}. Do not edit.\n", docs.project.name);
     let indexed = |ids: &mut dyn Iterator<Item = &String>, kind: &str| ids.enumerate().map(|(i, id)| format!("        pub const {}: {kind} = {i};\n", constant(id))).collect::<String>();
     let kinds: Vec<String> = types.iter().map(|t| variant(&t.id)).collect();
+    let world = WorldData {
+        classes: classes.iter().map(|c| ClassData { id: &c.id, class: CollisionClass { kind: collision_kind(&c.kind), slope: c.slope.as_ref().map_or((0, 0), |s| (s.left, s.right)) } }).collect(),
+        rooms,
+        start,
+        physics: physics_of(&docs.project.physics),
+    };
+    let (section, used) = pecten_studio_rt::data::write::write(&world, docs.project.build.data_reserve.map(|bytes| bytes as usize));
+    let entity_count: usize = world.rooms.iter().map(|room| room.entities.len()).sum();
+    summary.push(format!("data section: {used} bytes, {} more reserved", section.len() - used));
+    write("studio_data.bin", &section, &mut problems);
     let data = format!(
         r#"{header}#[allow(dead_code, unused_imports)]
 pub mod data {{
-    use pecten_studio_rt::data::{{CollisionClass, CollisionKind, Entity, Prop, Room, World}};
-    use pecten_studio_rt::physics::{{Movement, Physics, PhysicsMode, PlatformerPhysics, TopDownPhysics}};
+    use pecten_studio_rt::data::{{Entity, Limits, World}};
 
-    /// The numbers set in the studio's Physics tab.
-    pub static PHYSICS: Physics = {physics};
+    #[repr(C, align(4))]
+    struct Aligned<T: ?Sized>(T);
 
-    pub static CLASSES: [CollisionClass; {class_count}] = [
-{class_rows}    ];
+    /// The data section: rooms, collision, entities, world placement and physics, in
+    /// the layout of `pecten_studio_rt::data::layout`. Tools find it in the ROM by its
+    /// magic number and may replace it, up to its capacity, without a build.
+    static SECTION: Aligned<[u8; {section_len}]> = Aligned(*include_bytes!({section_file}));
+    static SECTION_BYTES: &[u8] = &SECTION.0;
 
-    /// Collision class indices, as [`Room::class_index`] gives them.
+    /// What the compiled half of the game holds, which the section may name.
+    pub const LIMITS: Limits = Limits {{ entity_kinds: {kind_count}, tilesets: {tileset_count}, backgrounds: {background_count}, tracks: {track_count} }};
+
+    /// Entities in the project when it was built: size `Collected` with it.
+    pub const ENTITY_COUNT: usize = {entity_count};
+
+    /// The world as the ROM holds it now. Call it once, at the start.
+    ///
+    /// # Panics
+    /// If the ROM's data section was replaced by one this game cannot read.
+    pub fn world() -> World<'static> {{
+        // A volatile read keeps the compiler from building values of the section into
+        // the code, where replacing the section in the ROM would not reach them.
+        // SAFETY: reads an initialised, aligned static.
+        let bytes: &'static [u8] = unsafe {{ core::ptr::read_volatile(&raw const SECTION_BYTES) }};
+        match World::new(bytes, &LIMITS) {{
+            Ok(world) => world,
+            Err(error) => panic!("the ROM's level data cannot be read ({{error:?}}); rebuild the game"),
+        }}
+    }}
+
+    /// Collision class indices, as `Room::class_index` gives them.
     pub mod class {{
 {class_consts}    }}
 
@@ -615,41 +654,21 @@ pub mod data {{
         }}
     }}
 
-    /// Room indices in [`ROOMS`].
+    /// Room indices, as `World::room` takes them.
     pub mod room {{
 {room_consts}    }}
-
-    pub static ROOMS: [Room; {room_count}] = [
-{room_rows}
-    ];
-
-    pub static WORLD: World = World {{ rooms: &ROOMS, classes: &CLASSES, start: {start} }};
 }}
 "#,
-        physics = physics_source(&docs.project.physics),
-        class_count = classes.len(),
-        class_rows = classes
-            .iter()
-            .map(|c| {
-                let kind = match c.kind.as_str() {
-                    "solid" => "Solid",
-                    "oneway" => "OneWay",
-                    "slope" => "Slope",
-                    "hazard" => "Hazard",
-                    "custom" => "Custom",
-                    _ => "Empty",
-                };
-                let slope = c.slope.as_ref().map_or((0, 0), |s| (s.left, s.right));
-                format!("        CollisionClass {{ id: {:?}, kind: CollisionKind::{kind}, slope: ({}, {}) }},\n", c.id, slope.0, slope.1)
-            })
-            .collect::<String>(),
+        section_len = section.len(),
+        section_file = out_file("studio_data.bin"),
+        tileset_count = tileset_rows.len(),
+        background_count = pictures.len(),
+        track_count = docs.audio.tracks.len(),
         class_consts = indexed(&mut classes.iter().map(|c| &c.id), "u8"),
         kind_variants = kinds.iter().map(|k| format!("        {k},\n")).collect::<String>(),
         kind_count = kinds.len(),
         kind_all = kinds.iter().map(|k| format!("EntityKind::{k}")).collect::<Vec<_>>().join(", "),
         room_consts = indexed(&mut docs.rooms.keys(), "usize"),
-        room_count = room_rows.len(),
-        room_rows = room_rows.join("\n"),
     );
     let gfx = format!(
         r#"{header}#[allow(dead_code, unused_imports)]
@@ -659,7 +678,7 @@ pub mod gfx {{
         object::{{Size, Sprite}},
         tiled::{{TileFormat, TileSet}},
     }};
-    use pecten_studio_rt::gfx::{{Animation, BackgroundImage, BackgroundLayer, RoomGfx, SpriteSheet, Tileset, frame_bytes}};
+    use pecten_studio_rt::gfx::{{Animation, Art, BackgroundImage, SpriteSheet, Tileset, frame_bytes}};
 
     #[repr(C, align(4))]
     struct Aligned<T: ?Sized>(T);
@@ -674,10 +693,8 @@ pub mod gfx {{
 {background_rows}
     ];
 
-    /// Tile layers and backgrounds of each room, in the order of `data::ROOMS`.
-    pub static ROOMS: [RoomGfx; {room_count}] = [
-{room_gfx_rows}
-    ];
+    /// What the data section's rooms are drawn with, for `WorldView`.
+    pub const ART: Art = Art {{ tilesets: &TILESETS, backgrounds: &BACKGROUNDS }};
 
 {sprite_items}
     /// The sprite of each entity type that has one, in the order of `data::EntityKind`.
@@ -688,8 +705,6 @@ pub mod gfx {{
         tileset_rows = tileset_rows.join("\n"),
         background_count = background_rows.len(),
         background_rows = background_rows.join("\n"),
-        room_count = room_gfx_rows.len(),
-        room_gfx_rows = room_gfx_rows.join("\n"),
         kind_count = kinds.len(),
         entity_sprites = entity_sprites.join(", "),
     );
@@ -736,6 +751,7 @@ pub mod audio {{
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pecten_studio_rt::data::{Limits, World};
     use std::path::Path;
 
     #[test]
@@ -771,15 +787,24 @@ mod tests {
         assert!(data.contains("pub const SOLID: u8 = 1;"));
         assert!(data.contains("PlayerStart,"));
         assert!(data.contains("pub const ENTRY: usize = 0;"));
-        assert!(data.contains("start: Some(0)"));
+        assert!(data.contains("pub const ENTITY_COUNT: usize = "), "{data}");
+        assert!(data.contains("Limits { entity_kinds: "), "{data}");
+        assert!(!data.contains("pub static ROOMS"), "rooms are in the section, not in code: {data}");
+
+        // Everything else is in the data section, which the runtime reads back.
+        let section = fs::read(out.join("studio_data.bin")).unwrap();
+        assert!(data.contains(&format!("Aligned<[u8; {}]>", section.len())), "{data}");
+        let world = World::new(&section, &Limits::ANY).unwrap_or_else(|error| panic!("{error:?}"));
+        assert_eq!(world.start(), Some(0));
+        assert_eq!(world.class_id(1), "solid");
+        assert_eq!(world.collision_class(1).kind, CollisionKind::Solid);
         // The fixture says nothing about physics: it gets the defaults.
-        assert!(data.contains("mode: PhysicsMode::Platformer"), "{data}");
-        assert!(data.contains("gravity: 48, fall_gravity: 48, max_fall_speed: 1024, run_speed: 384"), "{data}");
-        assert!(data.contains("movement: Movement::Free, speed: 256"), "{data}");
+        assert_eq!(world.physics(), Physics { mode: PhysicsMode::Platformer, platformer: PlatformerPhysics::DEFAULT, top_down: TopDownPhysics::DEFAULT });
 
         // The entry room: 60x20 cells, floor from row 17 down, a one-way girder at row 12.
-        let collision = fs::read(out.join("room_entry.collision")).unwrap();
-        assert_eq!(collision.len(), 60 * 20);
+        let entry = world.room(0);
+        assert_eq!((entry.id(), entry.cols(), entry.rows()), ("entry", 60, 20));
+        let collision = entry.collision();
         let at = |col: usize, row: usize| collision[row * 60 + col];
         assert_eq!(at(10, 17), 1, "ground is solid");
         assert_eq!(at(10, 16), 0, "air above it");
@@ -791,15 +816,17 @@ mod tests {
         let tiles = fs::read(out.join("tileset_tiles.4bpp")).unwrap();
         assert_eq!(tiles.len(), 16 * image::TILE_BYTES);
         assert!(tiles[..image::TILE_BYTES].iter().all(|&b| b == 0), "tile 0 is empty");
-        let layer = fs::read(out.join("room_entry.layer1")).unwrap();
-        assert_eq!(layer.len(), 60 * 20 * 2);
+        assert_eq!(entry.layer_count(), 2);
+        let painted = (0..20).flat_map(|row| (0..60).map(move |col| (col, row))).filter(|&(col, row)| entry.tile(1, col, row) > 0).count();
+        assert!(painted > 0, "the front layer has tiles");
 
         // The entry room has one picture behind it twice, at two speeds: it is converted
         // once, 16x20 tiles with one of each kept, and the speeds become 256ths.
         let gfx = fs::read_to_string(out.join("studio_gfx.rs")).unwrap();
         assert!(gfx.contains("pub static BACKGROUNDS: [BackgroundImage; 1]"), "{gfx}");
-        assert!(gfx.contains("backgrounds: &[BackgroundLayer { image: &BACKGROUNDS[0], parallax: (64, 0) }, BackgroundLayer { image: &BACKGROUNDS[0], parallax: (128, 256) }]"), "{gfx}");
-        assert!(gfx.contains("world: Some((2, 0)), backgrounds: &[] }"), "the shaft has none: {gfx}");
+        assert_eq!(entry.backgrounds().collect::<Vec<_>>(), [Background { image: 0, parallax: (64, 0) }, Background { image: 0, parallax: (128, 256) }]);
+        let shaft = world.room(1);
+        assert_eq!((shaft.id(), shaft.world(), shaft.backgrounds().len()), ("shaft", Some((2, 0)), 0), "the shaft has none");
         let cells = fs::read(out.join("background_0.cells")).unwrap();
         assert_eq!(cells.len(), 16 * 20 * 2);
         let distinct = fs::read(out.join("background_0.4bpp")).unwrap().len() / image::TILE_BYTES;
@@ -811,13 +838,50 @@ mod tests {
     #[test]
     fn writes_the_physics_set_in_the_project() {
         let physics: model::Physics = serde_json::from_str(r#"{"mode":"topdown","platformer":{"gravity":30,"airJumps":2},"topDown":{"movement":"grid","gridSize":8,"directions":4}}"#).unwrap();
-        let source = physics_source(&physics);
-        assert!(source.contains("mode: PhysicsMode::TopDown"), "{source}");
-        assert!(source.contains("gravity: 30, fall_gravity: 48"), "fields left out keep their defaults: {source}");
-        assert!(source.contains("air_jumps: 2"), "{source}");
-        assert!(source.contains("movement: Movement::Grid"), "{source}");
-        assert!(source.contains("directions: 4"), "{source}");
-        assert!(source.contains("grid_size: 8"), "{source}");
+        let physics = physics_of(&physics);
+        assert_eq!(physics.mode, PhysicsMode::TopDown);
+        assert_eq!((physics.platformer.gravity, physics.platformer.fall_gravity), (30, 48), "fields left out keep their defaults");
+        assert_eq!(physics.platformer.air_jumps, 2);
+        assert_eq!(physics.top_down.movement, Movement::Grid);
+        assert_eq!((physics.top_down.directions, physics.top_down.grid_size), (4, 8));
+    }
+
+    /// The section is followed by zeros up to its capacity: the project's reserve, or
+    /// by default a quarter of the data and at least 4 KiB.
+    #[test]
+    fn reserves_room_to_grow() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixture");
+        let dir = std::env::temp_dir().join(format!("pecten-studio-build-reserve-{}", std::process::id()));
+        let header = |section: &[u8]| (u32::from_le_bytes(section[12..16].try_into().unwrap()) as usize, u32::from_le_bytes(section[16..20].try_into().unwrap()) as usize);
+
+        let out = dir.join("default");
+        generate(&Options { project: fixture.clone(), out: out.clone() }).unwrap_or_else(|error| panic!("{error}"));
+        let section = fs::read(out.join("studio_data.bin")).unwrap();
+        let (used, capacity) = header(&section);
+        assert_eq!(capacity, section.len());
+        assert_eq!(capacity - used, pecten_studio_rt::data::layout::default_reserve(used));
+        assert!(capacity - used >= 4096);
+        assert!(section[used..].iter().all(|&b| b == 0));
+
+        // A project that sets its own reserve.
+        fn copy(from: &Path, to: &Path) {
+            fs::create_dir_all(to).unwrap();
+            for entry in fs::read_dir(from).unwrap().map(Result::unwrap) {
+                if entry.file_type().unwrap().is_dir() { copy(&entry.path(), &to.join(entry.file_name())) } else { fs::copy(entry.path(), to.join(entry.file_name())).map(|_| ()).unwrap() }
+            }
+        }
+        let project = dir.join("project");
+        copy(&fixture, &project);
+        let mut json: Value = serde_json::from_str(&fs::read_to_string(project.join("studio/project.json")).unwrap()).unwrap();
+        json["build"] = serde_json::json!({ "dataReserve": 10000 });
+        fs::write(project.join("studio/project.json"), json.to_string()).unwrap();
+        let out = dir.join("set");
+        let report = generate(&Options { project, out: out.clone() }).unwrap_or_else(|error| panic!("{error}"));
+        let section = fs::read(out.join("studio_data.bin")).unwrap();
+        let (used, capacity) = header(&section);
+        assert_eq!(capacity, (used + 10000).next_multiple_of(4));
+        assert!(report.summary.iter().any(|line| line == &format!("data section: {used} bytes, {} more reserved", capacity - used)), "{:?}", report.summary);
+        fs::remove_dir_all(dir).ok();
     }
 
     /// A room's pictures share the console's four backgrounds with its tile layers.

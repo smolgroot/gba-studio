@@ -13,11 +13,21 @@ use serde_json::Value;
 #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub name: String,
+    #[serde(default)]
+    pub build: Build,
     pub collision_classes: Vec<CollisionClass>,
     #[serde(default)]
     pub entity_types: Vec<EntityType>,
     #[serde(default)]
     pub physics: Physics,
+}
+
+/// The part of `build` the generated data needs; the commands are the studio's.
+#[derive(Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Build {
+    /// Bytes kept free after the data section, for patching in a larger project.
+    pub data_reserve: Option<u32>,
 }
 
 #[derive(Deserialize, Default, Clone, Copy, PartialEq, Eq)]

@@ -10,25 +10,16 @@ use agb::{
     fixnum::{Vector2D, vec2},
 };
 
+use core::cell::Cell;
+
+use crate::data::{Background, Room, World};
+
 /// A tileset's tiles and the palettes they are drawn with.
 pub struct Tileset {
     pub tiles: TileSet,
     /// Which of `palettes` each tile uses.
     pub tile_palettes: &'static [u8],
     pub palettes: &'static [Palette16],
-}
-
-/// A room's tile layers, back to front.
-pub struct RoomGfx {
-    pub tileset: &'static Tileset,
-    pub cols: u16,
-    pub rows: u16,
-    /// Each layer's cells row by row as little-endian `u16`: 0 is empty, n is tile n-1.
-    pub layers: &'static [&'static [u8]],
-    /// Where its top-left screen sits on the world grid, if it is on the map.
-    pub world: Option<(i16, i16)>,
-    /// Pictures behind the tile layers, back to front: two at most.
-    pub backgrounds: &'static [BackgroundLayer],
 }
 
 /// A picture cut into tiles, drawn behind rooms. It repeats in both directions.
@@ -53,20 +44,12 @@ impl BackgroundImage {
     }
 }
 
-/// A picture behind a room and how it follows the camera.
-pub struct BackgroundLayer {
-    pub image: &'static BackgroundImage,
-    /// How far it scrolls for every 256 pixels the camera moves, across and down:
-    /// 0 stands still, 256 moves with the room, less looks farther away.
-    pub parallax: (u16, u16),
-}
-
-impl BackgroundLayer {
-    /// The pixel of the picture at the screen's top-left corner, for a camera that
-    /// has moved `(dx, dy)` from where the picture was laid down.
-    pub const fn scroll(&self, dx: i32, dy: i32) -> (i32, i32) {
-        ((dx * self.parallax.0 as i32) >> 8, (dy * self.parallax.1 as i32) >> 8)
-    }
+/// The compiled half of the game's graphics, which the data section's rooms name
+/// by index: `gfx::TILESETS` and `gfx::BACKGROUNDS`.
+#[derive(Clone, Copy)]
+pub struct Art {
+    pub tilesets: &'static [Tileset],
+    pub backgrounds: &'static [BackgroundImage],
 }
 
 /// The GBA draws four backgrounds: tile layers and pictures share them.
@@ -74,7 +57,8 @@ const SCREEN_LAYERS: usize = 4;
 const PALETTES: usize = 16;
 
 struct Backdrop {
-    layer: &'static BackgroundLayer,
+    layer: Background,
+    image: &'static BackgroundImage,
     /// The first of the palettes its image was given.
     palette: u8,
     map: InfiniteScrolledMap,
@@ -94,10 +78,9 @@ impl Backdrops {
     }
 
     /// Whether these are the pictures on show, moving the same way.
-    fn shows(&self, backgrounds: &'static [BackgroundLayer]) -> bool {
-        let mut wanted = backgrounds.iter();
+    fn shows(&self, mut wanted: impl Iterator<Item = Background>) -> bool {
         self.layers.iter().all(|shown| match (shown, wanted.next()) {
-            (Some(shown), Some(wanted)) => core::ptr::eq(shown.layer.image, wanted.image) && shown.layer.parallax == wanted.parallax,
+            (Some(shown), Some(wanted)) => shown.layer == wanted,
             (None, None) => true,
             _ => false,
         }) && wanted.next().is_none()
@@ -107,18 +90,22 @@ impl Backdrops {
     /// the `palettes` the tileset uses, and they take what the `tile_layers` leave of
     /// the console's four backgrounds. Asking for the pictures already shown changes
     /// nothing, so they carry on unbroken from room to room.
-    fn set(&mut self, backgrounds: &'static [BackgroundLayer], origin: (i32, i32), palettes: usize, tile_layers: usize, graphics: &Graphics) {
-        if self.shows(backgrounds) {
+    fn set(&mut self, room: &Room, art: &Art, origin: (i32, i32), palettes: usize, tile_layers: usize, graphics: &Graphics) {
+        if self.shows(room.backgrounds()) {
             return;
         }
         // The old maps go first, so their tiles leave video memory before new ones come.
         self.layers = [const { None }; 2];
         self.origin = origin;
         let mut next = palettes;
-        for (index, layer) in backgrounds.iter().enumerate().take(SCREEN_LAYERS.saturating_sub(tile_layers).min(2)) {
-            let own = layer.image.tiles.palettes;
+        for (index, layer) in room.backgrounds().enumerate().take(SCREEN_LAYERS.saturating_sub(tile_layers).min(2)) {
+            // Indices are checked against the compiled pictures when the world is read.
+            let Some(image) = art.backgrounds.get(layer.image as usize) else {
+                continue;
+            };
+            let own = image.tiles.palettes;
             // Two layers of one picture share its palettes.
-            let shared = self.layers[..index].iter().flatten().find(|other| core::ptr::eq(other.layer.image, layer.image)).map(|other| other.palette as usize);
+            let shared = self.layers[..index].iter().flatten().find(|other| other.layer.image == layer.image).map(|other| other.palette as usize);
             let first = shared.unwrap_or(next);
             if first + own.len() > PALETTES {
                 continue;
@@ -130,7 +117,7 @@ impl Backdrops {
                 next += own.len();
             }
             let map = InfiniteScrolledMap::new(RegularBackground::new(Priority::P3, RegularBackgroundSize::Background32x32, TileFormat::FourBpp));
-            self.layers[index] = Some(Backdrop { layer, palette: first as u8, map });
+            self.layers[index] = Some(Backdrop { layer, image, palette: first as u8, map });
         }
     }
 
@@ -139,7 +126,7 @@ impl Backdrops {
         let origin = self.origin;
         let mut ready = true;
         for backdrop in self.layers.iter_mut().flatten() {
-            let (image, palette) = (backdrop.layer.image, backdrop.palette);
+            let (image, palette) = (backdrop.image, backdrop.palette);
             let scroll = backdrop.layer.scroll(x - origin.0, y - origin.1);
             ready &= backdrop.map.set_scroll_pos(vec2(scroll.0, scroll.1), |pos| image.tile(pos, palette)) == PartialUpdateStatus::Done;
         }
@@ -156,56 +143,84 @@ impl Backdrops {
     }
 }
 
-impl RoomGfx {
-    /// What a layer shows in a cell; blank outside the room.
-    fn tile(&'static self, layer: usize, pos: Vector2D<i32>) -> (&'static TileSet, TileSetting) {
-        let tiles = &self.tileset.tiles;
-        if pos.x < 0 || pos.y < 0 || pos.x >= self.cols as i32 || pos.y >= self.rows as i32 {
-            return (tiles, TileSetting::BLANK);
-        }
-        let at = (pos.y as usize * self.cols as usize + pos.x as usize) * 2;
-        let cell = u16::from_le_bytes([self.layers[layer][at], self.layers[layer][at + 1]]);
-        if cell == 0 {
-            return (tiles, TileSetting::BLANK);
-        }
-        let palette = self.tileset.tile_palettes[cell as usize - 1];
-        (tiles, TileSetting::new(cell - 1, TileEffect::new(false, false, palette)))
+/// What a room's layer shows in a cell; blank outside the room.
+fn room_tile(room: &Room, tileset: &'static Tileset, layer: usize, pos: Vector2D<i32>) -> (&'static TileSet, TileSetting) {
+    cell_tile(tileset, room.tile(layer, pos.x, pos.y))
+}
+
+/// How a layer cell is drawn: 0 is blank, n is tile n-1.
+fn cell_tile(tileset: &'static Tileset, cell: u16) -> (&'static TileSet, TileSetting) {
+    let tiles = &tileset.tiles;
+    // A cell past the tileset's end only comes from a section the build did not check.
+    match tileset.tile_palettes.get((cell as usize).wrapping_sub(1)) {
+        Some(&palette) if cell > 0 => (tiles, TileSetting::new(cell - 1, TileEffect::new(false, false, palette))),
+        _ => (tiles, TileSetting::BLANK),
+    }
+}
+
+/// A room's tileset. Indices are checked against the compiled tilesets when the
+/// world is read, so the fallback to the first is never taken.
+fn tileset_of(room: &Room, art: &Art) -> &'static Tileset {
+    art.tilesets.get(room.tileset() as usize).unwrap_or(&art.tilesets[0])
+}
+
+/// Where one layer of one room is on the world's tile grid, and its cells; no cells
+/// where the view draws the room blank.
+#[derive(Clone, Copy)]
+struct Area<'a> {
+    left: i32,
+    top: i32,
+    cols: i32,
+    rows: i32,
+    cells: &'a [u16],
+}
+
+impl Area<'_> {
+    fn holds(&self, pos: Vector2D<i32>) -> bool {
+        let (x, y) = (pos.x - self.left, pos.y - self.top);
+        x >= 0 && y >= 0 && x < self.cols && y < self.rows
+    }
+
+    fn cell(&self, pos: Vector2D<i32>) -> u16 {
+        self.cells.get(((pos.y - self.top) * self.cols + pos.x - self.left) as usize).map_or(0, |&cell| u16::from_le(cell))
     }
 }
 
 /// A room on screen. Rooms are far bigger than the GBA's backgrounds, so tiles are
 /// written into video memory as the camera reaches them.
-pub struct RoomView {
-    room: &'static RoomGfx,
+pub struct RoomView<'a> {
+    room: Room<'a>,
+    tileset: &'static Tileset,
     layers: [Option<InfiniteScrolledMap>; 3],
     backdrops: Backdrops,
 }
 
-impl RoomView {
+impl<'a> RoomView<'a> {
     /// Sets the background palettes to the room's tileset and makes a background per
     /// layer, the front layer at priority 1 so sprites at priority 0 stand before it.
     /// The room's pictures go behind, laid down from its top-left corner.
-    pub fn new(room: &'static RoomGfx, graphics: &mut Graphics) -> Self {
-        graphics.set_background_palettes(room.tileset.palettes);
-        let count = room.layers.len().min(3);
+    pub fn new(room: Room<'a>, art: &Art, graphics: &mut Graphics) -> Self {
+        let tileset = tileset_of(&room, art);
+        graphics.set_background_palettes(tileset.palettes);
+        let count = room.layer_count().min(3);
         let mut layers = [const { None }; 3];
         for (index, layer) in layers.iter_mut().enumerate().take(count) {
             let priority = [Priority::P3, Priority::P2, Priority::P1][index + 3 - count];
             *layer = Some(InfiniteScrolledMap::new(RegularBackground::new(priority, RegularBackgroundSize::Background32x32, TileFormat::FourBpp)));
         }
         let mut backdrops = Backdrops::new();
-        backdrops.set(room.backgrounds, (0, 0), room.tileset.palettes.len(), count, graphics);
-        Self { room, layers, backdrops }
+        backdrops.set(&room, art, (0, 0), tileset.palettes.len(), count, graphics);
+        Self { room, tileset, layers, backdrops }
     }
 
     /// Moves the camera's top-left corner to a pixel of the room. Returns whether every
     /// tile in view is in place; after a jump that takes a few frames of calling this.
     pub fn set_camera(&mut self, x: i32, y: i32) -> bool {
-        let room = self.room;
+        let (room, tileset) = (self.room, self.tileset);
         let mut ready = true;
         for (index, layer) in self.layers.iter_mut().enumerate() {
             if let Some(map) = layer {
-                ready &= map.set_scroll_pos(vec2(x, y), |pos| room.tile(index, pos)) == PartialUpdateStatus::Done;
+                ready &= map.set_scroll_pos(vec2(x, y), |pos| room_tile(&room, tileset, index, pos)) == PartialUpdateStatus::Done;
             }
         }
         ready & self.backdrops.set_camera(x, y)
@@ -234,27 +249,31 @@ impl RoomView {
 /// Behind the rooms are the pictures of one room, the one the player is in: they
 /// drift with the camera rather than sit on the map, so two rooms' pictures cannot
 /// meet at a border. Say which with [`WorldView::set_backgrounds`].
-pub struct WorldView {
-    rooms: &'static [RoomGfx],
+pub struct WorldView<'a> {
+    world: &'a World<'a>,
+    art: Art,
+    /// The tileset's index in `art`, as rooms name it, and the tileset.
+    shared: u16,
     tileset: &'static Tileset,
     count: usize,
     layers: [Option<InfiniteScrolledMap>; 3],
     backdrops: Backdrops,
 }
 
-impl WorldView {
+impl<'a> WorldView<'a> {
     /// A view of the rooms that share `room`'s tileset, with `room`'s pictures behind
     /// them. Sets the background palettes.
-    pub fn new(rooms: &'static [RoomGfx], room: usize, graphics: &mut Graphics) -> Self {
-        let tileset = rooms[room].tileset;
+    pub fn new(world: &'a World<'a>, art: Art, room: usize, graphics: &mut Graphics) -> Self {
+        let shared = world.room(room).tileset();
+        let tileset = tileset_of(&world.room(room), &art);
         graphics.set_background_palettes(tileset.palettes);
-        let count = rooms.iter().filter(|r| core::ptr::eq(r.tileset, tileset)).map(|r| r.layers.len()).max().unwrap_or(1).min(3);
+        let count = world.rooms().filter(|r| r.tileset() == shared).map(|r| r.layer_count()).max().unwrap_or(1).min(3);
         let mut layers = [const { None }; 3];
         for (index, layer) in layers.iter_mut().enumerate().take(count) {
             let priority = [Priority::P3, Priority::P2, Priority::P1][index + 3 - count];
             *layer = Some(InfiniteScrolledMap::new(RegularBackground::new(priority, RegularBackgroundSize::Background32x32, TileFormat::FourBpp)));
         }
-        let mut view = Self { rooms, tileset, count, layers, backdrops: Backdrops::new() };
+        let mut view = Self { world, art, shared, tileset, count, layers, backdrops: Backdrops::new() };
         view.set_backgrounds(room, graphics);
         view
     }
@@ -264,30 +283,49 @@ impl WorldView {
     /// unbroken; other pictures are laid down from the new room's top-left corner and
     /// appear a few frames later, once drawn. A room with none clears them.
     pub fn set_backgrounds(&mut self, room: usize, graphics: &Graphics) {
-        let room = &self.rooms[room];
-        let origin = room.world.map_or((0, 0), |(x, y)| (x as i32 * 240, y as i32 * 160));
-        self.backdrops.set(room.backgrounds, origin, self.tileset.palettes.len(), self.count, graphics);
+        let room = self.world.room(room);
+        let origin = room.world().map_or((0, 0), |(x, y)| (x as i32 * 240, y as i32 * 160));
+        self.backdrops.set(&room, &self.art, origin, self.tileset.palettes.len(), self.count, graphics);
     }
 
     /// Whether a room is drawn by this view: it is on the map and shares the tileset.
     pub fn shows(&self, room: usize) -> bool {
-        self.rooms[room].world.is_some() && core::ptr::eq(self.rooms[room].tileset, self.tileset)
+        let room = self.world.room(room);
+        room.world().is_some() && room.tileset() == self.shared
     }
 
     /// What slot `slot` of the view shows at a world tile. Rooms with fewer layers
     /// than the view fill its front slots, so every room's front layer lines up.
-    fn tile(rooms: &'static [RoomGfx], tileset: &'static Tileset, count: usize, slot: usize, pos: Vector2D<i32>) -> (&'static TileSet, TileSetting) {
-        for room in rooms {
-            let Some((wx, wy)) = room.world else { continue };
-            let local = vec2(pos.x - wx as i32 * 30, pos.y - wy as i32 * 20);
-            if local.x < 0 || local.y < 0 || local.x >= room.cols as i32 || local.y >= room.rows as i32 {
+    fn tile<'w>(
+        world: &'w World<'w>,
+        shared: u16,
+        tileset: &'static Tileset,
+        count: usize,
+        slot: usize,
+        pos: Vector2D<i32>,
+        last: &Cell<Option<Area<'w>>>,
+    ) -> (&'static TileSet, TileSetting) {
+        // Tiles come in rows and columns, so the next is nearly always in the same room.
+        if let Some(area) = last.get().filter(|area| area.holds(pos)) {
+            return cell_tile(tileset, area.cell(pos));
+        }
+        // Tested room by room, as finding the screen first would divide, which the GBA
+        // does slowly in software.
+        for room in world.rooms() {
+            let Some((wx, wy)) = room.world() else {
+                continue;
+            };
+            let area = Area { left: wx as i32 * 30, top: wy as i32 * 20, cols: room.cols() as i32, rows: room.rows() as i32, cells: &[] };
+            if !area.holds(pos) {
                 continue;
             }
-            let behind = count - room.layers.len().min(count);
-            if !core::ptr::eq(room.tileset, tileset) || slot < behind {
-                break;
-            }
-            return room.tile(slot - behind, local);
+            // A room of another tileset is blank in this view, as are the slots behind
+            // a room with fewer layers than the view.
+            let behind = count - room.layer_count().min(count);
+            let cells = if room.tileset() != shared || slot < behind { &[][..] } else { room.layer(slot - behind) };
+            let area = Area { cells, ..area };
+            last.set(Some(area));
+            return cell_tile(tileset, area.cell(pos));
         }
         (&tileset.tiles, TileSetting::BLANK)
     }
@@ -295,11 +333,12 @@ impl WorldView {
     /// Moves the camera's top-left corner to a world pixel. Returns whether every tile
     /// in view is in place; it always is while the camera moves less than a screen a frame.
     pub fn set_camera(&mut self, x: i32, y: i32) -> bool {
-        let (rooms, tileset, count) = (self.rooms, self.tileset, self.count);
+        let (world, shared, tileset, count) = (self.world, self.shared, self.tileset, self.count);
         let mut ready = true;
         for (slot, layer) in self.layers.iter_mut().enumerate() {
             if let Some(map) = layer {
-                ready &= map.set_scroll_pos(vec2(x, y), |pos| Self::tile(rooms, tileset, count, slot, pos)) == PartialUpdateStatus::Done;
+                let last = Cell::new(None);
+                ready &= map.set_scroll_pos(vec2(x, y), |pos| Self::tile(world, shared, tileset, count, slot, pos, &last)) == PartialUpdateStatus::Done;
             }
         }
         ready & self.backdrops.set_camera(x, y)
