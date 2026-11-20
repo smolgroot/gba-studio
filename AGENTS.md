@@ -75,7 +75,9 @@ what ran and what failed; do not mark a story `Done` with failing checks.
   `codegen/fixture/` shared between Rust and TypeScript where both compute the same
   thing (budgets, conversions).
 - **Docs:** a user-visible change updates its page in `docs/guide/`, and
-  `README.md` and `docs/reference/limits.md` when it adds or removes a limit.
+  `README.md` and `docs/reference/limits.md` when it adds or removes a limit. The
+  `docs-writer` agent in `.claude/agents/` does this, with screenshots taken by
+  `scripts/screenshots.ts` from the list in `docs/screenshots.json`.
 
 ## Style
 

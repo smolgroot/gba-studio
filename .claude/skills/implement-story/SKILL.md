@@ -86,8 +86,11 @@ check that shows it holds. Tick a box (`- [x]`) only for a criterion shown to ho
 
 ## 5. Document and close
 
-- Update the page in `docs/guide/` the change belongs to, and `README.md` and
-  `docs/reference/limits.md` if a limit was lifted or added.
+- Hand the documentation to the `docs-writer` agent (`.claude/agents/`) with the
+  story ID: it updates the VitePress pages, the README and the screenshots. If it
+  cannot run, follow its steps yourself. A story whose change is visible to an
+  author is not `Done` until its docs and screenshots are updated or listed for
+  the author to take.
 - If every box is ticked and every check passes, set the status to `Done` in the
   story and the summary table. Otherwise leave it `In progress` and list what is
   left.

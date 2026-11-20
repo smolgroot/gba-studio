@@ -129,6 +129,7 @@ Notes / open questions
 | US-105 | Tutorials from an empty folder to a game | E11 | P1 | Proposed | M |
 | US-106 | Test on more browsers, touch and large projects | E11 | P2 | Proposed | M |
 | US-107 | Fix the README's "left out on purpose" list | E11 | P0 | Proposed | S |
+| US-108 | Scripted documentation screenshots | E11 | P1 | In progress | S |
 | US-110 | Game flags and variables | E12 | P1 | Proposed | M |
 | US-111 | Trigger zones | E12 | P1 | Proposed | S |
 | US-112 | Rule format: event, conditions, actions | E12 | P1 | Proposed | M |
@@ -898,6 +899,33 @@ As a reader, I want the README to match the studio, which now has a pixel editor
 Acceptance criteria
 - [ ] The pixel editor is removed from "Left out on purpose".
 - [ ] The roadmap points to this file.
+
+#### US-108 · Scripted documentation screenshots
+**Priority** P1 · **Status** In progress · **Size** S · **Depends on** —
+**Touches** scripts, docs, package.json
+
+As a contributor, I want the docs' screenshots taken by a script from a list, so
+that every new feature can be documented with up-to-date pictures without taking
+them by hand.
+
+Acceptance criteria
+- [x] `docs/screenshots.json` lists every picture in `docs/public/screenshots/`,
+  with its route, viewport and the steps to reach the state shown.
+- [x] `node scripts/screenshots.ts <name>...` starts the studio on a project, takes
+  the named shots and writes them; `--all` takes every shot not marked manual;
+  `--list` lists them. With no names and no `--all` it refuses, so hand-taken
+  pictures are not replaced by accident.
+- [ ] Playwright is a dev dependency in the lockfile and the script runs on a clean
+  checkout after `pnpm install`, `pnpm exec playwright install chromium` and
+  `pnpm build`.
+- [ ] Every non-manual shot in the list is taken successfully on `sample/`.
+- [ ] The shots marked manual (collision overlay, new tileset, new image, Build
+  panel) get the actions that make them scriptable, or a note saying why not.
+- [ ] Decide which project the published pictures come from (the docs footer says
+  Diamond Hands, the list defaults to `sample/`) and make the footer match.
+
+Notes / open questions
+- The `play` shot needs a built ROM in the project first.
 
 ---
 
