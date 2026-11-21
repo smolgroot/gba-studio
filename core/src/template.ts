@@ -21,7 +21,7 @@ export function newProject(name: string): { project: Project; world: World; audi
         { id: 'slope-down', name: 'Slope down 45°', colour: '#46a758', kind: 'slope', slope: { left: 8, right: 0 } },
         { id: 'hazard', name: 'Hazard', colour: '#d6409f', kind: 'hazard' },
       ],
-      entityTypes: [{ id: 'player-start', name: 'Player start', colour: '#3e63dd', props: [] }],
+      entityTypes: [{ id: 'player-start', name: 'Player start', colour: '#3e63dd', props: [], behaviours: [] }],
       physics: Physics.parse({}),
     },
     world: { version: FORMAT_VERSION, rooms: [] },

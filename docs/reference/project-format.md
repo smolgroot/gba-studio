@@ -1,6 +1,6 @@
 # Project format
 
-Plain JSON files in the game's repository, laid out to diff well in git. The schemas in [`core/src/schema.ts`](https://github.com/smolgroot/gba-studio/blob/main/core/src/schema.ts) are the reference, and `pecten-studio schema` prints them as JSON Schema.
+Plain JSON files in the game's repository, laid out to diff well in git. The schemas in [`core/src/schema.ts`](https://github.com/smolgroot/gba-studio/blob/main/core/src/schema.ts) are the reference, and `pecten-studio schema` prints them as JSON Schema, with the properties of each behaviour under `behaviours`.
 
 ```
 studio/project.json         name, build commands, collision classes, entity types, physics
@@ -20,6 +20,7 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, up to 2 backgr
 - A tile layer and a background may have `"dim": true`, and a room may have `"dimLevel"`, a whole number from 0 (no change, the default) to 16 (black). Layers with `dim` are darkened by the room's level; the others and sprites are not. Left out, nothing is dimmed, so older projects load as they were.
 - Collision classes have a kind (`empty`, `solid`, `one-way`, `slope`, `hazard`, `custom`) and, for slopes, the floor height at the tile's left and right edge. What `hazard` and `custom` mean is up to the game.
 - An entity is a type, a position in pixels from the room's top-left, and the properties its type defines (integer, boolean, text or one of a list).
+- An entity type may have `behaviours`: a list of `{ "id": "patrol", "props": { "patrol": 48 } }`, each a behaviour from the runtime's library with the type's values for its properties. Values left out take the behaviour's default. A placed entity overrides one with a property of the same name in its own `props`. An entity has a behaviour only when its type lists it: a property of the type's own with a behaviour's property name, such as `value`, does not give it one. Left out, the list is empty, so older projects load as they were. See [Behaviours](../guide/making-a-game#behaviours) for the behaviours, their properties and the problems reported.
 - `physics` in `project.json` holds the game type and how it moves. Left out, it is the default platformer. See [Physics](../guide/physics).
 - Ids are lowercase letters, digits, `-` and `_`, and are also the file names.
 - `build.dataReserve` in `project.json`, optional, is how many bytes the ROM keeps free after the level data, so that a slightly larger project can replace it without a build. See [Data section](./data-section).
@@ -55,6 +56,26 @@ A collision class and the build section of `project.json`:
   "start": "badlands",
   "size": { "width": 10, "height": 9 }
 }
+```
+
+An entity type in `project.json` with an own property and two behaviours, and a placed sentry bot in a room that walks further than the others:
+
+```json
+{
+  "id": "sentry-bot",
+  "name": "Sentry bot",
+  "colour": "#e5484d",
+  "sprite": "sentry-bot",
+  "props": [{ "name": "armour", "type": "int", "default": 1 }],
+  "behaviours": [
+    { "id": "patrol", "props": { "patrol": 32 } },
+    { "id": "hazard" }
+  ]
+}
+```
+
+```json
+{ "type": "sentry-bot", "x": 120, "y": 136, "props": { "patrol": 64 } }
 ```
 
 A track in `audio.json`:

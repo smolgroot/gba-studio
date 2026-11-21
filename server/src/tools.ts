@@ -3,7 +3,7 @@
 // nothing is read or written outside the game folder.
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
-import { Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
+import { BEHAVIOURS, Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
 import type { Documents, Room } from '@pecten-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
@@ -623,7 +623,11 @@ export const TOOLS: Tool[] = [
   ...GENERATOR_TOOLS,
 ]
 
-/** JSON Schema of every document kind, for editors and agents that want the format itself. */
+/**
+ * JSON Schema of every document kind, for editors and agents that want the format itself,
+ * and under `behaviours` the properties of each behaviour an entity type can list.
+ */
 export function documentSchemas(): Record<string, unknown> {
-  return Object.fromEntries(Object.entries({ ...SINGLE_DOCS, ...MULTI_DOCS }).map(([kind, schema]) => [kind, z.toJSONSchema(schema, { io: 'input' })]))
+  const documents = Object.entries({ ...SINGLE_DOCS, ...MULTI_DOCS }).map(([kind, schema]) => [kind, z.toJSONSchema(schema, { io: 'input' })])
+  return { ...Object.fromEntries(documents), behaviours: BEHAVIOURS }
 }

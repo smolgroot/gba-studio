@@ -13,6 +13,7 @@
 //! which the game brings in with `pecten_studio_rt`'s `include_data!`, `include_gfx!`
 //! and `include_audio!`. Problems in the project fail the build with a list of them.
 
+pub mod behaviours;
 mod image;
 mod model;
 
@@ -90,11 +91,8 @@ fn constant(id: &str) -> String {
 
 /// `player-start` as `PlayerStart`, for enum variants.
 fn variant(id: &str) -> String {
-    let name: String = id
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .map(|part| part[..1].to_ascii_uppercase() + &part[1..])
-        .collect();
+    let name: String =
+        id.split(|c: char| !c.is_ascii_alphanumeric()).filter(|part| !part.is_empty()).map(|part| part[..1].to_ascii_uppercase() + &part[1..]).collect();
     if name.starts_with(|c: char| c.is_ascii_digit()) { format!("_{name}") } else { name }
 }
 
@@ -220,6 +218,7 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
     if classes.len() > 255 {
         problems.push("studio/project.json: more than 255 collision classes".into());
     }
+    behaviours::check_types(types, &mut problems);
 
     // Tilesets: tiles and palettes for drawing, and each tile's collision class for the rooms.
     let mut gfx = String::new();
@@ -382,7 +381,8 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
                 problems.push(format!("{file}: entity {n} has unknown type \"{}\"", entity.kind));
                 continue;
             };
-            let props: Vec<(&str, Prop)> = types[kind]
+            behaviours::check_entity(&file, n, &types[kind], entity, &mut problems);
+            let mut props: Vec<(&str, Prop)> = types[kind]
                 .props
                 .iter()
                 .filter_map(|def| {
@@ -391,13 +391,17 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
                         Value::Number(number) => Prop::Int(number.as_i64().unwrap_or(0) as i32),
                         Value::String(text) => Prop::Str(text),
                         other => {
-                            problems.push(format!("{file}: entity {n}: property \"{}\" has a value that is not a number, a boolean or text: {other}", def.name));
+                            problems
+                                .push(format!("{file}: entity {n}: property \"{}\" has a value that is not a number, a boolean or text: {other}", def.name));
                             return None;
                         }
                     };
                     Some((def.name.as_str(), value))
                 })
                 .collect();
+            // Its behaviours' properties come after the type's own; a missing or bad value
+            // has been reported above.
+            props.extend(behaviours::values(&types[kind], &entity.props).unwrap_or_default());
             let (Ok(x), Ok(y)) = (i16::try_from(entity.x), i16::try_from(entity.y)) else {
                 problems.push(format!("{file}: entity {n} is at ({}, {}); positions run from -32768 to 32767", entity.x, entity.y));
                 continue;
@@ -414,8 +418,11 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
         });
         // Percent of the camera's speed, as the 256ths the runtime shifts by.
         let speed = |percent: u32| ((percent.min(100) * 256 + 50) / 100) as u16;
-        let backgrounds: Vec<Background> =
-            room.backgrounds.iter().map(|b| Background { image: picture_index(&b.image) as u16, parallax: (speed(b.parallax.x), speed(b.parallax.y)) }).collect();
+        let backgrounds: Vec<Background> = room
+            .backgrounds
+            .iter()
+            .map(|b| Background { image: picture_index(&b.image) as u16, parallax: (speed(b.parallax.x), speed(b.parallax.y)) })
+            .collect();
         summary.push(format!("room {id}: {cols}x{rows} tiles, {} layers, {} backgrounds, {} entities", layers.len(), backgrounds.len(), entities.len()));
         rooms.push(RoomData {
             id,
@@ -530,7 +537,9 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
             animations.push(format!("Animation {{ name: {:?}, frames: &[{}], looping: {} }}", animation.name, frames.join(", "), animation.looping));
         }
         let frames: Vec<String> = (0..sheet.frames)
-            .map(|frame| format!("unsafe {{ Sprite::new(&{palette_name}, frame_bytes(&SPRITE_{index}_DATA.0, {frame}, {frame_bytes}), Size::S{width}x{height}) }}"))
+            .map(|frame| {
+                format!("unsafe {{ Sprite::new(&{palette_name}, frame_bytes(&SPRITE_{index}_DATA.0, {frame}, {frame_bytes}), Size::S{width}x{height}) }}")
+            })
             .collect();
         let hitbox = sprite.hitbox.as_ref().map_or("None".to_string(), |h| format!("Some(({}, {}, {}, {}))", h.x, h.y, h.width, h.height));
         let _ = write!(
@@ -596,17 +605,33 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
     }
 
     let header = format!("// @generated by pecten_studio_build from the studio project {:?}. Do not edit.\n", docs.project.name);
-    let indexed = |ids: &mut dyn Iterator<Item = &String>, kind: &str| ids.enumerate().map(|(i, id)| format!("        pub const {}: {kind} = {i};\n", constant(id))).collect::<String>();
+    let indexed = |ids: &mut dyn Iterator<Item = &String>, kind: &str| {
+        ids.enumerate().map(|(i, id)| format!("        pub const {}: {kind} = {i};\n", constant(id))).collect::<String>()
+    };
     let kinds: Vec<String> = types.iter().map(|t| variant(&t.id)).collect();
     let world = WorldData {
-        classes: classes.iter().map(|c| ClassData { id: &c.id, class: CollisionClass { kind: collision_kind(&c.kind), slope: c.slope.as_ref().map_or((0, 0), |s| (s.left, s.right)) } }).collect(),
+        classes: classes
+            .iter()
+            .map(|c| ClassData {
+                id: &c.id,
+                class: CollisionClass { kind: collision_kind(&c.kind), slope: c.slope.as_ref().map_or((0, 0), |s| (s.left, s.right)) },
+            })
+            .collect(),
         rooms,
         start,
         physics: physics_of(&docs.project.physics),
+        behaviours: types.iter().map(behaviours::positions).collect(),
         manifest: Manifest {
             entity_types: types.iter().map(|t| (t.id.as_str(), t.sprite.as_deref())).collect(),
-            tilesets: tileset_ids.iter().enumerate().map(|(n, id)| ArtData { id, tiles: tile_counts[n] as u32, palettes: tileset_palettes[n] as u32 }).collect(),
-            pictures: pictures.iter().map(|(file, (_, cost))| ArtData { id: file, tiles: cost.map_or(0, |c| c.0 as u32), palettes: cost.map_or(0, |c| c.1 as u32) }).collect(),
+            tilesets: tileset_ids
+                .iter()
+                .enumerate()
+                .map(|(n, id)| ArtData { id, tiles: tile_counts[n] as u32, palettes: tileset_palettes[n] as u32 })
+                .collect(),
+            pictures: pictures
+                .iter()
+                .map(|(file, (_, cost))| ArtData { id: file, tiles: cost.map_or(0, |c| c.0 as u32), palettes: cost.map_or(0, |c| c.1 as u32) })
+                .collect(),
             tracks: docs.audio.tracks.iter().map(|t| t.id.as_str()).collect(),
         },
     };
@@ -814,7 +839,11 @@ mod tests {
             fs::create_dir_all(expected.parent().unwrap()).unwrap();
             fs::write(&expected, &section).unwrap();
         }
-        assert!(fs::read(&expected).is_ok_and(|bytes| bytes == section), "the section differs from {}; rerun with PECTEN_STUDIO_UPDATE_FIXTURE=1 if that is meant", expected.display());
+        assert!(
+            fs::read(&expected).is_ok_and(|bytes| bytes == section),
+            "the section differs from {}; rerun with PECTEN_STUDIO_UPDATE_FIXTURE=1 if that is meant",
+            expected.display()
+        );
         assert!(data.contains(&format!("ENTITY_SLOTS: usize = {};", section.len() / 12)), "{data}");
         assert!(data.contains(&format!("Aligned<[u8; {}]>", section.len())), "{data}");
         let world = World::new(&section, &Limits::ANY).unwrap_or_else(|error| panic!("{error:?}"));
@@ -827,6 +856,16 @@ mod tests {
         // The entry room: 60x20 cells, floor from row 17 down, a one-way girder at row 12.
         let entry = world.room(0);
         assert_eq!((entry.id(), entry.cols(), entry.rows()), ("entry", 60, 20));
+        // Signs are also checkpoints and doors: their behaviours' properties follow the
+        // type's own, with the type's value unless the placed sign has its own.
+        let signs: Vec<_> = entry.entities().filter(|e| e.kind == 1).collect();
+        assert_eq!(signs.iter().map(|sign| sign.int("needs_ability")).collect::<Vec<_>>(), [Some(4), Some(7)]);
+        assert_eq!(signs[0].int("weight"), Some(-3), "the type's own properties are still there");
+        // The game reads them by position, through the behaviours section.
+        use pecten_studio_rt::behaviour::{Behaviour, Checkpoint, Door, Patrol};
+        assert_eq!(signs.iter().map(|sign| Door::from_entity(sign).map(|door| door.needs)).collect::<Vec<_>>(), [Some(Some(4)), Some(Some(7))]);
+        assert!(Checkpoint::from_entity(&signs[0]).is_some());
+        assert_eq!(Patrol::from_entity(&signs[0]), None, "signs do not patrol");
         let collision = entry.collision();
         let at = |col: usize, row: usize| collision[row * 60 + col];
         assert_eq!(at(10, 17), 1, "ground is solid");
@@ -863,7 +902,9 @@ mod tests {
 
     #[test]
     fn writes_the_physics_set_in_the_project() {
-        let physics: model::Physics = serde_json::from_str(r#"{"mode":"topdown","platformer":{"gravity":30,"airJumps":2},"topDown":{"movement":"grid","gridSize":8,"directions":4}}"#).unwrap();
+        let physics: model::Physics =
+            serde_json::from_str(r#"{"mode":"topdown","platformer":{"gravity":30,"airJumps":2},"topDown":{"movement":"grid","gridSize":8,"directions":4}}"#)
+                .unwrap();
         let physics = physics_of(&physics);
         assert_eq!(physics.mode, PhysicsMode::TopDown);
         assert_eq!((physics.platformer.gravity, physics.platformer.fall_gravity), (30, 48), "fields left out keep their defaults");
@@ -878,7 +919,9 @@ mod tests {
     fn reserves_room_to_grow() {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixture");
         let dir = std::env::temp_dir().join(format!("pecten-studio-build-reserve-{}", std::process::id()));
-        let header = |section: &[u8]| (u32::from_le_bytes(section[12..16].try_into().unwrap()) as usize, u32::from_le_bytes(section[16..20].try_into().unwrap()) as usize);
+        let header = |section: &[u8]| {
+            (u32::from_le_bytes(section[12..16].try_into().unwrap()) as usize, u32::from_le_bytes(section[16..20].try_into().unwrap()) as usize)
+        };
 
         let out = dir.join("default");
         generate(&Options { project: fixture.clone(), out: out.clone() }).unwrap_or_else(|error| panic!("{error}"));
@@ -893,7 +936,11 @@ mod tests {
         fn copy(from: &Path, to: &Path) {
             fs::create_dir_all(to).unwrap();
             for entry in fs::read_dir(from).unwrap().map(Result::unwrap) {
-                if entry.file_type().unwrap().is_dir() { copy(&entry.path(), &to.join(entry.file_name())) } else { fs::copy(entry.path(), to.join(entry.file_name())).map(|_| ()).unwrap() }
+                if entry.file_type().unwrap().is_dir() {
+                    copy(&entry.path(), &to.join(entry.file_name()))
+                } else {
+                    fs::copy(entry.path(), to.join(entry.file_name())).map(|_| ()).unwrap()
+                }
             }
         }
         let project = dir.join("project");
@@ -924,7 +971,10 @@ mod tests {
         let layer = r#"{"name":"L","data":[600,0]}"#;
         let sky = r#"{"image":"assets/sky.png","parallax":{"x":25,"y":0}}"#;
         let room = |layers: usize, backgrounds: &str| {
-            format!(r#"{{"name":"R","width":1,"height":1,"tileset":"tiles","layers":[{}],"backgrounds":[{backgrounds}],"entities":[]}}"#, vec![layer; layers].join(","))
+            format!(
+                r#"{{"name":"R","width":1,"height":1,"tileset":"tiles","layers":[{}],"backgrounds":[{backgrounds}],"entities":[]}}"#,
+                vec![layer; layers].join(",")
+            )
         };
         // Three tile layers in one room leave one background for every room drawn with it.
         fs::write(dir.join("studio/rooms/a.json"), room(3, "")).unwrap();
@@ -935,6 +985,34 @@ mod tests {
         assert!(text.contains("studio/rooms/c.json: background assets/none.png:"), "{text}");
         assert!(!text.contains("rooms/a.json"), "{text}");
         fs::remove_dir_all(dir).ok();
+    }
+
+    /// The studio reads the behaviours from `core/src/behaviourschema.ts`, written from
+    /// the runtime's declarations: the two must not differ.
+    #[test]
+    fn the_studio_has_the_behaviour_declarations() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../core/src/behaviourschema.ts");
+        let written = fs::read_to_string(&path).unwrap_or_default();
+        assert!(
+            written == behaviours::schema_module(),
+            "{} differs from the runtime's declarations; run `cargo run -p pecten_studio_build --bin behaviours-schema`",
+            path.display()
+        );
+    }
+
+    /// One of each problem with behaviour settings, in the words the studio uses too.
+    #[test]
+    fn reports_bad_behaviour_settings() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixture/bad-behaviours");
+        let out = std::env::temp_dir().join(format!("pecten-studio-build-behaviours-{}", std::process::id()));
+        let error = generate(&Options { project: fixture.clone(), out: out.clone() }).err().expect("a project with bad settings does not build");
+        let expected = fs::read_to_string(fixture.join("expected.txt")).unwrap();
+        let mut reported = error.0.clone();
+        reported.sort();
+        let mut lines: Vec<String> = expected.lines().filter(|line| !line.is_empty()).map(String::from).collect();
+        lines.sort();
+        assert_eq!(reported, lines);
+        fs::remove_dir_all(out).ok();
     }
 
     #[test]

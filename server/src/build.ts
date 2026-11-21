@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
-import { Project, docPath } from '@pecten-studio/core'
+import { Project, docPath, readSection } from '@pecten-studio/core'
 import { writeDebugMap } from './debugmap.ts'
 import { hashInputs, writeRecord } from './freshness.ts'
 import { HttpError } from './project.ts'
@@ -15,6 +15,8 @@ export interface RomInfo {
   size: number
   /** Milliseconds since the epoch: changes when the ROM is rebuilt. */
   modified: number
+  /** Bytes of the level data section in use and its capacity; null if the ROM has none. */
+  data: { used: number; capacity: number } | null
 }
 
 export interface BuildStatus {
@@ -56,6 +58,19 @@ export class Builder {
     return parsed.data.build
   }
 
+  /** Section sizes by ROM path, kept while the file's size and time stay the same. */
+  private sections = new Map<string, { size: number; modified: number; data: RomInfo['data'] }>()
+
+  private async sectionUse(path: string, size: number, modified: number): Promise<RomInfo['data']> {
+    const known = this.sections.get(path)
+    if (known && known.size === size && known.modified === modified) return known.data
+    const bytes = await readFile(this.project.resolve(path)).catch(() => null)
+    const section = bytes ? readSection(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)) : null
+    const data = section ? { used: section.used, capacity: section.capacity } : null
+    this.sections.set(path, { size, modified, data })
+    return data
+  }
+
   async status(): Promise<BuildStatus> {
     const roms: BuildStatus['roms'] = {}
     const build = await this.settings().catch(() => null)
@@ -63,7 +78,7 @@ export class Builder {
       const path = build?.[`${mode}Rom`]
       if (!path) continue
       const info = await stat(this.project.resolve(path)).catch(() => null)
-      if (info?.isFile()) roms[mode] = { path, size: info.size, modified: info.mtimeMs }
+      if (info?.isFile()) roms[mode] = { path, size: info.size, modified: info.mtimeMs, data: await this.sectionUse(path, info.size, info.mtimeMs) }
     }
     return { ...this.state, roms }
   }

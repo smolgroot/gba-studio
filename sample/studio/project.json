@@ -59,18 +59,21 @@
       "name": "Player start",
       "colour": "#3e63dd",
       "sprite": "hero",
-      "props": []
+      "props": [],
+      "behaviours": []
     },
     {
       "id": "coin",
       "name": "Coin",
       "colour": "#f5c41e",
       "sprite": "coin",
-      "props": [
+      "props": [],
+      "behaviours": [
         {
-          "name": "value",
-          "type": "int",
-          "default": 1
+          "id": "collectible",
+          "props": {
+            "value": 1
+          }
         }
       ]
     },
@@ -79,11 +82,13 @@
       "name": "Diamond",
       "colour": "#46c8f0",
       "sprite": "diamond",
-      "props": [
+      "props": [],
+      "behaviours": [
         {
-          "name": "value",
-          "type": "int",
-          "default": 5
+          "id": "collectible",
+          "props": {
+            "value": 5
+          }
         }
       ]
     },
@@ -92,11 +97,17 @@
       "name": "Sentry bot",
       "colour": "#e5484d",
       "sprite": "sentry-bot",
-      "props": [
+      "props": [],
+      "behaviours": [
         {
-          "name": "patrol",
-          "type": "int",
-          "default": 32
+          "id": "patrol",
+          "props": {
+            "patrol": 32
+          }
+        },
+        {
+          "id": "hazard",
+          "props": {}
         }
       ]
     }

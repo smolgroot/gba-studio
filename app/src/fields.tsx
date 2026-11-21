@@ -79,6 +79,47 @@ export function NumberInput({ value, onCommit, label, min, max, disabled }: { va
   )
 }
 
+/**
+ * A field that may be left empty. `parse` reads the text: a value (undefined for
+ * empty) or a problem, shown under the field while the old value stays.
+ */
+export function OptionalNumberInput({ value, onCommit, parse, label, placeholder }: { value: number | undefined; onCommit: (value: number | undefined) => void; parse: (text: string) => { ok: true; value: number | undefined } | { ok: false; problem: string }; label: string; placeholder?: string }) {
+  const shown = value === undefined ? '' : String(value)
+  const [draft, setDraft] = useState(shown)
+  const [problem, setProblem] = useState<string | null>(null)
+  useEffect(() => setDraft(shown), [shown])
+  const commit = () => {
+    const result = parse(draft)
+    if (!result.ok) {
+      setProblem(result.problem)
+      return setDraft(shown)
+    }
+    setProblem(null)
+    setDraft(result.value === undefined ? '' : String(result.value))
+    if (result.value !== value) onCommit(result.value)
+  }
+  return (
+    <Box sx={{ width: '100%', minWidth: 0 }}>
+      <Box
+        component="input"
+        inputMode="numeric"
+        aria-label={label}
+        aria-invalid={problem ? true : undefined}
+        value={draft}
+        placeholder={placeholder}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur()
+          if (event.key === 'Escape') setDraft(shown)
+        }}
+        sx={controlSx}
+      />
+      {problem && <Typography variant="body2" color="error" role="alert" sx={{ mt: 0.5 }}>{problem}</Typography>}
+    </Box>
+  )
+}
+
 export function SelectInput<T extends string>({ value, onChange, options, label, disabled }: { value: T; onChange: (value: T) => void; options: ReadonlyArray<{ value: T; label: string }>; label: string; disabled?: boolean }) {
   return (
     <Box component="select" aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as T)} sx={{ ...controlSx, px: 1 }}>

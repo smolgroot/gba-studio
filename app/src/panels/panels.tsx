@@ -33,7 +33,8 @@ import type { MultiKind, Project } from '@pecten-studio/core'
 import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { ReactNode } from 'react'
-import { Checkbox, Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
+import { Checkbox, Field, Fields, NumberInput, OptionalNumberInput, SelectInput, TextInput } from '../fields.tsx'
+import { parseReserve } from '../datause.ts'
 import { selectionKey, useStudio } from '../store.ts'
 import type { Selection } from '../store.ts'
 import { useSidebar } from '../sidebar.ts'
@@ -506,7 +507,21 @@ function ProjectSettings() {
         {build('devRom', 'Dev ROM')}
         {build('release', 'Release build command')}
         {build('releaseRom', 'Release ROM')}
+        <Field label="Level data reserve">
+          <OptionalNumberInput
+            label="Level data reserve in bytes"
+            placeholder="Default: a quarter of the data, at least 4 KiB"
+            value={project.build.dataReserve}
+            parse={parseReserve}
+            onCommit={(dataReserve) => {
+              const { dataReserve: _, ...rest } = project.build
+              update({ build: dataReserve === undefined ? rest : { ...rest, dataReserve } })
+            }}
+          />
+          <Typography color="text.secondary" sx={{ flexShrink: 0 }}>bytes</Typography>
+        </Field>
       </Fields>
+      <Empty>The reserve is room kept free after the level data in a built ROM, so a project that grows a little can still be patched in without a build. It takes effect at the next build; the Build panel shows how much is used.</Empty>
       <Heading>Entity types</Heading>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(100px, 1.5fr) minmax(100px, 1fr) max-content', alignItems: 'center' }}>
         {project.entityTypes.map((type, index) => (
@@ -528,7 +543,7 @@ function ProjectSettings() {
         <Button
           variant="outlined"
           startIcon={<AddIcon />}
-          onClick={() => update({ entityTypes: [...project.entityTypes, { id: uniqueId('entity', project.entityTypes.map((t) => t.id)), name: 'New entity', colour: '#f5a524', props: [] }] })}
+          onClick={() => update({ entityTypes: [...project.entityTypes, { id: uniqueId('entity', project.entityTypes.map((t) => t.id)), name: 'New entity', colour: '#f5a524', props: [], behaviours: [] }] })}
         >
           Add entity type
         </Button>

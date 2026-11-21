@@ -74,10 +74,14 @@ Notes / open questions
 | US-003 | Live-apply edits to the running game | E1 | P0 | Done | L |
 | US-004 | Say when a change needs a full build | E1 | P0 | Done | S |
 | US-005 | Play from the room and spot under the cursor | E1 | P1 | Done | M |
-| US-006 | Data reserve and section use in Project settings | E1 | P2 | Proposed | S |
+| US-006 | Data reserve and section use in Project settings | E1 | P2 | Done | S |
 | US-007 | Redraw only the changed tiles on live apply | E1 | P2 | Proposed | S |
-| US-010 | Behaviour library in the runtime | E2 | P0 | Proposed | L |
-| US-011 | Behaviours declare their properties to codegen | E2 | P0 | Proposed | M |
+| US-010 | Behaviour library in the runtime | E2 | P0 | Done | L |
+| US-010a | Behaviour shape, patrol, collectible and hazard, used by the sample | E2 | P0 | Done | M |
+| US-010b | Projectile, shooter, platform, door, checkpoint, ability pickup, spawner | E2 | P0 | Done | M |
+| US-011 | Behaviours declare their properties to codegen | E2 | P0 | Done | M |
+| US-011a | Behaviour declarations, the `behaviours` field and its problems | E2 | P0 | Done | M |
+| US-011b | Behaviour properties read by position | E2 | P0 | Done | M |
 | US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Proposed | M |
 | US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Proposed | M |
 | US-014 | Prefabs with per-instance overrides | E2 | P1 | Proposed | M |
@@ -242,7 +246,7 @@ Acceptance criteria
 - [x] The start override is a debug-only setting that release builds ignore.
 
 #### US-006 · Data reserve and section use in Project settings
-**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-001
+**Priority** P2 · **Status** Done · **Size** S · **Depends on** US-001
 **Touches** app, server
 
 As an author, I want to see how much of the ROM's level data space my project uses
@@ -250,8 +254,8 @@ and set the reserve in Project settings, so that I know when an edit will need a
 full build without editing JSON.
 
 Acceptance criteria
-- [ ] Project settings has a field for `build.dataReserve`, empty for the default.
-- [ ] After a build, the Build panel shows the section's bytes used and capacity.
+- [x] Project settings has a field for `build.dataReserve`, empty for the default.
+- [x] After a build, the Build panel shows the section's bytes used and capacity.
 
 #### US-007 · Redraw only the changed tiles on live apply
 **Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-003
@@ -279,23 +283,55 @@ stays Rust, as the studio intends, but common behaviour should come ready-made a
 be attached in the studio.
 
 #### US-010 · Behaviour library in the runtime
-**Priority** P0 · **Status** Proposed · **Size** L · **Depends on** —
+**Priority** P0 · **Status** Done · **Size** L · **Depends on** —
 **Touches** runtime, sample
 
 As a programmer, I want the common Metroidvania behaviours in the runtime, so that
 a game only writes what is special about it.
 
 Acceptance criteria
-- [ ] The runtime has, each with host unit tests: patrol, collectible, hazard,
+- [x] The runtime has, each with host unit tests: patrol, collectible, hazard,
   projectile and shooter, moving platform, door, checkpoint, pickup that grants an
   ability, and spawner.
-- [ ] Each behaviour is a plain struct with an update function taking the entity,
+- [x] Each behaviour is a plain struct with an update function taking the entity,
   the world and a small context (player body, clock, input).
-- [ ] The sample's sentry bot and collectibles use the library and `main.rs` gets
+- [x] The sample's sentry bot and collectibles use the library and `main.rs` gets
   shorter.
 
+Split into US-010a and US-010b, one branch each; this story is `Done` when both are.
+The criteria above are shared out between them unchanged. Design:
+`design/US-010.md`.
+
+#### US-010a · Behaviour shape, patrol, collectible and hazard, used by the sample
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** —
+**Touches** runtime, sample
+
+As a programmer, I want the shape every behaviour shares and the three the sample
+needs, so that the sample's sentry bot and coins come from the library.
+
+Acceptance criteria
+- [x] The runtime has patrol, collectible and hazard, each with host unit tests.
+- [x] Each is a plain struct with an update function taking the entity (`Actor`),
+  the world and a small context (player body, clock, input), through one
+  `Behaviour` trait.
+- [x] The sample's sentry bot and collectibles use the library and `main.rs` gets
+  shorter. (374 to 364 lines; headless pictures identical before and after.)
+
+#### US-010b · Projectile, shooter, platform, door, checkpoint, ability pickup, spawner
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-010a
+**Touches** runtime
+
+As a programmer, I want the rest of the common Metroidvania behaviours in the
+runtime, so that a game only writes what is special about it.
+
+Acceptance criteria
+- [x] The runtime has, each with host unit tests: projectile and shooter, moving
+  platform, door, checkpoint, pickup that grants an ability, and spawner, plus a
+  fixed-size pool for what is made while the game runs.
+- [x] Each implements the `Behaviour` trait from US-010a, and none allocates.
+
 #### US-011 · Behaviours declare their properties to codegen
-**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-010
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-010
 **Touches** runtime, codegen, core (schema)
 
 As a programmer, I want each behaviour to declare the properties it reads, with
@@ -303,10 +339,53 @@ types, defaults and ranges, so that the studio can build an editor for them and
 the build can check them.
 
 Acceptance criteria
-- [ ] Declarations are written once (for example a `behaviour!` macro or a
+- [x] Declarations are written once (for example a `behaviour!` macro or a
   `behaviours.json` the crate ships) and exported as JSON Schema the studio reads.
-- [ ] A missing or wrong-typed property is a problem in the Problems panel, not a
+- [x] A missing or wrong-typed property is a problem in the Problems panel, not a
   runtime surprise.
+- [x] No property is looked up by name in the frame loop: behaviours read their
+  properties by a position fixed per entity type. (The frame-time part, "no slower
+  than before US-010a", moved to US-013 by the author's decision: reading settings
+  from ROM every frame costs 301 against 296, and only keeping them between frames,
+  as US-013's live table does, gets under it. See `design/US-011.md`.)
+
+Split into US-011a and US-011b, one branch each; this story is `Done` when both are.
+The criteria above are shared out between them unchanged. Design:
+`design/US-011.md`.
+
+#### US-011a · Behaviour declarations, the `behaviours` field and its problems
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-010
+**Touches** runtime, codegen, core (schema), server
+
+As a programmer, I want each behaviour to declare its properties once and entity
+types to list their behaviours, so that the studio and the build check behaviour
+settings.
+
+Acceptance criteria
+- [x] Declarations are written once, in the runtime next to each behaviour, and
+  exported as JSON Schema the studio reads (`core/src/behaviourschema.ts`, checked up
+  to date by a test).
+- [x] An entity type lists its behaviours and their values in `project.json`; placed
+  entities can override them; old projects load unchanged.
+- [x] A missing, undeclared, wrong-typed or out-of-range behaviour property, an
+  unknown or repeated behaviour, or a name clash with the type's own properties is
+  a problem in the Problems panel and in the build, with the same words.
+
+#### US-011b · Behaviour properties read by position
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-011a
+**Touches** runtime, codegen, core (data section), sample
+
+As a programmer, I want behaviours to read their properties by a position fixed
+per entity type, so that they cost nothing to look up in the frame loop.
+
+Acceptance criteria
+- [x] The data section says which behaviours each entity type has and where their
+  properties start; both writers give the same bytes (shared fixture).
+- [x] `from_entity` reads no property by name, and gives a behaviour only to
+  entities whose type lists it.
+- [x] The sample's types list their behaviours and its loop no longer checks types
+  for them. (Its average frame is 301 hundred cycles, from 312 after US-010a; the
+  target of 296 moved to US-013, by the author's decision.)
 
 #### US-012 · Attach behaviours to entity types in the studio
 **Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-011
@@ -334,6 +413,9 @@ Acceptance criteria
 - [ ] `include_data!()` gives an `update_entities` (or similar) that calls each
   entity's behaviours.
 - [ ] A game can still handle a kind itself before or instead of the generated code.
+- [ ] Behaviour settings are read from the ROM once and kept with each live entity,
+  not every frame, and the sample's average frame is no slower than before US-010a
+  (296 hundred cycles; moved here from US-011, see `design/US-011.md`).
 
 #### US-014 · Prefabs with per-instance overrides
 **Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-012

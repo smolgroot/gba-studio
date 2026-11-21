@@ -61,6 +61,7 @@ Problems are collected across the whole project and listed in the Problems panel
 - rooms with the wrong amount of tile data;
 - overlapping rooms on the world map, or rooms outside a sized map;
 - sprite frames that are not a GBA size;
+- entity types' behaviours: unknown ones, and properties missing, unknown or out of range (see [Behaviours](./making-a-game#giving-a-type-its-behaviours));
 - and more.
 
 Fix them before you build; the build helper reports hardware limits (palettes, tile counts) when it runs. See [Build and Play](./build-and-play).

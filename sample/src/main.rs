@@ -9,14 +9,13 @@
 //! all of that feels is set in the studio's Physics tab. Switched to top-down there,
 //! the D-pad walks in every direction and the edges of the map are walls.
 //!
-//! Collectibles are entities whose type has a `value` property, like the project's
-//! coins and diamonds: touching one takes it for good and adds its value to the count
-//! in the corner. A new kind of collectible is a new entity type in the studio, with
-//! a sprite and a `value`; nothing here changes.
-//!
-//! Enemies are matched by type: a sentry bot walks back and forth around where it was
-//! placed, as far each way as its `patrol` property says, and touching it hurts like
-//! spikes do: the hero goes back to where it entered the room.
+//! What entities do comes from the runtime's behaviour library, as their types list it
+//! in the project. Coins and diamonds are collectibles: touching one takes it for good
+//! and adds its value to the count in the corner. The sentry bot is a patrol and a
+//! hazard: it walks back and forth around where it was placed, as far each way as its
+//! `patrol` says, and touching it hurts like spikes do: the hero goes back to where it
+//! entered the room. A new enemy or pickup that does these things is a new entity type
+//! in the studio with a sprite and behaviours; nothing here changes.
 //!
 //! Sound effects are the project's audio list, played by id: `jump`, `coin`, `diamond`
 //! and `damage`.
@@ -30,6 +29,7 @@
 use agb::input::{Button, ButtonController};
 use agb::sound::mixer::{Frequency, Mixer, SoundChannel};
 use pecten_studio_rt::{
+    behaviour::{Abilities, Actor, Behaviour, Collectible, Context, Event, Hazard, Patrol},
     data::{Collected, CollisionKind, SCREEN_H, SCREEN_W, World},
     debug::{self, GameState, Live},
     gfx::{AnimPlayer, WorldView},
@@ -45,9 +45,6 @@ use data::EntityKind;
 /// The most the camera moves in a frame when the area it may show changes, so it
 /// glides to its new place. Following the hero never needs this much.
 const CAMERA_SPEED: i32 = 6;
-
-/// A sentry bot takes this many frames to walk a pixel.
-const SENTRY_PACE: u32 = 2;
 
 /// Words of 32 bits that hold one bit for every entity of the project.
 const ENTITY_WORDS: usize = data::ENTITY_SLOTS.div_ceil(32);
@@ -115,20 +112,6 @@ impl Stopwatch {
 /// Plays a sound effect of the project. When every channel is busy it is dropped.
 fn play(mixer: &mut Mixer, sound: usize) {
     let _ = mixer.play_sound(SoundChannel::new(audio::SFX[sound]));
-}
-
-/// Where a patrol has got to after `clock` frames: pixels from where the entity was
-/// placed, out to `reach` on each side and back, and whether it is walking left.
-fn patrol(reach: i32, clock: u32) -> (i32, bool) {
-    if reach <= 0 {
-        return (0, false);
-    }
-    let step = (clock / SENTRY_PACE % (4 * reach as u32)) as i32;
-    match step {
-        _ if step < reach => (step, false),
-        _ if step < 3 * reach => (2 * reach - step, true),
-        _ => (step - 4 * reach, false),
-    }
 }
 
 /// The hero's box: the hitbox drawn in the studio, or a default.
@@ -304,10 +287,12 @@ fn main(mut gba: agb::Gba) -> ! {
         let (feet_x, feet_y) = body.feet();
         hero.object(animation.frame(), feet_x - camera.0, feet_y - camera.1, faces_left).show(&mut frame);
         // Every other entity whose type has a sprite stands where it was placed, in
-        // every room that is in view, playing its sprite's first animation. One with a
-        // `value` is a collectible: it is taken when the hero touches it. A sentry bot
-        // patrols, and hurts the hero it touches.
+        // every room that is in view, playing its sprite's first animation, unless a
+        // behaviour moves it. A collectible is taken for good when the hero touches it,
+        // and a hazard hurts the hero it touches.
         let mut hurt = false;
+        let (held, pressed) = pecten_studio_rt::gfx::buttons(&input);
+        let cx = Context { player: &body, clock, held, pressed, abilities: Abilities::NONE };
         for (index, other) in world.rooms().enumerate() {
             let Some((left, top)) = world.origin(index).filter(|_| view.shows(index)) else { continue };
             if left >= camera.0 + SCREEN_W || top >= camera.1 + SCREEN_H || left + other.width() <= camera.0 || top + other.height() <= camera.1 {
@@ -318,30 +303,29 @@ fn main(mut gba: agb::Gba) -> ! {
                 if EntityKind::of(&entity) == Some(EntityKind::PlayerStart) || found.has(taken) {
                     continue;
                 }
-                let sentry = EntityKind::of(&entity) == Some(EntityKind::SentryBot);
-                let (walked, flip) = if sentry { patrol(entity.int("patrol").unwrap_or(0), clock) } else { (0, false) };
-                let (world_x, world_y) = (left + entity.x as i32 + walked, top + entity.y as i32);
-                let (x, y) = (world_x - camera.0, world_y - camera.1);
-                if let Some(sheet) = gfx::ENTITY_SPRITES[entity.kind as usize]
-                    && (-64..SCREEN_W + 64).contains(&x)
-                    && (-64..SCREEN_H + 64).contains(&y)
-                {
-                    if let Some(value) = entity.int("value") {
-                        let (box_x, box_y, box_w, box_h) = sheet.hitbox_at(world_x, world_y);
-                        if body.overlaps(box_x, box_y, box_w, box_h) && found.take(taken) {
-                            score = score.saturating_add(value.max(0) as u32);
-                            let diamond = EntityKind::of(&entity) == Some(EntityKind::Diamond);
-                            play(&mut mixer, if diamond { audio::sfx::DIAMOND } else { audio::sfx::COIN });
-                            continue;
-                        }
-                    }
-                    if sentry {
-                        let (box_x, box_y, box_w, box_h) = sheet.hitbox_at(world_x, world_y);
-                        hurt |= body.overlaps(box_x, box_y, box_w, box_h);
-                    }
-                    let shown = sheet.animations.first().map_or(0, |animation| animation.frame_at(clock));
-                    sheet.object(shown, x, y, flip).show(&mut frame);
+                let Some(sheet) = gfx::ENTITY_SPRITES[entity.kind as usize] else { continue };
+                let mut actor = Actor::at(left + entity.x as i32, top + entity.y as i32, sheet.hitbox());
+                if let Some(mut patrol) = Patrol::from_entity(&entity) {
+                    patrol.update(&mut actor, &world, &cx);
                 }
+                let (x, y) = (actor.x - camera.0, actor.y - camera.1);
+                if !(-64..SCREEN_W + 64).contains(&x) || !(-64..SCREEN_H + 64).contains(&y) {
+                    continue;
+                }
+                if let Some(mut collectible) = Collectible::from_entity(&entity)
+                    && let Event::Collect { value } = collectible.update(&mut actor, &world, &cx)
+                    && found.take(taken)
+                {
+                    score = score.saturating_add(value.max(0) as u32);
+                    let diamond = EntityKind::of(&entity) == Some(EntityKind::Diamond);
+                    play(&mut mixer, if diamond { audio::sfx::DIAMOND } else { audio::sfx::COIN });
+                    continue;
+                }
+                if let Some(mut hazard) = Hazard::from_entity(&entity) {
+                    hurt |= hazard.update(&mut actor, &world, &cx) == Event::Hurt;
+                }
+                let shown = sheet.animations.first().map_or(0, |animation| animation.frame_at(clock));
+                sheet.object(shown, x, y, actor.faces_left).show(&mut frame);
             }
         }
         if hurt {

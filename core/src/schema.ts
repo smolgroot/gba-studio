@@ -56,6 +56,17 @@ export const PropertyDef = z
     if ((p.type === 'enum') !== (p.options !== undefined)) ctx.addIssue({ code: 'custom', message: 'options go with type "enum", and only with it', path: ['options'] })
   })
 
+/**
+ * A behaviour from the runtime's library that an entity type has (see `behaviourschema.ts`),
+ * with the type's values for its properties. What is left out takes the behaviour's
+ * default; placed entities override a value with a property of the same name. Values
+ * are checked against the behaviour by `behaviours.ts`, so any value parses here.
+ */
+export const BehaviourUse = z.object({
+  id: Id,
+  props: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])).default({}),
+})
+
 export const EntityType = z.object({
   id: Id,
   name: z.string().min(1),
@@ -63,6 +74,8 @@ export const EntityType = z.object({
   /** Sprite document shown for it in the map editor. */
   sprite: Id.optional(),
   props: z.array(PropertyDef).default([]),
+  /** Behaviours from the runtime's library, in the order the game runs them. */
+  behaviours: z.array(BehaviourUse).default([]),
 })
 
 const tuning = (min: number, max: number, value: number) => z.number().int().min(min).max(max).default(value)
@@ -253,6 +266,7 @@ export const Audio = z.object({
 
 export type CollisionClass = z.infer<typeof CollisionClass>
 export type EntityType = z.infer<typeof EntityType>
+export type BehaviourUse = z.infer<typeof BehaviourUse>
 export type PlatformerPhysics = z.infer<typeof PlatformerPhysics>
 export type TopDownPhysics = z.infer<typeof TopDownPhysics>
 export type Physics = z.infer<typeof Physics>

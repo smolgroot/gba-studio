@@ -11,6 +11,7 @@ import { applyLive, liveTaken, planLiveApply, readDebugMap, startAt } from '@pec
 import type { DebugMap, StartSpot } from '@pecten-studio/core'
 import { api, fileUrl } from '../api.ts'
 import type { PatchResult, RomInfo, ToolchainReport } from '../api.ts'
+import { dataUseLine } from '../datause.ts'
 import { Checkbox } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { ui } from '../theme.ts'
@@ -57,6 +58,21 @@ function BuildSetup() {
   )
 }
 
+/** How much of each built ROM's level data section is used: see design/US-006.md. */
+function DataUse({ roms }: { roms: Partial<Record<'dev' | 'release', RomInfo>> }) {
+  const lines = (['dev', 'release'] as const).flatMap((mode) => (roms[mode] ? [{ mode, ...dataUseLine(mode, roms[mode].data) }] : []))
+  if (!lines.length) return null
+  return (
+    <Box sx={{ px: 2, py: 0.75, borderBottom: '1px solid #111' }}>
+      {lines.map((line) => (
+        <Typography key={line.mode} variant="body2" color={line.warning ? 'warning.main' : 'text.secondary'} title={line.warning ? 'Little room is left: an edit that adds data may need a full build. Raise the level data reserve in Project settings, then build.' : undefined}>
+          {line.text}
+        </Typography>
+      ))}
+    </Box>
+  )
+}
+
 /** Build buttons, status line and the streamed log. */
 export function BuildPanel() {
   const build = useStudio((s) => s.build)
@@ -95,6 +111,7 @@ export function BuildPanel() {
         <Typography color={failed ? 'error' : 'text.secondary'} noWrap sx={{ flex: 1, minWidth: 0 }}>{status}</Typography>
       </Box>
       <BuildSetup />
+      <DataUse roms={build?.roms ?? {}} />
       <Box
         ref={log}
         onScroll={(event) => {

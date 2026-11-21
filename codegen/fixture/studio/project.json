@@ -90,6 +90,17 @@
             "stone"
           ]
         }
+      ],
+      "behaviours": [
+        {
+          "id": "checkpoint"
+        },
+        {
+          "id": "door",
+          "props": {
+            "needs_ability": 4
+          }
+        }
       ]
     }
   ]

@@ -5,14 +5,29 @@ use agb::{
     display::{
         Graphics, GraphicsFrame, Palette16, Priority,
         object::{Object, Sprite},
-        tiled::{InfiniteScrolledMap, PartialUpdateStatus, RegularBackground, RegularBackgroundId, RegularBackgroundSize, TileEffect, TileFormat, TileSet, TileSetting},
+        tiled::{
+            InfiniteScrolledMap, PartialUpdateStatus, RegularBackground, RegularBackgroundId, RegularBackgroundSize, TileEffect, TileFormat, TileSet,
+            TileSetting,
+        },
     },
     fixnum::{Num, Vector2D, vec2},
+    input::{Button, ButtonController},
 };
 
 use core::cell::Cell;
 
+use crate::behaviour::{Buttons, Hitbox};
 use crate::data::{Background, Dim, Room, World};
+
+/// The buttons as behaviours see them, held and pressed this frame, from agb's
+/// input after its `update` for the frame. agb numbers its buttons with the same bits.
+pub fn buttons(input: &ButtonController) -> (Buttons, Buttons) {
+    use Button::*;
+    let all = [A, B, Select, Start, Right, Left, Up, Down, R, L];
+    let held = all.iter().filter(|&&b| input.is_pressed(b)).fold(0, |bits, &b| bits | b as u16);
+    let pressed = all.iter().filter(|&&b| input.is_just_pressed(b)).fold(0, |bits, &b| bits | b as u16);
+    (Buttons(held), Buttons(pressed))
+}
 
 /// A tileset's tiles and the palettes they are drawn with.
 pub struct Tileset {
@@ -523,6 +538,15 @@ impl SpriteSheet {
     pub fn hitbox_at(&self, x: i32, y: i32) -> (i32, i32, i32, i32) {
         let (left, top, w, h) = self.hitbox.unwrap_or((0, 0, self.width as u16, self.height as u16));
         (x - self.anchor.0 as i32 + left as i32, y - self.anchor.1 as i32 + top as i32, w as i32, h as i32)
+    }
+
+    /// The sheet's hitbox (the whole frame if it has none) as an offset from the anchor,
+    /// which is where an entity's feet are: what an [`Actor`] carries.
+    ///
+    /// [`Actor`]: crate::behaviour::Actor
+    pub fn hitbox(&self) -> Hitbox {
+        let (left, top, w, h) = self.hitbox_at(0, 0);
+        Hitbox { x: left as i16, y: top as i16, w: w as u16, h: h as u16 }
     }
 
     /// An object showing a frame with the sheet's anchor at a point of the screen.

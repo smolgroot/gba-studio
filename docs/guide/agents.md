@@ -6,12 +6,16 @@ The studio's project code is also a command line and an MCP server, so an agent 
 pecten-studio validate <folder> [--json]            # every problem; exit 1 on errors
 pecten-studio build <folder> [--release] [--json]   # run the project's build command
 pecten-studio patch <folder> [--release] [--json]   # put changed level data into the built ROM; exit 3 if it needs a build
-pecten-studio schema                                # JSON Schema of every document kind
+pecten-studio schema                                # JSON Schema of every document kind and behaviour
 pecten-studio agents <folder> [--claude]            # write AGENTS.md; --claude also sets up Claude Code
 pecten-studio mcp <folder>                          # MCP server over stdio
 ```
 
 From a checkout, `pecten-studio` is `node <this repo>/server/src/cli.ts`.
+
+## Building
+
+`pecten-studio build` runs the dev build command from [Project settings](./project-settings), or the release one with `--release`, and prints its output. With `--json` the build's output goes to stderr, and stdout gets one object with `ok`, `mode`, `command`, `exitCode`, `seconds`, `log` and `rom`. `rom` is null when there is no ROM at the configured path; otherwise it has the `path`, `size` and `modified` time, and `data`: `{ used, capacity }`, the bytes of level data in the ROM's [data section](../reference/data-section) and the room it has, or null when the game does not read its level data from the ROM. These are the numbers the [Build panel](./build-and-play#level-data-use) shows.
 
 ## Patching the ROM
 
@@ -79,6 +83,8 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 | `render_room`, `render_tileset`, `render_sprite` | Pictures: a room (optionally tinted by collision), a tileset or sprite sheet with its grid |
 | `build`, `patch_rom`, `run_rom` | Build the ROM; put changed level data into the built ROM without a build; run it headless for given frames and held buttons and get a picture after each step |
 | `studio_view`, `studio_open` | What the author has open; put an item in front of them (studio endpoint only) |
+
+An entity type's [behaviours](./making-a-game#giving-a-type-its-behaviours) are set by writing `project` with `write_document`; `entity_type_set` keeps the ones a type has. The answer lists the problems left in `project.json`, such as an unknown behaviour or a value out of range. A placed entity overrides a behaviour's value through `props` in `entity_add` and `entity_update`, which answer with the problems in its room. `validate` lists them all, and `pecten-studio schema` gives each behaviour's properties under `behaviours`.
 
 `room_update` darkens layers (see [Darkening layers](./rooms#darkening-layers)) with three parameters: `dimLevel`, from 0 to 16; `dimLayers`, the tile layers to darken, by number (0 is the back layer) or name, which replaces the set, so `[]` turns dimming off for all tile layers; and `dim` on each entry of `backgrounds`. `project_overview` shows which layers are dimmed and the level.
 

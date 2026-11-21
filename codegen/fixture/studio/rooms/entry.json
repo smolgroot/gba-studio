@@ -172,7 +172,7 @@
       "x": 64,
       "y": 136,
       "props": {
-        "text": "Caf\u00e9 ahead",
+        "text": "Café ahead",
         "lit": true
       }
     },
@@ -182,7 +182,8 @@
       "y": 136,
       "props": {
         "weight": 70000,
-        "style": "stone"
+        "style": "stone",
+        "needs_ability": 7
       }
     }
   ],

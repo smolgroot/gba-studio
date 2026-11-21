@@ -345,8 +345,9 @@ The game brings the result in with three macros:
 
 Level data (rooms, tile layers, collision cells, entities and their properties, world
 placement, the start room and physics) is in one data section in the ROM, with a
-fixed, versioned layout and room to grow after it (`build.dataReserve` in
-`project.json`; by default a quarter of the data, at least 4 KiB). Graphics, sprites
+fixed, versioned layout and room to grow after it (**Level data reserve** in
+Project settings, `build.dataReserve` in `project.json`; by default a quarter of the
+data, at least 4 KiB). The Build panel shows how much of it each built ROM uses. Graphics, sprites
 and audio stay compiled. The game reads the section once at start with
 `let world = data::world();` and passes `&world` to what needs it: `world.physics()`,
 `body.step(&world, ...)`, `WorldView::new(&world, gfx::ART, room, &mut graphics)`,
@@ -366,6 +367,16 @@ and audio stay compiled. The game reads the section once at start with
   bit for every entity that has been taken (numbered across rooms by
   `World::entity_index`, and plain words a game can save), and
   `SpriteSheet::hitbox_at` gives a placed entity's box.
+- `behaviour` has ready-made behaviours for placed entities: `Patrol`, `Collectible`,
+  `Hazard`, `Projectile` and `Shooter`, `MovingPlatform`, `Door`, `Checkpoint`,
+  `AbilityPickup` and `Spawner`. An entity type lists its behaviours in
+  `studio/project.json`. Each is a plain struct built from the settings the type and
+  the placed entity give it, read by position with no name lookups, with an `update`
+  for one frame that moves an `Actor` and answers with an `Event` (`Hurt`,
+  `Collect`, `Grant`, `Checkpoint`, `Fire`, `Spawn`, `Opened`). The
+  game decides what an event does. `Abilities` is a set of 32 abilities that doors
+  check, and `Pool` a fixed-size home for shots and spawned enemies. No dependencies,
+  no allocation, tested on the host.
 - `gfx` (behind the `agb` feature) has `WorldView`, which draws every room that
   shares a tileset as one scrolling space, streaming tiles in as the camera moves;
   `RoomView` for a single room on its own; and `SpriteSheet` and `AnimPlayer`.
@@ -389,13 +400,14 @@ respawns on spikes, walks from one room into the next while the camera scrolls
 across in front of a sky and hills that drift at a quarter and half of its speed,
 collects coins and diamonds that add to a count in the corner, and is sent back to
 where it entered the room by a patrolling sentry bot. Its `src/main.rs` is
-about 330 lines.
+about 360 lines.
 
-A collectible is an entity type with a sprite and an integer `value` property: the
-sample takes any such entity the hero touches. To add another kind (a ruby, a key),
-import its PNG as a sprite, add the entity type in Project settings, give it a `value`
+A collectible is an entity type with a sprite that lists the `collectible` behaviour,
+with its `value`: the sample takes any such entity the hero touches. To add another
+kind (a ruby, a key), import its PNG as a sprite, add the entity type in Project
+settings, give it `"behaviours": [{ "id": "collectible", "props": { "value": 10 } }]`
 in `studio/project.json`, and place it in rooms with the entities tool; no Rust
-changes. It builds from its own folder, with the nightly toolchain pinned in
+changes. The sentry bot lists `patrol` and `hazard` the same way. It builds from its own folder, with the nightly toolchain pinned in
 `sample/rust-toolchain.toml` and `agb-gbafix` installed (`cargo install agb-gbafix`):
 
 ```sh
@@ -516,8 +528,7 @@ Roughly in order. Each item is useful on its own. The full, prioritised list is 
 ### Runtime
 
 - Camera helpers (room bounds, screen transitions between rooms, shake).
-- Entity helpers: spawning from room data, activation near the camera, simple
-  patrol and projectile behaviours.
+- Entity helpers: spawning from room data, activation near the camera.
 - Save data for what the player has found and opened, keyed by room and entity.
 - Door and ability-gate patterns for the Metroidvania loop.
 - Headless test helpers on the Pecten core, so a game can test "the player can

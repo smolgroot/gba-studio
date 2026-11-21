@@ -1,4 +1,5 @@
 // Checks across documents: the references and sizes a single schema cannot see.
+import { behaviourEntityProblems, behaviourTypeProblems, isBehaviourProp } from './behaviours.ts'
 import { rleLength } from './rle.ts'
 import { MAX_SCREEN_LAYERS, SCREEN, SPRITE_SIZES, docPath } from './schema.ts'
 import type { Audio, Project, Room, Sprite, Tileset, World } from './schema.ts'
@@ -44,6 +45,7 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
       if (type.sprite && !docs.sprites[type.sprite]) add('error', file, `entity type "${type.id}" uses unknown sprite "${type.sprite}"`)
       for (const name of duplicates(type.props.map((p) => p.name))) add('error', file, `entity type "${type.id}" has property "${name}" twice`)
     }
+    for (const message of behaviourTypeProblems(project.entityTypes)) add('error', file, message)
   }
 
   for (const [id, tileset] of Object.entries(docs.tilesets)) {
@@ -102,8 +104,11 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
       if (project && !type) add('error', file, `entity ${i} has unknown type "${entity.type}"`)
       if (entity.x >= room.width * SCREEN.width || entity.y >= room.height * SCREEN.height) add('error', file, `entity ${i} (${entity.type}) is outside the room`)
       for (const name of Object.keys(entity.props)) {
-        if (type && !type.props.some((p) => p.name === name)) add('warning', file, `entity ${i} (${entity.type}) has a property "${name}" its type does not define`)
+        if (type && !type.props.some((p) => p.name === name) && !isBehaviourProp(type, name)) {
+          add('warning', file, `entity ${i} (${entity.type}) has a property "${name}" its type does not define`)
+        }
       }
+      if (type) for (const message of behaviourEntityProblems(i, type, entity)) add('error', file, message)
     }
     if (room.music && audio && !tracks.has(room.music)) add('error', file, `unknown music track "${room.music}"`)
     if (world && !world.rooms.some((r) => r.room === id)) add('warning', file, 'not placed in the world')

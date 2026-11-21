@@ -5,6 +5,7 @@
 // layout of runtime/src/data/layout.rs and the writer of runtime/src/data/write.rs.
 // The two must give the same bytes: core/test/datasection.test.ts checks this one
 // against codegen/fixture/expected/studio_data.bin, which codegen's tests check too.
+import { behaviourPositions, behaviourValues } from './behaviours.ts'
 import { dimFlags } from './dim.ts'
 import { rleDecode, rleLength } from './rle.ts'
 import { roomSize } from './room.ts'
@@ -13,8 +14,10 @@ import type { Documents } from './validate.ts'
 const MAGIC = [0x50, 0x45, 0x43, 0x54, 0x44, 0x41, 0x54, 0x41] // "PECTDATA"
 export const SECTION_VERSION = 1
 const HEADER = 20
-const SECTIONS = 8
-const [S_STRINGS, S_CLASSES, S_ROOMS, S_ENTITIES, S_PROPS, S_CELLS, S_GLOBALS, S_MANIFEST] = [0, 1, 2, 3, 4, 5, 6, 7] as const
+const SECTIONS = 9
+/** A section from before behaviours had theirs has 8, and is read as having none. */
+const MIN_SECTIONS = 8
+const [S_STRINGS, S_CLASSES, S_ROOMS, S_ENTITIES, S_PROPS, S_CELLS, S_GLOBALS, S_MANIFEST, S_BEHAVIOURS] = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const
 const CLASS = 12
 const ROOM = 64
 const NO_ROOM = 0xffff
@@ -94,7 +97,7 @@ export function readSection(rom: Uint8Array): Section | null {
   const used = u32(12)
   const capacity = u32(16)
   const empty: Manifest = { entityTypes: [], tilesets: [], pictures: [], tracks: [] }
-  if (version !== SECTION_VERSION || u16(10) < SECTIONS || start + capacity > rom.length) return { start, version, used, capacity, manifest: empty, classes: [], rooms: [] }
+  if (version !== SECTION_VERSION || u16(10) < MIN_SECTIONS || start + capacity > rom.length) return { start, version, used, capacity, manifest: empty, classes: [], rooms: [] }
   const part = (n: number) => u32(HEADER + n * 8)
   const strings = part(S_STRINGS)
   const str = (at: number) => fromUtf8(rom.subarray(start + strings + u32(at), start + strings + u32(at) + u32(at + 4)))
@@ -336,12 +339,18 @@ export function writeSection(docs: Documents, compiled: Manifest, capacity: numb
         return
       }
       const defs = types[kind]!.props
-      parts[S_ENTITIES]!.u16(kind, entity.x, entity.y, defs.length)
+      // Its behaviours' properties come after the type's own, as codegen writes them.
+      const behaviourProps = behaviourValues(types[kind]!, entity.props)
+      if (!behaviourProps) {
+        problems.push(`${file}: entity ${n} (${entity.type}) has a behaviour property with no value or a value that does not fit; see the Problems panel`)
+        return
+      }
+      const written = [...defs.map((def) => ({ name: def.name, value: entity.props[def.name] ?? def.default })), ...behaviourProps]
+      parts[S_ENTITIES]!.u16(kind, entity.x, entity.y, written.length)
       parts[S_ENTITIES]!.u32(propCount)
-      for (const def of defs) {
-        const value = entity.props[def.name] ?? def.default
+      for (const { name, value } of written) {
         const out = parts[S_PROPS]!
-        strings.put(out, def.name)
+        strings.put(out, name)
         if (typeof value === 'boolean') out.u8(1, 0, 0, 0, value ? 1 : 0, 0, 0, 0, 0, 0, 0, 0)
         else if (typeof value === 'number') {
           out.u8(0, 0, 0, 0)
@@ -426,6 +435,17 @@ export function writeSection(docs: Documents, compiled: Manifest, capacity: numb
   }
   for (const track of compiled.tracks) strings.put(manifest, track)
   parts[S_STRINGS]!.bytes = strings.bytes
+
+  // Each type's behaviours, and where their properties start among its entities'.
+  const positions = types.map(behaviourPositions)
+  const behaviours = parts[S_BEHAVIOURS]!
+  behaviours.u16(types.length & 0xffff, types.length >>> 16)
+  let first = 0
+  for (const kind of positions) {
+    behaviours.u16(first, kind.length)
+    first += kind.length
+  }
+  for (const kind of positions) for (const { number, at } of kind) behaviours.u16(number, at)
 
   const out = new Bytes()
   out.bytes = new Array<number>(padded(HEADER + SECTIONS * 8)).fill(0)

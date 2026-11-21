@@ -81,7 +81,7 @@ describe('what needs a build rather than a patch', () => {
 
   it('names what changed on the compiled side', () => {
     const docs = load(FIXTURE)
-    docs.project!.entityTypes.push({ id: 'bat', name: 'Bat', colour: '#000000', props: [] })
+    docs.project!.entityTypes.push({ id: 'bat', name: 'Bat', colour: '#000000', props: [], behaviours: [] })
     docs.project!.entityTypes[0]!.sprite = undefined
     docs.rooms.cave = docs.rooms.entry!
     docs.audio!.tracks.push({ id: 'boss', name: 'Boss', file: 'assets/boss.xm', format: 'xm' })

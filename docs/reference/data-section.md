@@ -1,11 +1,11 @@
 # Data section
 
 A built game keeps its level data in one block of the ROM, the data section: rooms,
-their tile layers and collision cells, entities and their properties, where rooms
-sit on the world map, the start room and the physics. The game reads all of it from
-there when it starts. Graphics (tile and picture pixels, palettes, sprites) and
-audio are compiled into the game and are not in the section; the section refers to
-them by number.
+their tile layers and collision cells, entities and their properties, the behaviours
+of each entity type, where rooms sit on the world map, the start room and the
+physics. The game reads all of it from there when it starts. Graphics (tile and
+picture pixels, palettes, sprites) and audio are compiled into the game and are not
+in the section; the section refers to them by number.
 
 Because the layout is fixed and versioned, a tool can find the section in a `.gba`
 file and replace it without compiling the game, as long as the new data fits. The
@@ -24,8 +24,11 @@ ROM. Search the file for them.
 
 After the data come zero bytes up to the section's capacity. A replacement section
 can be as large as the capacity. The reserve is set by `build.dataReserve` in
-`studio/project.json`, in bytes, from 0 to 1 MiB. Left out, it is a quarter of the
-data, rounded up to a KiB, and at least 4 KiB.
+`studio/project.json`, in bytes, from 0 to 1 MiB, or with **Level data reserve** in
+[Project settings](../guide/project-settings#level-data-reserve). Left out, it is a
+quarter of the data, rounded up to a KiB, and at least 4 KiB. The studio's
+[Build panel](../guide/build-and-play#level-data-use) shows the bytes used and the
+capacity of each built ROM, read from the header below.
 
 The game also has a fixed list of entity types, tilesets, background pictures and
 tracks, and the ids of rooms and collision classes become names in its code. The
@@ -49,7 +52,7 @@ they point into. Every part starts on a 4-byte boundary.
 | --- | --- | --- |
 | 0 | 8 | `PECTDATA` |
 | 8 | 2 | Layout version: 1. A game refuses any other. |
-| 10 | 2 | Entries in the table: 8. A later version may add parts after these; a reader skips those it does not know. |
+| 10 | 2 | Entries in the table: 9. A section written before behaviours had their part has 8, and reads as having no behaviours. A later version may add parts after these; a reader skips those it does not know. |
 | 12 | 4 | Bytes used, header included. |
 | 16 | 4 | Capacity: bytes the section takes in the ROM, at least the bytes used. |
 | 20 | 8 each | The table: `{ offset u32, length u32 }` for each part below, in this order. |
@@ -64,6 +67,7 @@ they point into. Every part starts on a 4-byte boundary.
 | 5 cells | Collision cells and tile layer cells. |
 | 6 globals | The start room, the entity count and the physics, 92 bytes. |
 | 7 manifest | What the game compiled from the project. The game does not read it. |
+| 8 behaviours | Which behaviours each entity type has, and where their properties start. |
 
 ### Collision class
 
@@ -116,7 +120,12 @@ the room has none.
 | 6 | 2 | Number of properties |
 | 8 | 4 | Number of its first property in the props part |
 
-An entity has every property its type defines, defaults filled in.
+An entity has every property its type defines, defaults filled in. Then come the
+properties of each behaviour its type lists, behaviour after behaviour in the type's
+order, and each behaviour's in the order the behaviour declares them. Each has the
+placed entity's value, else the type's, else the behaviour's default. They have
+their names, like the type's own, but the game reads them by position: the
+[behaviours](#behaviours) part says where each behaviour's start.
 
 ### Property
 
@@ -174,11 +183,31 @@ A new section can replace the old one without a build while the project's entity
 types (and their sprites), collision class ids, room ids, tilesets and their tile
 counts, background pictures and tracks are the same as these, in the same order.
 
+### Behaviours
+
+All in `u16` halfwords:
+
+| Halfwords | Field |
+| --- | --- |
+| 2 | Number of entity types, low half first |
+| 2 each | For each entity type, by number: its first entry, counted from the first entry, and its number of entries |
+| 2 each | The entries: `{ behaviour number, position of its first property }` |
+
+A type's entries are its behaviours in the order the type lists them. The behaviour
+number is the one the runtime declares (`pecten-studio schema` gives it under
+`behaviours`): 0 patrol, 1 collectible, 2 hazard, 3 projectile, 4 shooter, 5 moving
+platform, 6 door, 7 checkpoint, 8 ability pickup, 9 spawner. The position counts
+from the entity's first property, and the behaviour's properties follow it in the
+order it declares them, the same for every entity of the type. A type with no
+behaviours has a count of 0, as does a type past the number of types here. An entity
+whose position is past its own number of properties fails the check below.
+
 ## What the game checks
 
 When it starts, the game checks the whole section before using it: the header, that
 every part and every record lies inside the data, that strings are UTF-8, that every
-cell names a class that exists, and that tilesets, pictures, tracks and entity types
+cell names a class that exists, that every entity has the properties its type's
+behaviours start at, and that tilesets, pictures, tracks and entity types
 are ones the game was built with. A section that fails stops the game with a message
 saying to rebuild it. Once checked, the section is read in place and nothing is
 copied into RAM.

@@ -67,6 +67,9 @@ pub struct WorldData<'a> {
     pub start: Option<u16>,
     pub physics: Physics,
     pub manifest: Manifest<'a>,
+    /// For each entity type, by index, its behaviours: each one's number and the
+    /// position of its first property among the entity's. Types past the end have none.
+    pub behaviours: Vec<Vec<(u16, u16)>>,
 }
 
 /// Strings, each kept once.
@@ -212,6 +215,17 @@ pub fn write(world: &WorldData, reserve: Option<usize>) -> (Vec<u8>, usize) {
         strings.put(out, track);
     }
     sections[S_STRINGS] = strings.bytes;
+
+    let out = &mut sections[S_BEHAVIOURS];
+    let kinds = world.behaviours.len() as u32;
+    let mut halves = vec![kinds as u16, (kinds >> 16) as u16];
+    let mut first = 0u16;
+    for kind in &world.behaviours {
+        halves.extend([first, kind.len() as u16]);
+        first += kind.len() as u16;
+    }
+    halves.extend(world.behaviours.iter().flatten().flat_map(|&(number, at)| [number, at]));
+    out.extend(halves.iter().flat_map(|half| half.to_le_bytes()));
 
     let mut out = vec![0u8; table_end(SECTIONS)];
     out[..8].copy_from_slice(&MAGIC);

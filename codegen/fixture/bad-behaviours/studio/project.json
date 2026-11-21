@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "name": "Bad behaviours",
+  "build": { "dev": "true", "release": "true", "devRom": "dist/dev.gba", "releaseRom": "dist/game.gba" },
+  "collisionClasses": [{ "id": "empty", "name": "Empty", "colour": "#000000", "kind": "empty" }],
+  "entityTypes": [
+    { "id": "typo", "name": "Typo", "colour": "#000000", "behaviours": [{ "id": "patroll" }] },
+    { "id": "twice", "name": "Twice", "colour": "#000000", "behaviours": [{ "id": "hazard" }, { "id": "hazard" }] },
+    { "id": "extra", "name": "Extra", "colour": "#000000", "behaviours": [{ "id": "hazard", "props": { "damage": 2 } }, { "id": "patrol", "props": { "speed": 1 } }] },
+    { "id": "slow", "name": "Slow", "colour": "#000000", "behaviours": [{ "id": "patrol", "props": { "patrol_pace": 0, "patrol": "far" } }] },
+    { "id": "own", "name": "Own", "colour": "#000000", "props": [{ "name": "value", "type": "int", "default": 1 }], "behaviours": [{ "id": "collectible" }] },
+    { "id": "both", "name": "Both", "colour": "#000000", "behaviours": [{ "id": "shooter" }, { "id": "projectile" }] },
+    { "id": "key", "name": "Key", "colour": "#000000", "behaviours": [{ "id": "ability-pickup" }] },
+    { "id": "boots", "name": "Boots", "colour": "#000000", "behaviours": [{ "id": "ability-pickup", "props": { "grants_ability": 3 } }] }
+  ]
+}

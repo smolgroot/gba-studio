@@ -128,7 +128,7 @@ const hero: Sprite = {
   ],
 }
 // Collectibles: 8x8 sheets from make-sample-assets.ts, placed by the middle of their
-// bottom edge. The game takes any entity whose type has a `value`.
+// bottom edge. Their types have the runtime's collectible behaviour, worth its `value`.
 const pickup = (name: string, file: string, frames: Sprite['animations'][number]['frames']): Sprite => ({
   version: FORMAT_VERSION,
   name,
@@ -143,7 +143,8 @@ const diamond = pickup('Diamond', 'diamond', [{ index: 0, duration: 50 }, { inde
 // The digits of the count in the corner: frame n is the digit n.
 const digits: Sprite = { version: FORMAT_VERSION, name: 'Counter digits', image: 'assets/sprites/digits.png', frame: { width: 8, height: 8 }, anchor: { x: 0, y: 0 }, animations: [] }
 // The enemy: a hand-drawn sheet of 32x32 frames on a flat backdrop, which the build
-// clears. The game walks it `patrol` pixels each way and hurts the hero that touches it.
+// clears. Its type has the patrol and hazard behaviours: it walks `patrol` pixels each
+// way and hurts the hero that touches it.
 const sentry: Sprite = {
   version: FORMAT_VERSION,
   name: 'Sentry bot',
@@ -158,10 +159,13 @@ const sentry: Sprite = {
   ],
 }
 project.entityTypes = [
-  { id: 'player-start', name: 'Player start', colour: '#3e63dd', sprite: 'hero', props: [] },
-  { id: 'coin', name: 'Coin', colour: '#f5c41e', sprite: 'coin', props: [{ name: 'value', type: 'int', default: 1 }] },
-  { id: 'diamond', name: 'Diamond', colour: '#46c8f0', sprite: 'diamond', props: [{ name: 'value', type: 'int', default: 5 }] },
-  { id: 'sentry-bot', name: 'Sentry bot', colour: '#e5484d', sprite: 'sentry-bot', props: [{ name: 'patrol', type: 'int', default: 32 }] },
+  { id: 'player-start', name: 'Player start', colour: '#3e63dd', sprite: 'hero', props: [], behaviours: [] },
+  { id: 'coin', name: 'Coin', colour: '#f5c41e', sprite: 'coin', props: [], behaviours: [{ id: 'collectible', props: { value: 1 } }] },
+  { id: 'diamond', name: 'Diamond', colour: '#46c8f0', sprite: 'diamond', props: [], behaviours: [{ id: 'collectible', props: { value: 5 } }] },
+  {
+    id: 'sentry-bot', name: 'Sentry bot', colour: '#e5484d', sprite: 'sentry-bot', props: [],
+    behaviours: [{ id: 'patrol', props: { patrol: 32 } }, { id: 'hazard', props: {} }],
+  },
 ]
 // Sound effects from make-sample-assets.ts. The game plays them by these ids.
 audio.sfx = [

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "A",
+  "width": 1,
+  "height": 1,
+  "tileset": "tiles",
+  "layers": [{ "name": "Front", "data": [600, 0] }],
+  "entities": [
+    { "type": "key", "x": 10, "y": 10 },
+    { "type": "key", "x": 20, "y": 10, "props": { "grants_ability": 5 } },
+    { "type": "boots", "x": 30, "y": 10, "props": { "grants_ability": 40 } },
+    { "type": "slow", "x": 40, "y": 10, "props": { "patrol": true } }
+  ]
+}

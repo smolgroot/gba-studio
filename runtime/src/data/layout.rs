@@ -21,7 +21,10 @@ pub const H_CAPACITY: usize = 16;
 
 /// Sections in the table, each `{ offset u32, length u32 }`, in this order. A later
 /// version may add sections after these; a reader skips those it does not know.
-pub const SECTIONS: usize = 8;
+pub const SECTIONS: usize = 9;
+/// The fewest sections a reader takes: those before [`S_BEHAVIOURS`] was added. A
+/// section that stops there has no behaviours.
+pub const MIN_SECTIONS: usize = 8;
 pub const S_STRINGS: usize = 0;
 pub const S_CLASSES: usize = 1;
 pub const S_ROOMS: usize = 2;
@@ -30,6 +33,9 @@ pub const S_PROPS: usize = 4;
 pub const S_CELLS: usize = 5;
 pub const S_GLOBALS: usize = 6;
 pub const S_MANIFEST: usize = 7;
+/// Which behaviours each entity type has, and where their properties start among an
+/// entity's: see [`BEHAVIOUR`].
+pub const S_BEHAVIOURS: usize = 8;
 
 /// Where the first section may start: after the header and the table.
 pub const fn table_end(sections: usize) -> usize {
@@ -153,3 +159,12 @@ pub const fn default_reserve(used: usize) -> usize {
 pub const M_COUNTS: usize = 16;
 pub const M_ENTITY_TYPE: usize = 16;
 pub const M_ART: usize = 16;
+
+/// The behaviours section, in halfwords (u16): the number of entity types as two
+/// halves (low first), then for each type its first entry and its entry count, then the
+/// entries. An entry is a behaviour's number (as the runtime declares it) and the
+/// position of its first property among each entity's properties: its properties follow
+/// there in the order it declares them.
+pub const BEHAVIOUR: usize = 4;
+pub const B_NUMBER: usize = 0;
+pub const B_FIRST_PROP: usize = 2;

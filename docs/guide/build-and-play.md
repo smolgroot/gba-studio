@@ -4,7 +4,7 @@
 
 The Build panel sits beside Problems below the editor.
 
-![The Build panel with the dev build output](/screenshots/build-panel.png)
+![The Build panel after a dev build, with how much level data each ROM holds](/screenshots/build-panel.png)
 
 | Button | What it does |
 | --- | --- |
@@ -16,6 +16,18 @@ The Build panel sits beside Problems below the editor.
 Output is streamed live. A failed build is marked and its exit code shown; a successful one says how long it took. The build helper reports every hardware problem in one run, in terms of your project: a tile with more than 15 colours, tiles needing more than 16 palettes, a tileset over 1024 tiles, a sprite sheet with too many colours, an animation using a frame the sheet does not have, or backgrounds that with the rooms' tiles need more than 4 layers, 16 palettes or the 1024 tiles video memory holds.
 
 The same builds can be run from the command line; see [Command line and MCP](./agents).
+
+### Level data use {#level-data-use}
+
+Under the buttons, the panel has one line for each built ROM, saying how much of its [data section](../reference/data-section) the level data uses:
+
+> dev ROM · level data 10,700 of 14,796 bytes (72%), 4,096 free
+
+The free bytes are the room left for [Patch on change](#patch-on-change). Above 90% the line is in the warning colour: an edit that adds data may soon need a full build. To make more room, raise the [Level data reserve](./project-settings#level-data-reserve) in Project settings, then build.
+
+A ROM whose game never reads its level data has no section, and its line says "no level data section: the game does not read its level data from the ROM".
+
+The lines update after each build and each patch.
 
 ### Getting a folder ready to build
 
@@ -100,7 +112,7 @@ Some changes are compiled into the game, so only a build brings them in. The pan
 - tilesets, or the number of tiles in one;
 - background pictures;
 - music tracks;
-- level data larger than the room the last build left for it. That room is set by `build.dataReserve` in `studio/project.json`; see [Data section](../reference/data-section#room-to-grow).
+- level data larger than the room the last build left for it. That room is the **Level data reserve** in [Project settings](./project-settings#level-data-reserve), and the [Build panel](#level-data-use) shows how much is left.
 
 ![The Play panel saying a change needs a build, with the Build dev button](/screenshots/play-needs-build.png)
 

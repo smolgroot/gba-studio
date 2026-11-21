@@ -13,6 +13,7 @@
 #[cfg(any(test, feature = "write"))]
 extern crate alloc;
 
+pub mod behaviour;
 pub mod data;
 pub mod debug;
 pub mod physics;

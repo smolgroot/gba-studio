@@ -205,6 +205,12 @@ pub struct World<'a> {
     cells: &'a [u8],
     tiles: &'a [u16],
     globals: &'a Globals,
+    /// The behaviours section as halfwords; empty in a section written before it.
+    behaviours: &'a [u16],
+    /// The same split once into its two tables, so finding a type's behaviours is two
+    /// reads: per type its first entry and entry count, then the entries.
+    behaviour_kinds: &'a [u16],
+    behaviour_entries: &'a [u16],
 }
 
 impl<'a> World<'a> {
@@ -223,12 +229,13 @@ impl<'a> World<'a> {
         }
         let sections = u16_at(bytes, H_SECTIONS) as usize;
         let used = u32_at(bytes, H_USED) as usize;
-        if sections < SECTIONS || used > bytes.len() || used < table_end(sections) {
+        if sections < MIN_SECTIONS || used > bytes.len() || used < table_end(sections) {
             return Err(DataError::TooShort);
         }
         let bytes = &bytes[..used];
+        // Sections this reader knows that an older writer did not write stay empty.
         let mut found: [&[u8]; SECTIONS] = [&[]; SECTIONS];
-        for (n, slot) in found.iter_mut().enumerate() {
+        for (n, slot) in found.iter_mut().enumerate().take(sections) {
             let (offset, length) = (u32_at(bytes, HEADER + n * 8) as usize, u32_at(bytes, HEADER + n * 8 + 4) as usize);
             if offset % 4 != 0 || offset < table_end(sections) || offset.checked_add(length).is_none_or(|end| end > used) {
                 return Err(DataError::Section(n));
@@ -248,8 +255,22 @@ impl<'a> World<'a> {
                 Some([globals]) => globals,
                 _ => return Err(section(S_GLOBALS)),
             },
+            // An empty slice's address need not be aligned, so a missing section is not viewed.
+            behaviours: match found[S_BEHAVIOURS] {
+                [] => &[],
+                bytes => as_halves(bytes).ok_or(section(S_BEHAVIOURS))?,
+            },
+            behaviour_kinds: &[],
+            behaviour_entries: &[],
         };
+        let mut world = world;
         world.check(limits)?;
+        // Checked above: the tables fit in the section.
+        let kinds = world.behaviour_count();
+        if kinds > 0 {
+            world.behaviour_kinds = &world.behaviours[2..2 + 2 * kinds];
+            world.behaviour_entries = &world.behaviours[2 + 2 * kinds..];
+        }
         Ok(world)
     }
 
@@ -314,6 +335,7 @@ impl<'a> World<'a> {
                 return Err(DataError::Entity(n));
             }
         }
+        self.check_behaviours()?;
         for (n, prop) in self.props.iter().enumerate() {
             self.check_str(prop, P_NAME)?;
             match byte(prop, P_TAG) {
@@ -333,6 +355,56 @@ impl<'a> World<'a> {
             return Err(DataError::Physics);
         }
         Ok(())
+    }
+
+    /// The behaviours section holds together, and every entity has the properties its
+    /// type's behaviours start at: so a read by position stays inside the entity.
+    fn check_behaviours(&self) -> Result<(), DataError> {
+        if self.behaviours.is_empty() {
+            return Ok(());
+        }
+        let bad = DataError::Section(S_BEHAVIOURS);
+        let kinds = self.behaviour_count();
+        let entries = self.behaviours.len().checked_sub(2 + 2 * kinds).ok_or(bad)?;
+        if entries % 2 != 0 {
+            return Err(bad);
+        }
+        for kind in 0..kinds {
+            let (first, count) = (self.behaviours[2 + 2 * kind] as usize, self.behaviours[3 + 2 * kind] as usize);
+            if first + count > entries / 2 {
+                return Err(bad);
+            }
+        }
+        let table = &self.behaviours[2 + 2 * kinds..];
+        for (n, entity) in self.entities.iter().enumerate() {
+            let (kind, props) = (half(entity, E_KIND) as usize, half(entity, E_PROP_COUNT) as usize);
+            if kind < kinds {
+                let (first, count) = (self.behaviours[2 + 2 * kind] as usize, self.behaviours[3 + 2 * kind] as usize);
+                if table[2 * first..2 * (first + count)].chunks_exact(2).any(|entry| entry[1] as usize > props) {
+                    return Err(DataError::Entity(n));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// How many entity types the behaviours section covers.
+    fn behaviour_count(&self) -> usize {
+        match self.behaviours {
+            [low, high, ..] => *low as usize | (*high as usize) << 16,
+            _ => 0,
+        }
+    }
+
+    /// An entity type's behaviour entries, as `[number, first property]` pairs of
+    /// halves; empty when it has none.
+    #[inline]
+    fn behaviour_entries(&self, kind: u16) -> &'a [u16] {
+        let at = 2 * kind as usize;
+        match self.behaviour_kinds.get(at..at + 2) {
+            Some(&[first, count]) => self.behaviour_entries.get(2 * first as usize..2 * (first as usize + count as usize)).unwrap_or(&[]),
+            _ => &[],
+        }
     }
 
     #[inline]
@@ -690,15 +762,19 @@ pub struct Entity<'a> {
     pub x: i16,
     pub y: i16,
     props: &'a [PropRecord],
+    /// Its type's behaviour entries, found once when it is read.
+    behaviours: &'a [u16],
 }
 
 impl<'a> Entity<'a> {
     #[inline]
     fn read(world: &'a World<'a>, record: &'a EntityRecord) -> Self {
         let first = word(record, E_FIRST_PROP) as usize;
+        let kind = half(record, E_KIND);
         Entity {
             world,
-            kind: half(record, E_KIND),
+            behaviours: world.behaviour_entries(kind),
+            kind,
             x: half(record, E_X) as i16,
             y: half(record, E_Y) as i16,
             props: &world.props[first..first + half(record, E_PROP_COUNT) as usize],
@@ -719,6 +795,22 @@ impl<'a> Entity<'a> {
             _ => Prop::Int(word(prop, P_VALUE) as i32),
         })
     }
+    /// Every behaviour its type has, in the type's order: each one's number and settings.
+    #[inline]
+    pub fn behaviours(&self) -> impl Iterator<Item = (u16, Settings<'a>)> + 'a {
+        let props = self.props;
+        self.behaviours.chunks_exact(2).map(move |entry| (entry[0], Settings { props: props.get(entry[1] as usize..).unwrap_or(&[]) }))
+    }
+
+    /// The settings of a behaviour its type has, by the behaviour's number, or `None`
+    /// when its type does not have it. No names are compared: the section says where
+    /// the behaviour's properties start, and they are read by position from there.
+    #[inline]
+    pub fn behaviour(&self, number: u16) -> Option<Settings<'a>> {
+        let entry = self.behaviours.chunks_exact(2).find(|entry| entry[0] == number)?;
+        Some(Settings { props: self.props.get(entry[1] as usize..)? })
+    }
+
     #[inline]
     pub fn int(&self, name: &str) -> Option<i32> {
         match self.prop(name) {
@@ -739,6 +831,29 @@ impl<'a> Entity<'a> {
             Some(Prop::Str(value)) => Some(value),
             _ => None,
         }
+    }
+}
+
+/// One behaviour's properties on one entity, read by their position in the order the
+/// behaviour declares them: what [`Entity::behaviour`] gives.
+#[derive(Clone, Copy, Debug)]
+pub struct Settings<'a> {
+    props: &'a [PropRecord],
+}
+
+impl Settings<'_> {
+    /// Property `index` as a whole number, if it is one.
+    #[inline]
+    pub fn int(&self, index: usize) -> Option<i32> {
+        let prop = self.props.get(index)?;
+        (byte(prop, P_TAG) == TAG_INT).then(|| word(prop, P_VALUE) as i32)
+    }
+
+    /// Property `index` as true or false, if it is one.
+    #[inline]
+    pub fn bool(&self, index: usize) -> Option<bool> {
+        let prop = self.props.get(index)?;
+        (byte(prop, P_TAG) == TAG_BOOL).then(|| word(prop, P_VALUE) != 0)
     }
 }
 

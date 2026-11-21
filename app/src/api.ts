@@ -16,6 +16,8 @@ export interface RomInfo {
   path: string
   size: number
   modified: number
+  /** Bytes of the level data section in use and its capacity; null if the ROM has none. */
+  data: { used: number; capacity: number } | null
 }
 export interface BuildStatus {
   running: boolean

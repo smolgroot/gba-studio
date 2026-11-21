@@ -129,6 +129,18 @@ pub struct EntityType {
     pub sprite: Option<String>,
     #[serde(default)]
     pub props: Vec<PropDef>,
+    /// Behaviours from the runtime's library, with the type's values for their properties.
+    #[serde(default)]
+    pub behaviours: Vec<BehaviourUse>,
+}
+
+/// A behaviour an entity type has: its id, and values for the properties it declares.
+/// What is left out takes the declaration's default.
+#[derive(Deserialize)]
+pub struct BehaviourUse {
+    pub id: String,
+    #[serde(default)]
+    pub props: BTreeMap<String, Value>,
 }
 
 #[derive(Deserialize)]
