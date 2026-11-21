@@ -296,6 +296,9 @@ fn main(mut gba: agb::Gba) -> ! {
             view.set_camera(camera.0, camera.1);
         }
 
+        // Select dims the scene over 12 frames and lets it back up: what a dialogue or a
+        // pause menu would do, so the hero and the HUD stand out.
+        view.fade_dim(if input.is_pressed(Button::Select) { 12 } else { 6 }, 12);
         let mut frame = graphics.frame();
         view.show(&mut frame);
         let (feet_x, feet_y) = body.feet();

@@ -103,7 +103,7 @@ Notes / open questions
 | US-043 | Moving backgrounds in the map editor | E5 | P2 | Proposed | S |
 | US-044 | Undo for deleting rooms, tilesets and sprites | E5 | P1 | Proposed | S |
 | US-045 | Pinch zoom and finger painting | E5 | P3 | Proposed | M |
-| US-046 | Darken layers and backgrounds for contrast | E5 | P1 | Planned | M |
+| US-046 | Darken layers and backgrounds for contrast | E5 | P1 | Done | M |
 | US-050 | Font import and text drawing | E6 | P1 | Proposed | M |
 | US-051 | Dialogue boxes and a dialogue file format | E6 | P1 | Proposed | L |
 | US-052 | HUD layout editor | E6 | P2 | Proposed | L |
@@ -617,7 +617,7 @@ Acceptance criteria
 - [ ] Tested on an iPad and an Android tablet.
 
 #### US-046 · Darken layers and backgrounds for contrast
-**Priority** P1 · **Status** Planned · **Size** M · **Depends on** —
+**Priority** P1 · **Status** Done · **Size** M · **Depends on** —
 **Touches** core, app, codegen, runtime, server, docs
 
 As an author, I want to darken a room's background pictures and tile layers, and
@@ -625,30 +625,30 @@ change the darkness while the game runs, so that what is in front (a dialogue bo
 the player, a pause menu) stands out against the scene.
 
 Acceptance criteria
-- [ ] Each background and tile layer of a room has a `dim` setting (off by
+- [x] Each background and tile layer of a room has a `dim` setting (off by
   default). Layers with it on are darkened; the others, and sprites, are not.
-- [ ] A room has a `dimLevel` from 0 (no change) to 16 (black). It is applied on
+- [x] A room has a `dimLevel` from 0 (no change) to 16 (black). It is applied on
   the GBA by the hardware brightness-decrease effect, so it costs no palette
   slots, no tiles and no CPU per frame.
-- [ ] The runtime can set the level while the game runs (`set_dim(level)`) and
+- [x] The runtime can set the level while the game runs (`set_dim(level)`) and
   fade it over a number of frames, so a dialogue can dim the scene when it opens
   and restore it when it closes. The level returns to the room's own on room
   change.
-- [ ] The map editor and the Play preview show the dimmed layers the way the game
+- [x] The map editor and the Play preview show the dimmed layers the way the game
   draws them, with the same rounding as the hardware.
-- [ ] The room panel has a toggle per layer and one level slider; the layer list
+- [x] The room panel has a toggle per layer and one level slider; the layer list
   says which layers are dimmed.
-- [ ] MCP tools can set `dim` and `dimLevel`, answer with the problems they left,
+- [x] MCP tools can set `dim` and `dimLevel`, answer with the problems they left,
   and never write under `assets/`; the PNG itself is never changed.
-- [ ] A room with `dim` on a layer but level 0, or a level above 0 and no layer
+- [x] A room with `dim` on a layer but level 0, or a level above 0 and no layer
   dimmed, is a problem in the author's terms ("no layer is dimmed, so the level
   does nothing").
-- [ ] Old projects load unchanged; `FORMAT_VERSION` is raised only if they would
+- [x] Old projects load unchanged; `FORMAT_VERSION` is raised only if they would
   not.
-- [ ] Host test in `runtime` for the register values per level and layer set;
+- [x] Host test in `runtime` for the register values per level and layer set;
   vitest for the schema, validation and preview rounding; a fixture in
   `codegen/fixture/` shared by Rust and TypeScript for the darkened colours.
-- [ ] `docs/guide/rooms.md` and `docs/reference/project-format.md` describe it,
+- [x] `docs/guide/rooms.md` and `docs/reference/project-format.md` describe it,
   with a screenshot from `docs/screenshots.json`.
 
 Notes / open questions

@@ -17,6 +17,7 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, up to 2 backgr
 - The world map may have a `size` in screens, counted from screen (0, 0).
 - Tile layers are run-length pairs `[count, cell, ...]`, row by row. Cell 0 is empty and cell n is tile n-1 of the room's tileset.
 - A room's `backgrounds`, back to front, are each `{ "image": "assets/backgrounds/sky.png", "parallax": { "x": 25, "y": 0 } }`: a PNG whose size is a multiple of 8, and its scroll speed in percent of the camera's.
+- A tile layer and a background may have `"dim": true`, and a room may have `"dimLevel"`, a whole number from 0 (no change, the default) to 16 (black). Layers with `dim` are darkened by the room's level; the others and sprites are not. Left out, nothing is dimmed, so older projects load as they were.
 - Collision classes have a kind (`empty`, `solid`, `one-way`, `slope`, `hazard`, `custom`) and, for slopes, the floor height at the tile's left and right edge. What `hazard` and `custom` mean is up to the game.
 - An entity is a type, a position in pixels from the room's top-left, and the properties its type defines (integer, boolean, text or one of a list).
 - `physics` in `project.json` holds the game type and how it moves. Left out, it is the default platformer. See [Physics](../guide/physics).

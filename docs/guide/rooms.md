@@ -61,12 +61,32 @@ Entities are placed by their feet: the middle of the bottom edge. An entity type
 | **Tileset** | The tileset the room is painted with. |
 | **Music** | A track from [Audio](./audio). |
 | **Backgrounds** | Up to two pictures behind the tiles. |
+| **Darkness** | The level, 0 to 16, for the layers set to dim. See [Darkening layers](#darkening-layers). |
 
 ## Backgrounds
 
 Import a PNG (or pick one in the folder) in the room's Properties for the **Back** and **Front** slots, and give each a scroll speed across and down, in percent of the camera's. 0 stands still, 100 moves with the room, and a far layer gets less than a near one. A picture repeats in both directions. The two arrows swap back and front; the bin removes a background (the image stays in the folder).
 
 The GBA draws four layers, so tile layers and backgrounds together are at most four. The map shows backgrounds as they lie at the room's top-left corner (a toolbar button hides them); the [Play](./build-and-play) panel shows them moving.
+
+## Darkening layers
+
+A dimmed layer is drawn darker, so what is in front of it stands out: a dialogue box, the player, a pause menu. You choose which layers are dimmed and how dark they are.
+
+![The room panel with a tile layer and a background dimmed, and the Darkness slider](/screenshots/room-dim.png)
+
+- In the **Tiles & Layers** panel, each tile layer has a dim toggle. A dimmed layer shows a "dimmed" tag.
+- In **Properties**, each background has the same toggle. Under **Darkness**, one slider sets the level from 0 (no change) to 16 (black). A line below it names the dimmed layers.
+
+The map editor and the [world map](./world-map) show dimmed layers as the console draws them, rounding included. The [Play](./build-and-play) panel runs the real game, so it shows the effect after a build.
+
+The GBA has one brightness setting for the layers it darkens. Every dimmed layer gets the same level, so you cannot give two layers different amounts: a layer is dimmed or it is not. Sprites are never dimmed. The effect costs no palette slots, no tiles and no time per frame, and it leaves the alpha blend free.
+
+The Problems panel warns when a layer is set to dim but the level is 0, and when the level is above 0 but no layer is dimmed. In both cases nothing is darkened.
+
+A change to dimming sits in the room's record in the ROM, so live apply counts it as a change to the rooms: a game that makes a new `WorldView` when the rooms change (the sample does) shows it at once, and the room's own level comes back. A game that does not needs a restart.
+
+The game can change the level while it runs, with `view.set_dim(level)` or `view.fade_dim(level, frames)`. When the player enters a room, its own level comes back. See [Making a game with it](./making-a-game#the-runtime).
 
 ## Other rooms
 

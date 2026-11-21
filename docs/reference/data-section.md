@@ -87,7 +87,7 @@ A cell's class is its index in this list. There is at least one class and at mos
 | 18 | 2 | Height in tiles, a multiple of 20 |
 | 20 | 2 | Left screen on the world map (signed) |
 | 22 | 2 | Top screen on the world map (signed) |
-| 24 | 2 | Flags: 1 on the map, 2 has music |
+| 24 | 2 | Flags: 1 on the map, 2 has music, bits 2 to 4 tile layers dimmed (back layer first), bits 5 and 6 backgrounds dimmed, bits 8 to 12 the dim level, 0 to 16. Data written before dimming has zeros here, which is no dimming. |
 | 26 | 2 | Track number, if it has music |
 | 28 | 2 | Tileset number |
 | 30 | 1 | Tile layers, 0 to 3 |

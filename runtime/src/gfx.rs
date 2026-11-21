@@ -5,14 +5,14 @@ use agb::{
     display::{
         Graphics, GraphicsFrame, Palette16, Priority,
         object::{Object, Sprite},
-        tiled::{InfiniteScrolledMap, PartialUpdateStatus, RegularBackground, RegularBackgroundSize, TileEffect, TileFormat, TileSet, TileSetting},
+        tiled::{InfiniteScrolledMap, PartialUpdateStatus, RegularBackground, RegularBackgroundId, RegularBackgroundSize, TileEffect, TileFormat, TileSet, TileSetting},
     },
-    fixnum::{Vector2D, vec2},
+    fixnum::{Num, Vector2D, vec2},
 };
 
 use core::cell::Cell;
 
-use crate::data::{Background, Room, World};
+use crate::data::{Background, Dim, Room, World};
 
 /// A tileset's tiles and the palettes they are drawn with.
 pub struct Tileset {
@@ -56,6 +56,21 @@ pub struct Art {
 const SCREEN_LAYERS: usize = 4;
 const PALETTES: usize = 16;
 
+/// Darkens the backgrounds a frame has shown, with the console's brightness-decrease
+/// effect: no palette slots, tiles or per-frame work beyond two registers. It shares the
+/// blend registers with any other effect, so a later fade or alpha blend must take over
+/// this call rather than add to it. Sprites are not a target, so they stay bright.
+fn darken(frame: &mut GraphicsFrame, level: u8, shown: &[Option<RegularBackgroundId>; 5]) {
+    if level == 0 || shown.iter().all(Option::is_none) {
+        return;
+    }
+    // A level is that many sixteenths: `Num<u8, 4>` has 4 fractional bits, so the raw value is the level.
+    let mut effect = frame.blend().darken(Num::from_raw(level));
+    for id in shown.iter().flatten() {
+        effect.enable_background(*id);
+    }
+}
+
 struct Backdrop {
     layer: Background,
     image: &'static BackgroundImage,
@@ -70,11 +85,14 @@ struct Backdrops {
     layers: [Option<Backdrop>; 2],
     /// The camera position at which the pictures' top-left corners meet the screen's.
     origin: (i32, i32),
+    /// Bit n is set when picture n is darkened. Kept apart from the pictures, which a
+    /// next room may share while darkening them differently.
+    dim: u8,
 }
 
 impl Backdrops {
     const fn new() -> Self {
-        Self { layers: [const { None }; 2], origin: (0, 0) }
+        Self { layers: [const { None }; 2], origin: (0, 0), dim: 0 }
     }
 
     /// Whether these are the pictures on show, moving the same way.
@@ -91,6 +109,7 @@ impl Backdrops {
     /// the console's four backgrounds. Asking for the pictures already shown changes
     /// nothing, so they carry on unbroken from room to room.
     fn set(&mut self, room: &Room, art: &Art, origin: (i32, i32), palettes: usize, tile_layers: usize, graphics: &Graphics) {
+        self.dim = room.dim().backgrounds;
         if self.shows(room.backgrounds()) {
             return;
         }
@@ -136,9 +155,14 @@ impl Backdrops {
     /// Shows the pictures that are fully drawn; one just changed stays hidden for the
     /// few frames it takes. Call after showing the tile layers: at the same priority,
     /// what is shown first is in front.
-    fn show(&self, frame: &mut GraphicsFrame) {
-        for backdrop in self.layers.iter().rev().flatten() {
-            backdrop.map.show_if_done(frame);
+    fn show(&self, frame: &mut GraphicsFrame, shown: &mut [Option<RegularBackgroundId>; 5]) {
+        for (n, backdrop) in self.layers.iter().enumerate().rev() {
+            let Some(backdrop) = backdrop else { continue };
+            if let Some(id) = backdrop.map.show_if_done(frame)
+                && self.dim >> n & 1 == 1
+            {
+                shown[3 + n] = Some(id);
+            }
         }
     }
 }
@@ -193,6 +217,7 @@ pub struct RoomView<'a> {
     tileset: &'static Tileset,
     layers: [Option<InfiniteScrolledMap>; 3],
     backdrops: Backdrops,
+    dim: Dim,
 }
 
 impl<'a> RoomView<'a> {
@@ -210,12 +235,35 @@ impl<'a> RoomView<'a> {
         }
         let mut backdrops = Backdrops::new();
         backdrops.set(&room, art, (0, 0), tileset.palettes.len(), count, graphics);
-        Self { room, tileset, layers, backdrops }
+        let dim = Dim::new(room.dim().level);
+        Self { room, tileset, layers, backdrops, dim }
+    }
+
+    /// Sets how dark the room's dimmed layers are, 0 (no change) to 16 (black), for
+    /// example to dim the scene behind a dialogue. The room's own level comes back
+    /// with a new view.
+    pub fn set_dim(&mut self, level: u8) {
+        self.dim.set(level);
+    }
+
+    /// Moves the level to `level` over `frames` frames, a step each time the camera is set.
+    pub fn fade_dim(&mut self, level: u8, frames: u16) {
+        self.dim.fade(level, frames);
+    }
+
+    /// The level now.
+    pub fn dim_level(&self) -> u8 {
+        self.dim.level()
     }
 
     /// Moves the camera's top-left corner to a pixel of the room. Returns whether every
     /// tile in view is in place; after a jump that takes a few frames of calling this.
     pub fn set_camera(&mut self, x: i32, y: i32) -> bool {
+        self.dim.step();
+        self.place(x, y)
+    }
+
+    fn place(&mut self, x: i32, y: i32) -> bool {
         let (room, tileset) = (self.room, self.tileset);
         let mut ready = true;
         for (index, layer) in self.layers.iter_mut().enumerate() {
@@ -228,14 +276,22 @@ impl<'a> RoomView<'a> {
 
     /// Places the camera and fills the whole view at once, for entering a room.
     pub fn load(&mut self, x: i32, y: i32) {
-        while !self.set_camera(x, y) {}
+        while !self.place(x, y) {}
     }
 
     pub fn show(&self, frame: &mut GraphicsFrame) {
-        for map in self.layers.iter().flatten() {
-            map.show(frame);
+        let mut shown = [None; 5];
+        let dimmed = self.room.dim().tiles;
+        for (n, map) in self.layers.iter().enumerate() {
+            if let Some(map) = map {
+                let id = map.show(frame);
+                if dimmed >> n & 1 == 1 {
+                    shown[n] = Some(id);
+                }
+            }
         }
-        self.backdrops.show(frame);
+        self.backdrops.show(frame, &mut shown);
+        darken(frame, self.dim.level(), &shown);
     }
 }
 
@@ -260,6 +316,9 @@ pub struct WorldView<'a> {
     count: usize,
     layers: [Option<InfiniteScrolledMap>; 3],
     backdrops: Backdrops,
+    dim: Dim,
+    /// Bit n is set when view slot n is darkened, for the room the player is in.
+    dim_slots: u8,
 }
 
 impl<'a> WorldView<'a> {
@@ -272,7 +331,7 @@ impl<'a> WorldView<'a> {
         graphics.set_background_palettes(tileset.palettes);
         let count = world.rooms().filter(|r| r.tileset() == shared).map(|r| r.layer_count()).max().unwrap_or(1).min(3);
         let layers = Self::layers(count);
-        let mut view = Self { world, art, shared, tileset, count, layers, backdrops: Backdrops::new() };
+        let mut view = Self { world, art, shared, tileset, count, layers, backdrops: Backdrops::new(), dim: Dim::new(0), dim_slots: 0 };
         view.set_backgrounds(room, graphics);
         view
     }
@@ -301,9 +360,32 @@ impl<'a> WorldView<'a> {
     /// unbroken; other pictures are laid down from the new room's top-left corner and
     /// appear a few frames later, once drawn. A room with none clears them.
     pub fn set_backgrounds(&mut self, room: usize, graphics: &Graphics) {
+        let index = room;
         let room = self.world.room(room);
         let origin = room.world().map_or((0, 0), |(x, y)| (x as i32 * 240, y as i32 * 160));
         self.backdrops.set(&room, &self.art, origin, self.tileset.palettes.len(), self.count, graphics);
+        // Rooms with fewer layers than the view fill its front slots.
+        let behind = self.count - room.layer_count().min(self.count);
+        self.dim_slots = room.dim().tiles << behind;
+        // Entering a room puts its own level back; the same room again leaves the game's.
+        self.dim.enter(index, room.dim().level);
+    }
+
+    /// Sets how dark the dimmed layers of the room the player is in are, 0 (no change)
+    /// to 16 (black), for example to dim the scene behind a dialogue. Entering another
+    /// room with [`WorldView::set_backgrounds`] puts that room's own level back.
+    pub fn set_dim(&mut self, level: u8) {
+        self.dim.set(level);
+    }
+
+    /// Moves the level to `level` over `frames` frames, a step each time the camera is set.
+    pub fn fade_dim(&mut self, level: u8, frames: u16) {
+        self.dim.fade(level, frames);
+    }
+
+    /// The level now.
+    pub fn dim_level(&self) -> u8 {
+        self.dim.level()
     }
 
     /// Reads tiles from a new `World` from now on, without redrawing what is on screen.
@@ -358,6 +440,11 @@ impl<'a> WorldView<'a> {
     /// Moves the camera's top-left corner to a world pixel. Returns whether every tile
     /// in view is in place; it always is while the camera moves less than a screen a frame.
     pub fn set_camera(&mut self, x: i32, y: i32) -> bool {
+        self.dim.step();
+        self.place(x, y)
+    }
+
+    fn place(&mut self, x: i32, y: i32) -> bool {
         let (world, shared, tileset, count) = (&self.world, self.shared, self.tileset, self.count);
         let mut ready = true;
         for (slot, layer) in self.layers.iter_mut().enumerate() {
@@ -371,14 +458,21 @@ impl<'a> WorldView<'a> {
 
     /// Places the camera and fills the whole view at once, for starting or after a jump.
     pub fn load(&mut self, x: i32, y: i32) {
-        while !self.set_camera(x, y) {}
+        while !self.place(x, y) {}
     }
 
     pub fn show(&self, frame: &mut GraphicsFrame) {
-        for map in self.layers.iter().flatten() {
-            map.show(frame);
+        let mut shown = [None; 5];
+        for (n, map) in self.layers.iter().enumerate() {
+            if let Some(map) = map {
+                let id = map.show(frame);
+                if self.dim_slots >> n & 1 == 1 {
+                    shown[n] = Some(id);
+                }
+            }
         }
-        self.backdrops.show(frame);
+        self.backdrops.show(frame, &mut shown);
+        darken(frame, self.dim.level(), &shown);
     }
 }
 

@@ -25,7 +25,7 @@ use std::{
 
 use pecten_studio_rt::{
     data::{
-        Background, CollisionClass, CollisionKind, Prop,
+        Background, CollisionClass, CollisionKind, Prop, RoomDim,
         layout::ENTITY,
         write::{ArtData, ClassData, EntityData, Manifest, RoomData, WorldData},
     },
@@ -428,6 +428,11 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
             collision,
             layers: layers.iter().map(|layer| layer.iter().map(|&cell| cell as u16).collect()).collect(),
             backgrounds,
+            dim: RoomDim {
+                level: room.dim_level.unwrap_or(0),
+                tiles: room.layers.iter().enumerate().fold(0, |bits, (n, l)| bits | (u8::from(l.dim) << n)),
+                backgrounds: room.backgrounds.iter().enumerate().fold(0, |bits, (n, b)| bits | (u8::from(b.dim) << n)),
+            },
             entities,
         });
     }
@@ -843,7 +848,10 @@ mod tests {
         let gfx = fs::read_to_string(out.join("studio_gfx.rs")).unwrap();
         assert!(gfx.contains("pub static BACKGROUNDS: [BackgroundImage; 1]"), "{gfx}");
         assert_eq!(entry.backgrounds().collect::<Vec<_>>(), [Background { image: 0, parallax: (64, 0) }, Background { image: 0, parallax: (128, 256) }]);
+        // The entry room dims its back wall and first picture to level 6; the shaft dims nothing.
+        assert_eq!(entry.dim(), RoomDim { level: 6, tiles: 0b01, backgrounds: 0b01 });
         let shaft = world.room(1);
+        assert_eq!(shaft.dim(), RoomDim::default());
         assert_eq!((shaft.id(), shaft.world(), shaft.backgrounds().len()), ("shaft", Some((2, 0)), 0), "the shaft has none");
         let cells = fs::read(out.join("background_0.cells")).unwrap();
         assert_eq!(cells.len(), 16 * 20 * 2);

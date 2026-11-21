@@ -29,12 +29,14 @@ import type { Background, CollisionClass, EntityType, Room, Sprite, Tileset } fr
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { fileUrl } from '../api.ts'
+import { dimmedCopy } from '../dim.ts'
 import { useEditor } from '../editor.ts'
 import type { Stamp, Tool } from '../editor.ts'
 import { Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
 import { useHistoryDepth, useStudio } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
 import { ImportButton } from './common.tsx'
+import { DimLevel, DimToggle } from './dim.tsx'
 import { Divider, GridOverlay, Message, ToolButton, Viewport, useImage } from './views.tsx'
 
 function EraserIcon() {
@@ -209,6 +211,9 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
   const sheetCols = Math.floor(image.width / TILE)
   const sheetTiles = sheetCols * Math.floor(image.height / TILE)
   const { cols, rows } = roomSize(room)
+  // Layers set to dim are drawn from a darkened copy of the sheet, rounded as the console rounds.
+  const dimLevel = room.dimLevel ?? 0
+  const dimmedSheet = useMemo(() => (dimLevel > 0 ? dimmedCopy(image, dimLevel) : null), [image, dimLevel])
 
   /** The class that applies in a cell: a painted override, or else the frontmost tile that has one. -1 for none. */
   const classAt = (w: Work, i: number): number => {
@@ -231,7 +236,7 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
       if (hidden.includes(l)) continue
       const tile = w.layers[l]![i]! - 1
       if (tile < 0 || tile >= sheetTiles) continue
-      context.drawImage(image, (tile % sheetCols) * TILE, Math.floor(tile / sheetCols) * TILE, TILE, TILE, x, y, TILE, TILE)
+      context.drawImage(w.doc.layers[l]?.dim && dimmedSheet ? dimmedSheet : image, (tile % sheetCols) * TILE, Math.floor(tile / sheetCols) * TILE, TILE, TILE, x, y, TILE, TILE)
     }
     if (!showCollision) return
     const overlay = collisionCanvas.current!.getContext('2d')!
@@ -257,7 +262,7 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
   // disk), and repaint everything when it or what is shown changes.
   const paintedWith = useRef<unknown[]>([])
   useEffect(() => {
-    const deps = [room, image, hidden, showCollision, classes, tileClasses]
+    const deps = [room, image, hidden, showCollision, classes, tileClasses, dimmedSheet]
     if (work.current?.doc === room && deps.every((dep, i) => dep === paintedWith.current[i])) return
     if (work.current?.doc !== room) work.current = decodeRoom(room)
     paintedWith.current = deps
@@ -479,7 +484,7 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
       onContextMenu={(event) => event.preventDefault()}
       sx={{ position: 'relative', width: cols * cell, height: rows * cell, cursor: tool === 'pan' ? 'grab' : tool === 'entity' ? 'copy' : 'crosshair', userSelect: 'none' }}
     >
-      {showBackgrounds && room.backgrounds?.map((background, index) => <BackgroundPicture key={index} image={background.image} zoom={zoom} />)}
+      {showBackgrounds && room.backgrounds?.map((background, index) => <BackgroundPicture key={index} image={background.image} zoom={zoom} dim={background.dim ? room.dimLevel ?? 0 : 0} />)}
       <canvas ref={tilesCanvas} className="pixelated" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       <canvas ref={collisionCanvas} className="pixelated" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: showCollision ? 'block' : 'none' }} />
       {showGrid && zoom >= 2 && <GridOverlay stepX={cell} stepY={cell} colour="rgba(255,255,255,0.07)" />}
@@ -516,11 +521,12 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
 }
 
 /** A background behind the room's tiles, repeating from the room's top-left corner: where it lies when the camera is there. In the game it scrolls slower than the room. */
-export function BackgroundPicture({ image, zoom }: { image: string; zoom: number }) {
+export function BackgroundPicture({ image, zoom, dim = 0 }: { image: string; zoom: number; dim?: number }) {
   const revision = useStudio((s) => s.revision)
   const picture = useImage(image)
+  const dimmed = useMemo(() => (dim > 0 && picture && picture !== 'error' ? dimmedCopy(picture, dim).toDataURL() : null), [picture, dim])
   if (!picture || picture === 'error') return null
-  return <Box className="pixelated" sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: `url("${fileUrl(image, revision)}")`, backgroundSize: `${picture.width * zoom}px ${picture.height * zoom}px`, backgroundRepeat: 'repeat' }} />
+  return <Box className="pixelated" sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: `url("${dimmed ?? fileUrl(image, revision)}")`, backgroundSize: `${picture.width * zoom}px ${picture.height * zoom}px`, backgroundRepeat: 'repeat' }} />
 }
 
 /** An entity on the map: its sprite's first frame if its type has one, else a square in the type's colour. */
@@ -639,6 +645,8 @@ export function PalettePanel() {
                 {hidden.includes(index) ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />}
               </IconButton>
               <Typography noWrap sx={{ flex: 1, opacity: hidden.includes(index) ? 0.5 : 1 }}>{l.name}</Typography>
+              {l.dim && <Typography variant="caption" color="text.secondary">dimmed</Typography>}
+              <DimToggle name={l.name} on={l.dim === true} onChange={(dim) => commit('room', id, { ...room, layers: room.layers.map((x, i) => (i === index ? { ...x, dim: dim || undefined } : x)) })} />
             </Box>
           ))}
         </Box>
@@ -827,6 +835,7 @@ export function RoomProperties({ id }: { id: string }) {
             <Typography color="text.secondary">↔</Typography>
             <NumberInput label="Scroll speed down, in percent of the camera's" value={background.parallax.y} min={0} max={100} onCommit={(y) => setBackground(index, { parallax: { ...background.parallax, y } })} />
             <Typography color="text.secondary">↕</Typography>
+            <DimToggle name={`background ${index + 1}`} on={background.dim === true} onChange={(dim) => setBackground(index, { dim: dim || undefined })} />
             {backgrounds.length > 1 && index === 0 && (
               <IconButton aria-label="Swap the back and front backgrounds" title="Swap back and front" onClick={() => setBackgrounds([backgrounds[1]!, backgrounds[0]!])} sx={{ p: 0.5, color: 'text.secondary' }}><SwapVertIcon /></IconButton>
             )}
@@ -855,6 +864,8 @@ export function RoomProperties({ id }: { id: string }) {
             : 'A PNG behind the tiles, its size a multiple of 8, that repeats in both directions and scrolls slower than the room. Two of them at different speeds give parallax.'}
         </Typography>
       </Box>
+      <Heading>Darkness</Heading>
+      <DimLevel room={room} onChange={(dimLevel) => update({ dimLevel })} />
       {entity && (
         <>
           <Heading>Selected entity</Heading>

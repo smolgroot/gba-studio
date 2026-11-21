@@ -64,6 +64,9 @@ Open a room to paint it.
   directions. The GBA draws four layers, so tile layers and backgrounds together are
   at most four. The map shows them as they lie at the room's top-left corner (a
   toolbar button hides them); the Play panel shows them moving.
+- **Darkening:** a tile layer or background can be set to dim, and the room has one
+  level, 0 to 16, for all dimmed layers. The room panel has a toggle per layer and a
+  Darkness slider; sprites are never dimmed.
 - **Stamps:** click a tile in the tileset palette, or drag across several to paint
   a block. Painting a stamp over an area repeats its pattern from where the stroke
   began.
@@ -283,7 +286,7 @@ The endpoint refuses requests from other web pages, like the rest of the server.
 | `project_overview`, `validate`, `list_assets` | Summarise the project, list its problems, list asset files |
 | `read_document`, `write_document`, `delete_document` | Whole documents, checked against the schemas before writing |
 | `room_read_cells`, `room_fill`, `room_paint` | Read and change tile layers and collision by cell, without touching the run-length data |
-| `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset, music and backgrounds, arrange the world map |
+| `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset, music, backgrounds and darkening, arrange the world map |
 | `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
 | `entity_type_set`, `entity_type_remove` | Entity types and their typed properties |
 | `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
@@ -373,6 +376,11 @@ and audio stay compiled. The game reads the section once at start with
   enters another. Rooms with the same pictures at the same speeds keep one unbroken
   backdrop; different ones are swapped in a few frames later, laid down from the new
   room's top-left corner.
+- Darkening: the console's brightness-decrease effect darkens the room's dimmed layers
+  by one level, with no palette slots or per-frame work. `view.set_dim(level)` sets the
+  level, `view.fade_dim(level, frames)` moves to it a step at each `set_camera`, and
+  `view.dim_level()` reads it. `set_backgrounds` for a new room restores that room's
+  own level. `world.room(n).dim()` gives the room's settings.
 - Rooms drawn with different tilesets cannot share the screen (the GBA shows one
   set of 16 background palettes), so the game cuts between them instead of scrolling.
 
@@ -466,6 +474,8 @@ Honest list of what does not work yet:
   15 colours a tile: a photo will not convert, pixel art with few colours will.
 - **Desktop app:** Linux on x64 only for now, and the packaged app does not include the
   `pecten-studio` command.
+- **Darkening:** one level for all of a room's dimmed layers; each layer is dimmed or
+  not. Sprites are never dimmed. A change is not applied live to a running game.
 - **Budgets:** the studio does not yet show palette, tile or sprite budgets while you
   draw; the build helper reports them when it runs.
 - **Tilesets** are one 16-colour-palette set per tile (up to 16 palettes). The

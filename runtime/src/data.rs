@@ -9,12 +9,15 @@
 //! [`World::new`] checks the whole section once. After that no getter can fail or
 //! read out of bounds, so the frame loop never checks again.
 
+pub mod dim;
 pub mod layout;
 #[cfg(any(test, feature = "write"))]
 pub mod write;
 
 use crate::physics::{Movement, Physics, PhysicsMode, PlatformerPhysics, TopDownPhysics};
 use layout::*;
+
+pub use dim::{Dim, MAX_DIM, RoomDim};
 
 /// Side of a background tile in pixels.
 pub const TILE: i32 = 8;
@@ -286,6 +289,7 @@ impl<'a> World<'a> {
                 || !in_cells(layer_cells, cells * 2 * layers)
                 || layers > 3
                 || backgrounds > 2
+                || RoomDim::from_flags(flags).level > MAX_DIM
                 || half(room, R_TILESET) >= limits.tilesets
                 || (flags & FLAG_MUSIC != 0 && half(room, R_MUSIC) >= limits.tracks)
                 || first != entities
@@ -639,6 +643,12 @@ impl<'a> Room<'a> {
             let at = R_BACKGROUNDS + n * BACKGROUND;
             Background { image: half(record, at), parallax: (half(record, at + 2), half(record, at + 4)) }
         })
+    }
+
+    /// How its layers are darkened: see [`RoomDim`].
+    #[inline]
+    pub const fn dim(&self) -> RoomDim {
+        RoomDim::from_flags(half(self.record, R_FLAGS))
     }
 
     /// The [`World::entity_index`] of its first entity.

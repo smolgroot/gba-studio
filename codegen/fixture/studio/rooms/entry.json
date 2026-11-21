@@ -42,7 +42,8 @@
         8,
         264,
         0
-      ]
+      ],
+      "dim": true
     },
     {
       "name": "Ground",
@@ -148,7 +149,8 @@
       "parallax": {
         "x": 25,
         "y": 0
-      }
+      },
+      "dim": true
     },
     {
       "image": "assets/sky.png",
@@ -170,7 +172,7 @@
       "x": 64,
       "y": 136,
       "props": {
-        "text": "Café ahead",
+        "text": "Caf\u00e9 ahead",
         "lit": true
       }
     },
@@ -184,5 +186,6 @@
       }
     }
   ],
-  "music": "theme"
+  "music": "theme",
+  "dimLevel": 6
 }

@@ -69,7 +69,7 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 | `project_overview`, `validate`, `list_assets` | Summarise the project, list its problems, list asset files |
 | `read_document`, `write_document`, `delete_document` | Whole documents, checked against the schemas before writing |
 | `room_read_cells`, `room_fill`, `room_paint` | Read and change tile layers and collision by cell, without touching the run-length data |
-| `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset, music and backgrounds, arrange the world map |
+| `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset, music, backgrounds and darkening, arrange the world map |
 | `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
 | `entity_type_set`, `entity_type_remove` | Entity types and their typed properties |
 | `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
@@ -79,6 +79,8 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 | `render_room`, `render_tileset`, `render_sprite` | Pictures: a room (optionally tinted by collision), a tileset or sprite sheet with its grid |
 | `build`, `patch_rom`, `run_rom` | Build the ROM; put changed level data into the built ROM without a build; run it headless for given frames and held buttons and get a picture after each step |
 | `studio_view`, `studio_open` | What the author has open; put an item in front of them (studio endpoint only) |
+
+`room_update` darkens layers (see [Darkening layers](./rooms#darkening-layers)) with three parameters: `dimLevel`, from 0 to 16; `dimLayers`, the tile layers to darken, by number (0 is the back layer) or name, which replaces the set, so `[]` turns dimming off for all tile layers; and `dim` on each entry of `backgrounds`. `project_overview` shows which layers are dimmed and the level.
 
 When the ROM `run_rom` runs is out of date, its answer ends with a line that says so, for example "This ROM is out of date: Rust source changed: src/main.rs. Run the build tool to see the change.", or, when only level data changed, a note to run `patch_rom`. An agent then knows the pictures do not show its last edit.
 

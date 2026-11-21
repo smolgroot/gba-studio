@@ -3,7 +3,7 @@
 
 use alloc::{collections::BTreeMap, vec, vec::Vec};
 
-use super::{Background, CollisionClass, Prop, layout::*};
+use super::{Background, CollisionClass, Prop, RoomDim, layout::*};
 use crate::physics::{Movement, Physics, PhysicsMode};
 
 /// A collision class to write.
@@ -35,6 +35,8 @@ pub struct RoomData<'a> {
     pub collision: Vec<u8>,
     pub layers: Vec<Vec<u16>>,
     pub backgrounds: Vec<Background>,
+    /// Which layers are darkened, and by how much.
+    pub dim: RoomDim,
     pub entities: Vec<EntityData<'a>>,
 }
 
@@ -121,7 +123,7 @@ pub fn write(world: &WorldData, reserve: Option<usize>) -> (Vec<u8>, usize) {
         strings.put(out, room.id);
         strings.put(out, room.name);
         let (wx, wy) = room.world.unwrap_or((0, 0));
-        let flags = if room.world.is_some() { FLAG_ON_MAP } else { 0 } | if room.music.is_some() { FLAG_MUSIC } else { 0 };
+        let flags = if room.world.is_some() { FLAG_ON_MAP } else { 0 } | if room.music.is_some() { FLAG_MUSIC } else { 0 } | room.dim.to_flags();
         for half in [room.cols, room.rows, wx as u16, wy as u16, flags, room.music.unwrap_or(0), room.tileset] {
             out.extend_from_slice(&half.to_le_bytes());
         }

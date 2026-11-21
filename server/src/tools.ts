@@ -3,7 +3,7 @@
 // nothing is read or written outside the game folder.
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
-import { Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
+import { Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
 import type { Documents, Room } from '@pecten-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
@@ -124,8 +124,9 @@ export const TOOLS: Tool[] = [
                 screens: `${room.width}x${room.height}`,
                 tiles: `${room.width * SCREEN.cols}x${room.height * SCREEN.rows}`,
                 tileset: room.tileset,
-                layers: room.layers.map((l) => l.name),
-                backgrounds: (room.backgrounds ?? []).map((b) => `${b.image} at ${b.parallax.x}% x, ${b.parallax.y}% y`),
+                layers: room.layers.map((l) => (l.dim ? `${l.name} (dimmed)` : l.name)),
+                backgrounds: (room.backgrounds ?? []).map((b) => `${b.image} at ${b.parallax.x}% x, ${b.parallax.y}% y${b.dim ? ', dimmed' : ''}`),
+                dimLevel: room.dimLevel ?? 0,
                 entities: room.entities.length,
                 music: room.music ?? null,
                 worldPosition: docs.world?.rooms.find((p) => p.room === id) ?? 'not on the map',
@@ -346,7 +347,7 @@ export const TOOLS: Tool[] = [
 
   tool(
     'room_update',
-    'Renames a room, or changes its tileset, its music track or its backgrounds. Backgrounds are pictures behind the tile layers that repeat in both directions and scroll slower than the room, for parallax: up to 2, back to front, and with the tile layers at most 4 layers in all.',
+    'Renames a room, or changes its tileset, its music track, its backgrounds or how its layers are darkened. Backgrounds are pictures behind the tile layers that repeat in both directions and scroll slower than the room, for parallax: up to 2, back to front, and with the tile layers at most 4 layers in all. Darkening (dimLevel, dimLayers, and `dim` on a background) shows what is in front, such as a dialogue box, against the scene: it never changes a picture file.',
     z.object({
       room: Id,
       name: z.string().min(1).optional(),
@@ -356,9 +357,14 @@ export const TOOLS: Tool[] = [
         .array(Background)
         .max(MAX_BACKGROUNDS)
         .optional()
-        .describe('Replaces the room\'s backgrounds, back to front; [] removes them. Each is a PNG already in the game folder (see list_assets) whose size is a multiple of 8, and a parallax in percent of the camera\'s speed across (x) and down (y): 0 stands still, 100 moves with the room, and a farther layer gets less than a nearer one'),
+        .describe('Replaces the room\'s backgrounds, back to front; [] removes them. Each is a PNG already in the game folder (see list_assets) whose size is a multiple of 8, and a parallax in percent of the camera\'s speed across (x) and down (y): 0 stands still, 100 moves with the room, and a farther layer gets less than a nearer one. Set dim: true on one to darken it by the room\'s dimLevel'),
+      dimLevel: z.number().int().min(0).max(MAX_DIM).optional().describe('How dark the dimmed layers are: 0 is no change, 16 is black. One level for all dimmed layers; the game can change it while it runs'),
+      dimLayers: z
+        .array(z.union([z.number().int().min(0), z.string()]))
+        .optional()
+        .describe('The tile layers to darken, by number (0 is the back layer) or name; every other tile layer is set not to dim. [] turns dimming off for all tile layers'),
     }),
-    async ({ room: id, name, tileset, music, backgrounds }, context) => {
+    async ({ room: id, name, tileset, music, backgrounds, dimLevel, dimLayers }, context) => {
       const { docs } = await documents(context)
       const room = roomOf(docs, id)
       for (const background of backgrounds ?? []) {
@@ -366,7 +372,16 @@ export const TOOLS: Tool[] = [
         const picture = await loadPng(context.project, background.image)
         if (picture.width % TILE || picture.height % TILE) throw new HttpError(400, `${background.image} is ${picture.width}x${picture.height} px; a background's size must be a multiple of ${TILE}`)
       }
-      const next = { ...room, ...(name ? { name } : {}), ...(tileset ? { tileset } : {}), ...(music !== undefined ? { music: music ?? undefined } : {}), ...(backgrounds ? { backgrounds: backgrounds.length ? backgrounds : undefined } : {}) }
+      const next: Room = { ...room, ...(name ? { name } : {}), ...(tileset ? { tileset } : {}), ...(music !== undefined ? { music: music ?? undefined } : {}), ...(backgrounds ? { backgrounds: backgrounds.length ? backgrounds : undefined } : {}) }
+      if (dimLevel !== undefined) next.dimLevel = dimLevel || undefined
+      if (dimLayers) {
+        const named = dimLayers.map((ref) => {
+          const index = typeof ref === 'number' ? ref : room.layers.findIndex((l) => l.name === ref)
+          if (index < 0 || index >= room.layers.length) throw new HttpError(400, `no layer ${JSON.stringify(ref)}; layers are: ${room.layers.map((l, i) => `${i} "${l.name}"`).join(', ')}`)
+          return index
+        })
+        next.layers = room.layers.map(({ dim: _was, ...layer }, i) => (named.includes(i) ? { ...layer, dim: true } : layer))
+      }
       return saveAndReport(context, 'room', id, next, `Updated ${id}.`)
     },
   ),

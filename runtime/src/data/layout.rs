@@ -86,6 +86,12 @@ pub const R_BACKGROUNDS: usize = 48;
 
 pub const FLAG_ON_MAP: u16 = 1;
 pub const FLAG_MUSIC: u16 = 2;
+/// Dimming, in the same u16: which tile layers (3 bits, back to front) and which
+/// backgrounds (2 bits) are darkened, and by how much (5 bits, 0 to 16). Rooms
+/// written before dimming have zeros here, which is no dimming.
+pub const FLAG_DIM_TILES_SHIFT: u16 = 2;
+pub const FLAG_DIM_BACKGROUNDS_SHIFT: u16 = 5;
+pub const FLAG_DIM_LEVEL_SHIFT: u16 = 8;
 
 /// A background layer: picture index among the game's compiled pictures (u16), then
 /// parallax across and down in 256ths of the camera's movement (u16 each), then zeros.

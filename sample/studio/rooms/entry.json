@@ -164,7 +164,8 @@
       "parallax": {
         "x": 25,
         "y": 0
-      }
+      },
+      "dim": true
     },
     {
       "image": "assets/backgrounds/near.png",
@@ -229,5 +230,6 @@
       "y": 136,
       "props": {}
     }
-  ]
+  ],
+  "dimLevel": 6
 }

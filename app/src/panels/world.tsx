@@ -58,7 +58,7 @@ function RoomPreview({ room, zoom }: { room: Room; zoom: number }) {
 
   return (
     <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      {room.backgrounds?.map((background, index) => <BackgroundPicture key={index} image={background.image} zoom={scale} />)}
+      {room.backgrounds?.map((background, index) => <BackgroundPicture key={index} image={background.image} zoom={scale} dim={background.dim ? room.dimLevel ?? 0 : 0} />)}
       <canvas ref={canvas} className="pixelated" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
     </Box>
   )

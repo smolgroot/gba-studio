@@ -65,6 +65,11 @@ Run `validate` after changing anything under `studio/`.
   that repeats in both directions and a parallax in percent of the camera's speed
   (0 stands still, 100 moves with the room). Tile layers and backgrounds together
   are at most 4, the layers the console draws. Set them with `room_update`.
+- A room can darken some of its layers so what is in front stands out: `dim` on a
+  background or tile layer, and one `dimLevel` for the room, 0 (no change) to 16
+  (black). The console has one level for all dimmed layers, and sprites are never
+  dimmed. Set it with `room_update` (`dimLevel`, `dimLayers`, and `dim` on a
+  background); the pictures themselves are never changed.
 - Collision comes from the tileset: each tile has a collision class. A room can
   override single cells.
 - An entity is a type, a position in pixels (its feet: the middle of its bottom
@@ -86,7 +91,10 @@ section in the ROM: call `let world = data::world();` once at the start and pass
 cells of the whole world (`body.step(&world, drop_through)`), and
 `WorldView::new(&world, gfx::ART, room, &mut graphics)`
 draws the rooms around a camera, with the backgrounds of one room behind them: call
-`view.set_backgrounds(room, &graphics)` when the player enters a room. The data
+`view.set_backgrounds(room, &graphics)` when the player enters a room. The view
+darkens the room's dimmed layers: `view.set_dim(level)` or
+`view.fade_dim(level, frames)` change the level while the game runs (to dim the scene
+behind a dialogue), and entering a room puts that room's own level back. The data
 and physics half of the runtime has no dependencies and runs on the host, so rules
 can be unit tested with `cargo test`.
 

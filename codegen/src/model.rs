@@ -208,12 +208,18 @@ pub struct Room {
     #[serde(default)]
     pub entities: Vec<Entity>,
     pub music: Option<String>,
+    /// How dark the layers set to `dim` are, 0 to 16.
+    #[serde(rename = "dimLevel")]
+    pub dim_level: Option<u8>,
 }
 
 #[derive(Deserialize)]
 pub struct Background {
     pub image: String,
     pub parallax: Parallax,
+    /// Darkened by the room's `dimLevel`.
+    #[serde(default)]
+    pub dim: bool,
 }
 
 /// Percent of the camera's speed, across and down.
@@ -227,6 +233,9 @@ pub struct Parallax {
 pub struct Layer {
     pub name: String,
     pub data: Vec<u32>,
+    /// Darkened by the room's `dimLevel`.
+    #[serde(default)]
+    pub dim: bool,
 }
 
 #[derive(Deserialize)]

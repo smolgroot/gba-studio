@@ -5,6 +5,7 @@
 // layout of runtime/src/data/layout.rs and the writer of runtime/src/data/write.rs.
 // The two must give the same bytes: core/test/datasection.test.ts checks this one
 // against codegen/fixture/expected/studio_data.bin, which codegen's tests check too.
+import { dimFlags } from './dim.ts'
 import { rleDecode, rleLength } from './rle.ts'
 import { roomSize } from './room.ts'
 import type { Documents } from './validate.ts'
@@ -315,7 +316,7 @@ export function writeSection(docs: Documents, compiled: Manifest, capacity: numb
     const out = parts[S_ROOMS]!
     strings.put(out, id)
     strings.put(out, room.name)
-    const flags = (placed ? 1 : 0) | (music !== null ? 2 : 0)
+    const flags = (placed ? 1 : 0) | (music !== null ? 2 : 0) | dimFlags(room)
     out.u16(cols, rows, placed?.x ?? 0, placed?.y ?? 0, flags, music ?? 0, tileset)
     out.u8(layers.length, backgrounds.length)
     out.u32(collisionAt, layersAt, entityCount, room.entities.length)

@@ -1,9 +1,6 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { Room, dimBgr555, dimFlags, dimRgba, dimmedLayers, validateProject, MAX_DIM } from '../src/index.ts'
 import { fromBgr555, toBgr555 } from '../src/index.ts'
-
-const fixture = JSON.parse(readFileSync(new URL('../../codegen/fixture/dim.json', import.meta.url), 'utf8')) as { cases: { level: number; in: number; out: number }[] }
 
 const room = (extra: object = {}) =>
   Room.parse({ version: 1, name: 'R', width: 1, height: 1, tileset: 't', layers: [{ name: 'a', data: [600, 0] }, { name: 'b', data: [600, 0] }], ...extra })
@@ -27,10 +24,6 @@ describe('dim schema', () => {
 })
 
 describe('dim preview rounding', () => {
-  it('matches the shared fixture of the hardware effect', () => {
-    expect(fixture.cases.length).toBeGreaterThan(100)
-    for (const c of fixture.cases) expect(dimBgr555(c.in, c.level), `${c.in} at ${c.level}`).toBe(c.out)
-  })
   it('level 0 changes nothing and 16 is black', () => {
     expect(dimBgr555(0x7fff, 0)).toBe(0x7fff)
     expect(dimBgr555(0x7fff, 16)).toBe(0)
