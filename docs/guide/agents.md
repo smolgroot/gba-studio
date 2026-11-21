@@ -73,6 +73,7 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 | `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
 | `entity_type_set`, `entity_type_remove` | Entity types and their typed properties |
 | `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
+| `tileset_generate`, `room_generate`, `pixel_art_convert` | The studio's three generators: a whole tileset with its collision, a room laid out on it, a picture converted to GBA colours. Pictures go to `generated/` |
 | `sprite_create`, `sprite_set_animation`, `sprite_remove_animation`, `sprite_set_geometry` | Sprites from a sheet in the folder, their animations, anchor and hitbox |
 | `audio_add` | Add a WAV, XM, MOD or MIDI file in the folder as a sound effect or track |
 | `render_room`, `render_tileset`, `render_sprite` | Pictures: a room (optionally tinted by collision), a tileset or sprite sheet with its grid |
@@ -86,3 +87,15 @@ Every write is validated and answered with the problems it left in that file. Er
 ::: warning Art and music are yours
 No tool creates, changes or deletes a file under `assets/`: agents can use the art and music that is there, not make it.
 :::
+
+### Making a tileset and a room with no art
+
+The three generators are the same ones as in the [Tools](tools.md) gallery. What they draw goes to `generated/tilesets/` or `generated/pixelart/`, never to `assets/`, and a tool never replaces a file there: a name that is taken gets `-2`, `-3` and so on. The author can move a picture they like into `assets/`, or draw over it.
+
+An agent can go from an empty project to a room by calls alone:
+
+1. `tileset_generate` with a name and a preset (`meadow`, `castle`, `crystal` and others), and optionally a block size, seed and colours. It saves the tileset with collision, adding the slope classes the project lacks, and answers with a picture of the sheet.
+2. `room_generate` with that tileset, a style (`corridor`, `halls`, `caverns` or `shaft`), a size in screens and a seed. Rooms are sized to the project's jump. It answers with a picture of the room.
+3. `world_place` to put the room on the map, then `room_paint` and the `entity_` tools to finish it.
+
+`room_generate` works only on a tileset laid out like a generated sheet, and says so when it is not.

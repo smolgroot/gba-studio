@@ -80,6 +80,14 @@ Open **Play** in the Project panel. It runs the built ROM on the [Pecten](https:
 
 The panel names the ROM, its size and when it was built. On touch devices, on-screen buttons appear.
 
+### Play from here
+
+The map editor's **Play from here** tool ([Rooms](./rooms#play-from-here)) starts the game in the room you clicked, standing on the tile you clicked. The panel says "Started in room "entry" at 124, 96." (the room and the spot in room pixels) below the buttons.
+
+The spot is kept when a rebuild restarts the game, so you can tune a late room without walking back to it. **Play / Restart** and **Reset** clear it and start from the start room.
+
+It needs a dev ROM built with this version of the studio. A release ROM has no debug record, so the panel says "this ROM has no debug record" and asks you to build dev. A dev ROM built before this tool existed says to build the dev game again. The start is written into the emulator's copy of the ROM, not the file on disk.
+
 ### Patch on change
 
 While the game runs, each change you save to tiles, collision, entities and their properties, where rooms sit on the [world map](./world-map), or [physics](./physics) is written into the built ROM's level data in a fraction of a second. Nothing is compiled. With **Live apply** on, the change then goes into the game as it runs; otherwise the game restarts with it. Below the buttons the panel says how long it took, how much of the room for level data is used, and what became of the game, as "Patched in 64 ms · level data 10,700 of 14,796 bytes · Applied live."

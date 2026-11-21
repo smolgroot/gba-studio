@@ -4,11 +4,13 @@
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
 import { Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
-import type { DocKind, Documents, Problem, Room } from '@pecten-studio/core'
+import type { Documents, Room } from '@pecten-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
 import { describePatch, patchRom, romStatus, staleNote } from './patch.ts'
 import { HttpError } from './project.ts'
+import { documents, problemLines, saveAndReport, tool } from './toolkit.ts'
+import { GENERATOR_TOOLS } from './generators.ts'
 import type { ProjectFolder } from './project.ts'
 import { effectiveCollision, encodePng, loadPng, renderRoom, renderSheet, renderTileset, roomCells, scale } from './render.ts'
 
@@ -48,35 +50,12 @@ const CellValue = z
   .union([z.number().int().min(-1), z.string(), z.null()])
   .describe('On a tile layer: a tile number of the room\'s tileset (0 is its top-left tile), or -1 for empty. On "collision": a collision class id, or null to give the cell back to its tile\'s own class')
 
-function tool<S extends z.ZodType>(name: string, description: string, input: S, run: (args: z.infer<S>, context: ToolContext) => Promise<ToolResult>): Tool {
-  return { name, description, input, run: run as Tool['run'] }
-}
-
 const json = (value: unknown): string => JSON.stringify(value, null, 2)
-
-function problemLines(problems: Problem[], file?: string): string {
-  const shown = file ? problems.filter((p) => p.file === file) : problems
-  if (shown.length === 0) return file ? `No problems in ${file}.` : 'No problems in the project.'
-  return shown.map((p) => `${p.severity}: ${p.file}: ${p.message}`).join('\n')
-}
-
-async function documents(context: ToolContext): Promise<{ docs: Documents; problems: Problem[] }> {
-  const bundle = await context.project.load()
-  if (!bundle.initialised) throw new HttpError(409, 'this folder has no studio project (no studio/project.json)')
-  return bundle
-}
 
 function roomOf(docs: Documents, id: string): Room {
   const room = docs.rooms[id]
   if (!room) throw new HttpError(404, `no room "${id}"; rooms are: ${Object.keys(docs.rooms).join(', ') || 'none'}`)
   return room
-}
-
-/** Saves a document and says what the project's checks make of it. */
-async function saveAndReport(context: ToolContext, kind: DocKind, id: string | undefined, doc: unknown, done: string): Promise<ToolResult> {
-  await context.project.save(kind, id, doc)
-  const { problems } = await context.project.load()
-  return { text: `${done}\n${problemLines(problems, docPath(kind, id))}` }
 }
 
 /** The cells a layer reference means, a way to write a value into them, and a way to save them back. */
@@ -626,6 +605,7 @@ export const TOOLS: Tool[] = [
       return { text: `Ran ${rom.path}. One picture per step, enlarged 2x:\n${lines.join('\n')}${note ? `\n\n${note}` : ''}`, images: screens.map((screen) => encodePng(scale(screen, 2))) }
     },
   ),
+  ...GENERATOR_TOOLS,
 ]
 
 /** JSON Schema of every document kind, for editors and agents that want the format itself. */

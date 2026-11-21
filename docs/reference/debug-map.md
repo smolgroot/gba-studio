@@ -6,7 +6,8 @@ frame the game copies the state that matters to a tool (the frame count, the roo
 the camera, the player) into one block of RAM. A record in the ROM holds that
 block's address, and after each build the studio writes a map file beside the ROM
 that gives the address and the layout. The record also points at a small inbox,
-where a tool tells the game that its level data changed.
+where a tool tells the game that its level data changed, and a start override, where a
+tool asks the game to begin in a given room at a given spot.
 
 This page is for tools that read a running game's memory, such as an emulator
 script or an agent checking where the player is. A game does not need it: it calls
@@ -49,13 +50,15 @@ ROM. Search the file for them. All numbers are little-endian.
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | 8 | `PECTDBUG` |
-| 8 | 4 | Version: 2 |
+| 8 | 4 | Version: 3 |
 | 12 | 4 | Address of the state block in RAM |
 | 16 | 4 | Size of the block in bytes: 64 |
 | 20 | 4 | Address of the inbox in RAM |
 | 24 | 4 | Size of the inbox in bytes: 12 |
+| 28 | 16 | The start override (below) |
 
-Version 2 records are 28 bytes. Version 1 records stop after the block's size, at 20
+Version 3 records are 44 bytes. Version 2 records stop after the inbox's size, at 28
+bytes, and have no start override. Version 1 records stop after the block's size, at 20
 bytes, and have no inbox.
 
 The linker fills in the addresses, so they change from build to build. The block and
@@ -64,7 +67,7 @@ that points anywhere other than EWRAM or IWRAM.
 
 ## The state block
 
-Versions 1 and 2. 64 bytes, all 32-bit words except the flags inside the player's body.
+Versions 1 to 3. 64 bytes, all 32-bit words except the flags inside the player's body.
 
 | Offset | Size | Field | Type |
 | --- | --- | --- | --- |
@@ -147,6 +150,27 @@ When `generation` differs from `seen`, `poll` copies `generation` to `seen`, cle
 the section's tables may have moved. Write the inbox between frames, as the studio
 does, so the game never sees half a change.
 
+## The start override
+
+Version 3. 16 bytes in the ROM, four 32-bit words, all zero as built. The game reads
+them once, as it starts. It is in the ROM and not in RAM so that it is there before the
+first frame. The Play panel's [Play from here](../guide/build-and-play#play-from-here)
+writes it into the emulator's copy of the ROM before the first frame; the file on disk
+is never changed.
+
+| Offset | Size | Field | Type |
+| --- | --- | --- | --- |
+| 0 | 4 | `set`: 1 to start at the spot, 0 to start as usual | `u32` |
+| 4 | 4 | `room`: the room's index, its position among the project's room ids in sorted order, as in the [data section](./data-section) | `u32` |
+| 8 | 4 | `x`: in room pixels | `i32` |
+| 12 | 4 | `y`: in room pixels | `i32` |
+
+The spot is where an entity placed on a tile stands: `x` is the middle of the tile and
+`y` the bottom edge of the tile, so the player's feet are there. The game starts in that
+room with the player at the spot, as it does for a `player-start` entity. If `set` is
+not 1, or the room does not exist, it starts as usual. A release build has no record, so
+nothing can set it.
+
 ## The map file
 
 After a build succeeds, from the **Build** panel, `pecten-studio build` or the MCP
@@ -158,7 +182,7 @@ part of the project; leave it in the ignored `dist/` folder.
 ```json
 {
   "rom": "dist/sample-dev.gba",
-  "version": 2,
+  "version": 3,
   "state": {
     "address": 33554432,
     "size": 64,
@@ -198,6 +222,16 @@ part of the project; leave it in the ignored `dist/` folder.
       { "name": "changed", "offset": 4, "type": "u32" },
       { "name": "seen", "offset": 8, "type": "u32" }
     ]
+  },
+  "startOverride": {
+    "address": 134351392,
+    "size": 16,
+    "fields": [
+      { "name": "set", "offset": 0, "type": "u32" },
+      { "name": "room", "offset": 4, "type": "u32" },
+      { "name": "x", "offset": 8, "type": "i32" },
+      { "name": "y", "offset": 12, "type": "i32" }
+    ]
   }
 }
 ```
@@ -213,6 +247,7 @@ This is the sample's map; the addresses in yours will differ.
 | `collected` | How the collected bits are packed. Their address is the block's `collected` field. |
 | `dataSection` | Where the [data section](./data-section) starts in the GBA's memory map (the ROM is at `0x08000000`), or `null` if the game has none. |
 | `inbox` | The inbox's address and size in RAM, and its fields, or `null` for a version 1 record. |
+| `startOverride` | The start override's address in the GBA's memory map (in the ROM, so from `0x08000000`), its size and its fields, or `null` for a version 1 or 2 record. Offsets count from the start of the override. |
 
 Field types: `u32` and `i32` are 32-bit numbers, unsigned and signed; `bool` is one
 byte, 0 or 1; `address` is a 32-bit address in the GBA's memory map; `body` is a
@@ -258,7 +293,7 @@ pecten_studio_rt = { path = "../runtime", features = ["agb", "debug-map"] }
 ## What it costs
 
 In a build with the map: 64 bytes of EWRAM (of 256 KB) for the block and 12 for the
-inbox, 28 bytes of ROM for the record and a few dozen for the copy and the poll, and
+inbox, 44 bytes of ROM for the record and a few dozen for the copy and the poll, and
 16 word writes and one read a frame, under 100 of the frame's 280,896 cycles. A
 change taken live costs more on the frame it arrives: the game makes its `World`
 again, and for tiles draws every tile in view, which on the sample skips about two
@@ -269,9 +304,9 @@ build it costs nothing.
 
 The version in the record says which layout the block has. It goes up when the
 block or the body changes, for example when a live entity table is added, and the
-map file's `version` with it. Version 2 added the inbox; the block did not change.
+map file's `version` with it. Version 2 added the inbox, and version 3 the start override, which costs 16 bytes of ROM; the block did not change.
 The studio still reads version 1 records, with no inbox, so a game built before
-version 2 restarts on each change instead of taking it live. A studio refuses a record with a version it does not
+version 2 restarts on each change instead of taking it live. A version 2 game has no start override, so **Play from here** asks for a new build. A studio refuses a record with a version it does not
 read, or a size that does not match its version, and the build log says to bring
 the studio and the game's runtime to the same version. A tool should check the
 version before it reads the block.

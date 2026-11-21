@@ -6,6 +6,8 @@
 // padding or margin, every size is a multiple of 8, and the whole sheet uses at most 15
 // colours, so every 8x8 tile fits one 16-colour palette.
 import { fromBgr555, toBgr555 } from './gba.ts'
+import { uniqueId } from './room.ts'
+import type { CollisionClass } from './schema.ts'
 
 export type BodyPattern = 'earth' | 'bricks' | 'stone' | 'cobble' | 'wood' | 'panels'
 export type TopStyle = 'smooth' | 'rough' | 'battlements'
@@ -1018,4 +1020,33 @@ export function autotile(cols: number, rows: number, solid: (x: number, y: numbe
       return roll < 0.15 ? 'c-alt' : roll < 0.3 ? 'c-alt2' : 'c'
     }),
   )
+}
+
+/**
+ * `tilegenCollision` against a project's collision classes. A tile with the project's first
+ * class needs nothing stored. Slopes need a class for each pair of floor heights; those the
+ * project lacks are added, and `added` says whether any were. `classes` is returned whole,
+ * for the project document.
+ */
+export function tilegenCollisionClasses(sheet: GeneratedTileset, projectClasses: readonly CollisionClass[]): { collision: Record<string, string>; classes: CollisionClass[]; added: boolean } {
+  const classes = [...projectClasses]
+  const fallback = classes[0]?.id
+  let added = false
+  const collision = tilegenCollision(sheet, (kind, slope) => {
+    let found = slope ? classes.find((c) => c.kind === 'slope' && c.slope?.left === slope.left && c.slope.right === slope.right) : classes.find((c) => c.kind === kind)
+    if (!found && slope && classes.length > 0) {
+      const steep = Math.abs(slope.right - slope.left) === 8
+      found = {
+        id: uniqueId(`slope-${slope.left}-${slope.right}`, classes.map((c) => c.id)),
+        name: `${steep ? 'Slope' : 'Gentle slope'} ${slope.right > slope.left ? 'up' : 'down'} ${slope.left}→${slope.right}`,
+        colour: '#46a758',
+        kind: 'slope',
+        slope,
+      }
+      classes.push(found)
+      added = true
+    }
+    return found?.id === fallback ? undefined : found?.id
+  })
+  return { collision, classes, added }
 }

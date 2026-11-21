@@ -25,6 +25,7 @@
 | `R` / `G` | Rectangle / fill |
 | `I`, or `Alt` + click | Pick a tile from the map |
 | `N` | Entities |
+| `P` | Play from here |
 | `H`, or hold `Space` | Pan |
 | `Delete` | Remove the selected entity |
 | Right mouse button | Erase while using the brush or rectangle |

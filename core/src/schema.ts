@@ -174,6 +174,8 @@ export const TileLayer = z.object({
   name: z.string().min(1),
   /** Run-length pairs `[count, cell, ...]` row by row; cell 0 is empty, n is tile n-1. See `rle.ts`. */
   data: z.array(z.number().int().min(0)),
+  /** Darken this layer by the room's `dimLevel`. Left out, it is not darkened. */
+  dim: z.boolean().optional(),
 })
 
 /** The GBA draws four background layers at once: a room's tile layers and backgrounds share them. */
@@ -187,6 +189,8 @@ export const Background = z.object({
   image: AssetPath,
   /** How fast it scrolls, in percent of the camera's speed: 0 stands still, 100 moves with the room. Less for what is farther away. */
   parallax: z.object({ x: Percent, y: Percent }),
+  /** Darken this picture by the room's `dimLevel`. Left out, it is not darkened. */
+  dim: z.boolean().optional(),
 })
 
 export const Entity = z.object({
@@ -213,6 +217,11 @@ export const Room = z.object({
   entities: z.array(Entity).default([]),
   /** Audio track that plays here. */
   music: Id.optional(),
+  /**
+   * How dark the layers set to `dim` are, from 0 (no change) to 16 (black). The GBA has one
+   * level for all of them, not one per layer. The game can change it while it runs.
+   */
+  dimLevel: z.number().int().min(0).max(16).optional(),
 })
 
 export const World = z.object({

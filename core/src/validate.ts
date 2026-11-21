@@ -84,6 +84,15 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
     if (room.layers.length + backgrounds.length > MAX_SCREEN_LAYERS) {
       add('error', file, `${room.layers.length} tile layers and ${backgrounds.length} backgrounds are ${room.layers.length + backgrounds.length} layers; the GBA draws ${MAX_SCREEN_LAYERS} at once`)
     }
+    const level = room.dimLevel ?? 0
+    const dimmed = [...room.layers, ...backgrounds].some((layer) => layer.dim === true)
+    if (level > 0 && !dimmed) add('warning', file, `no layer is dimmed, so the dim level ${level} does nothing: turn dim on for a layer or set the level to 0`)
+    if (level === 0) {
+      for (const layer of room.layers) if (layer.dim) add('warning', file, `layer "${layer.name}" is set to dim, but the dim level is 0, so nothing is darkened: raise the level or turn dim off`)
+      backgrounds.forEach((background, n) => {
+        if (background.dim) add('warning', file, `background ${n + 1} (${background.image}) is set to dim, but the dim level is 0, so nothing is darkened: raise the level or turn dim off`)
+      })
+    }
     if (room.collision) {
       const length = rleLength(room.collision)
       if (length !== cells) add('error', file, `collision overrides hold ${length ?? 'malformed'} cells, the room has ${cells}`)

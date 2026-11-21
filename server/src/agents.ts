@@ -14,6 +14,7 @@ on [agb](https://agbrs.dev) with the \`pecten_studio_rt\` runtime.
 | Files | Made by | Rule |
 | --- | --- | --- |
 | \`assets/\` (PNG, MIDI, SF2, XM, MOD, WAV) | the author, by hand | Read only. Never regenerate, replace, resize or delete. |
+| \`generated/\` (PNG) | tools, for the agent | Made by \`tileset_generate\`, \`pixel_art_convert\`. Tools never replace a file here; the author may. |
 | \`studio/rooms/\`, \`studio/world.json\` | the author, in the studio | Change only what was asked for; leave the rest of a room as it is. |
 | \`studio/project.json\`, \`tilesets/\`, \`sprites/\`, \`audio.json\` | the author, in the studio | Same. |
 | \`src/\` | you and the author | The game's rules. |
@@ -120,6 +121,8 @@ rest: game code in \`src/\`, and changes to the project they ask for. Read
 
 - Files under \`assets/\` are hand-made. Read them. Never regenerate, replace, resize,
   recolour or delete one, and never draw art or compose music in code as a stand-in.
+  When there is no art yet, the generator tools (below) make a tileset or a converted
+  picture under \`generated/\`: say that it is generated, so the author can replace it.
   If an asset is missing, say exactly what is needed (size, frame layout, format).
 - In rooms, change what was asked and nothing else. A room is someone's drawing.
 - Never edit a room's tile data by hand in JSON. It is run-length encoded; use the
@@ -144,6 +147,9 @@ A working order that avoids mistakes:
    \`entity_update\`, \`entity_remove\`, \`room_create\`, \`room_resize\`, \`world_place\`.
    For assets already in the folder: \`tileset_create\`, \`tileset_set_collision\`,
    \`sprite_create\`, \`sprite_set_animation\`, \`sprite_set_geometry\`, \`audio_add\`.
+   With no art yet: \`tileset_generate\` makes a tileset (picture and collision) under
+   \`generated/\`, then \`room_generate\` lays out a room on it; \`pixel_art_convert\`
+   shrinks a picture from the folder to GBA colours.
    For new kinds of things in rooms: \`entity_type_set\`.
 4. **Check.** Every change answers with the problems left in that file. Run
    \`validate\` at the end. Render the room again and look at it.

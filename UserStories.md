@@ -73,7 +73,7 @@ Notes / open questions
 | US-002 | Patch level data into a built ROM without compiling | E1 | P0 | Done | M |
 | US-003 | Live-apply edits to the running game | E1 | P0 | Done | L |
 | US-004 | Say when a change needs a full build | E1 | P0 | Done | S |
-| US-005 | Play from the room and spot under the cursor | E1 | P1 | Proposed | M |
+| US-005 | Play from the room and spot under the cursor | E1 | P1 | Done | M |
 | US-006 | Data reserve and section use in Project settings | E1 | P2 | Proposed | S |
 | US-007 | Redraw only the changed tiles on live apply | E1 | P2 | Proposed | S |
 | US-010 | Behaviour library in the runtime | E2 | P0 | Proposed | L |
@@ -103,6 +103,7 @@ Notes / open questions
 | US-043 | Moving backgrounds in the map editor | E5 | P2 | Proposed | S |
 | US-044 | Undo for deleting rooms, tilesets and sprites | E5 | P1 | Proposed | S |
 | US-045 | Pinch zoom and finger painting | E5 | P3 | Proposed | M |
+| US-046 | Darken layers and backgrounds for contrast | E5 | P1 | Planned | M |
 | US-050 | Font import and text drawing | E6 | P1 | Proposed | M |
 | US-051 | Dialogue boxes and a dialogue file format | E6 | P1 | Proposed | L |
 | US-052 | HUD layout editor | E6 | P2 | Proposed | L |
@@ -143,6 +144,7 @@ Notes / open questions
 | US-118 | Custom events, conditions and actions from Rust | E12 | P2 | Proposed | M |
 | US-119 | Rule tools for agents | E12 | P2 | Proposed | S |
 | US-120 | Template games built with rules only | E12 | P1 | Proposed | M |
+| US-121 | Generator tools for agents | E10 | P1 | Done | M |
 
 ---
 
@@ -228,16 +230,16 @@ Acceptance criteria
 - [x] Changing a `.rs` file or a sprite sheet sets "needs build".
 
 #### US-005 · Play from the room and spot under the cursor
-**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-002
+**Priority** P1 · **Status** Done · **Size** M · **Depends on** US-002
 **Touches** runtime, app
 
 As an author, I want to start the game in the room I am editing, at the tile I
 right-click, so that I do not walk from the start to test a late room.
 
 Acceptance criteria
-- [ ] The map editor has "Play from here"; the game starts with the player at that
+- [x] The map editor has "Play from here"; the game starts with the player at that
   point.
-- [ ] The start override is a debug-only setting that release builds ignore.
+- [x] The start override is a debug-only setting that release builds ignore.
 
 #### US-006 · Data reserve and section use in Project settings
 **Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-001
@@ -614,6 +616,68 @@ finger or pen.
 Acceptance criteria
 - [ ] Tested on an iPad and an Android tablet.
 
+#### US-046 · Darken layers and backgrounds for contrast
+**Priority** P1 · **Status** Planned · **Size** M · **Depends on** —
+**Touches** core, app, codegen, runtime, server, docs
+
+As an author, I want to darken a room's background pictures and tile layers, and
+change the darkness while the game runs, so that what is in front (a dialogue box,
+the player, a pause menu) stands out against the scene.
+
+Acceptance criteria
+- [ ] Each background and tile layer of a room has a `dim` setting (off by
+  default). Layers with it on are darkened; the others, and sprites, are not.
+- [ ] A room has a `dimLevel` from 0 (no change) to 16 (black). It is applied on
+  the GBA by the hardware brightness-decrease effect, so it costs no palette
+  slots, no tiles and no CPU per frame.
+- [ ] The runtime can set the level while the game runs (`set_dim(level)`) and
+  fade it over a number of frames, so a dialogue can dim the scene when it opens
+  and restore it when it closes. The level returns to the room's own on room
+  change.
+- [ ] The map editor and the Play preview show the dimmed layers the way the game
+  draws them, with the same rounding as the hardware.
+- [ ] The room panel has a toggle per layer and one level slider; the layer list
+  says which layers are dimmed.
+- [ ] MCP tools can set `dim` and `dimLevel`, answer with the problems they left,
+  and never write under `assets/`; the PNG itself is never changed.
+- [ ] A room with `dim` on a layer but level 0, or a level above 0 and no layer
+  dimmed, is a problem in the author's terms ("no layer is dimmed, so the level
+  does nothing").
+- [ ] Old projects load unchanged; `FORMAT_VERSION` is raised only if they would
+  not.
+- [ ] Host test in `runtime` for the register values per level and layer set;
+  vitest for the schema, validation and preview rounding; a fixture in
+  `codegen/fixture/` shared by Rust and TypeScript for the darkened colours.
+- [ ] `docs/guide/rooms.md` and `docs/reference/project-format.md` describe it,
+  with a screenshot from `docs/screenshots.json`.
+
+Notes / open questions
+- The GBA has one brightness level for all layers chosen as targets, not one per
+  layer. Per-layer darkness *amounts* would need a second palette per layer (16
+  palettes only) or the alpha blend, so this story offers on/off per layer and
+  one level. Say so in the guide.
+- Sprites and the layer a dialogue's text is drawn on must stay undimmed. If the
+  text shares a layer with the scene (US-050, US-051), that layer cannot be
+  dimmed; the story should report it as a problem once those exist.
+- Brightness decrease and alpha blend share the blend registers; this story
+  should leave a clear place for a later blend or fade story and not use the
+  alpha blend itself.
+- Alternative for authors who want a fixed look: darken the PNG in an image
+  editor. The studio does not change files under `assets/`, so this stays outside.
+
+Tasks
+1. Schema: `dim` on `Background` and `TileLayer`, `dimLevel` on `Room`
+   (`core/src/schema.ts`, `codegen/src/model.rs`, docs reference).
+2. Validation and Problems panel entries (`core`).
+3. Preview: darken in the map editor and Play preview (`core`, `app`).
+4. Codegen: write the layer set and level into the room data.
+5. Runtime: blend registers for the layer set, `set_dim` and a frame-stepped fade
+   (`data` stays dependency-free; the register writes sit behind `agb`).
+6. Room panel controls and MCP tool fields (`app`, `server`).
+7. Sample: dim the scene behind a message in `sample/`.
+8. Tests, docs and screenshot, then run `pnpm test`, `pnpm typecheck`,
+   `cargo test` and build `sample/`.
+
 ---
 
 ## E6 · Text and interface
@@ -846,6 +910,37 @@ descriptions fixed from what goes wrong.
 
 Acceptance criteria
 - [ ] A written list of failures and the changes made for each.
+
+#### US-121 · Generator tools for agents
+**Priority** P1 · **Status** Done · **Size** M · **Depends on** —
+**Touches** core, server, docs
+
+As an agent, I want MCP tools for the tileset generator, the room generator and the
+pixel art converter, so that I can make my own tileset and room template without a
+human drawing the art first.
+
+The studio's generators are only reachable from its web panels. Their pictures go
+in `generated/`, not `assets/`, so the rule that tools never write under `assets/`
+stands: `generated/` holds what a tool made, and a tool never replaces a file there.
+
+Acceptance criteria
+- [x] `tileset_generate` makes a tileset from a preset or from options, writes its
+  PNG under `generated/tilesets/`, saves the tileset document with collision set
+  (adding the slope classes the project lacks) and answers with a picture of the
+  sheet and the problems it left.
+- [x] `room_generate` lays out a room on a generated tileset, sized to the project's
+  jump, saves it, and answers with a picture of the room and the problems it left.
+  It says what to do when the tileset is not a generator sheet.
+- [x] `pixel_art_convert` converts a PNG from the game folder with the converter's
+  options and writes the result under `generated/pixelart/`, answering with its
+  size, colour count and a picture.
+- [x] No tool writes outside `generated/` except documents under `studio/`, and none
+  replaces an existing file: a taken name gets a numbered one.
+- [x] A fresh project can go from nothing to a validated tileset and room using only
+  MCP calls.
+- [x] The studio's own tileset panel and the tools share one collision-class
+  function.
+- [x] `docs/guide/agents.md` lists the tools; AGENTS.md says what `generated/` is.
 
 ---
 

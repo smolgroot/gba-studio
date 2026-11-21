@@ -14,11 +14,18 @@ Open a room from the Rooms list, or select it on the [world map](./world-map) an
 | Flood fill | `G` | |
 | Tile picker | `I`, or `Alt` + click | Pick a tile from the map. |
 | Entities | `N` | Place and move entities. |
+| Play from here | `P` | Click a tile to start the game in this room, standing on that tile. See [Play from here](#play-from-here). |
 | Pan | `H`, or hold `Space` | Or use the middle mouse button. |
 
 The **right mouse button** erases while using the brush or rectangle. Zoom with the toolbar buttons or `Ctrl` + wheel. The mouse position is shown as a tile and screen coordinate. Undo and redo are on the toolbar.
 
 Toolbar toggles show a **tile grid**, the **collision** overlay, and **guides** at every screen boundary (240x160 pixels).
+
+## Play from here
+
+To try a room without walking to it, choose **Play from here** (the play-circle icon, or `P`) and click a tile. The studio opens the [Play](./build-and-play#play-from-here) panel and starts the game in this room, with the player standing on that tile. The tile can be any tile of the room; the player is placed as an entity is, with their feet at the middle of the tile's bottom edge.
+
+This works in dev builds only. A release ROM has no [debug record](../reference/debug-map), so the panel tells you to build dev. The start is never written to the ROM file: it applies to the running game only.
 
 ## Layers
 

@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "stamp": "PSGS",
   "size": 64,
   "fields": [
@@ -29,5 +29,12 @@
     { "name": "generation", "offset": 0, "type": "u32" },
     { "name": "changed", "offset": 4, "type": "u32" },
     { "name": "seen", "offset": 8, "type": "u32" }
+  ],
+  "startSize": 16,
+  "start": [
+    { "name": "set", "offset": 0, "type": "u32" },
+    { "name": "room", "offset": 4, "type": "u32" },
+    { "name": "x", "offset": 8, "type": "i32" },
+    { "name": "y", "offset": 12, "type": "i32" }
   ]
 }

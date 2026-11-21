@@ -2,7 +2,7 @@
 // Tiles & Layers panel and Properties.
 import { create } from 'zustand'
 
-export type Tool = 'brush' | 'eraser' | 'rect' | 'fill' | 'pick' | 'entity' | 'pan'
+export type Tool = 'brush' | 'eraser' | 'rect' | 'fill' | 'pick' | 'entity' | 'pan' | 'play'
 /** A block of tiles picked in the tileset, in tiles: what the brush stamps. */
 export interface Stamp {
   x: number

@@ -138,9 +138,17 @@ fn hero_size() -> (i32, i32) {
 
 /// Where a game starts, in world pixels: the player-start entity of the start room.
 fn start(world: &World) -> (usize, Body) {
+    let (w, h) = hero_size();
+    // "Play from here" in the studio: a dev build starts in the room and spot it chose.
+    if let Some(point) = debug::start_override() {
+        let room = point.room as usize;
+        if room < world.room_count() {
+            let (left, top) = world.origin(room).unwrap_or((0, 0));
+            return (room, Body::standing_at(left + point.x, top + point.y, w, h));
+        }
+    }
     let room = world.start().unwrap_or(0) as usize;
     let (left, top) = world.origin(room).unwrap_or((0, 0));
-    let (w, h) = hero_size();
     let entity = world.room(room).entities().find(|e| EntityKind::of(e) == Some(EntityKind::PlayerStart));
     let (x, y) = entity.map_or((24, 24), |e| (e.x as i32, e.y as i32));
     (room, Body::standing_at(left + x, top + y, w, h))

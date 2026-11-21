@@ -6,7 +6,7 @@ import { DEBUG_LAYOUTS, ROM_ADDRESS, readDebugMap, readGameState } from '@pecten
 const FIXTURE = fileURLToPath(new URL('../../codegen/fixture/', import.meta.url))
 
 /** A ROM of zeros with a debug record at `at`, and optionally a data section at `section`. */
-function rom({ at = 0x100, version = 2, address = 0x0200_0000, size = 64, inbox = 0x0200_0040, inboxSize = 12, section }: { at?: number; version?: number; address?: number; size?: number; inbox?: number; inboxSize?: number; section?: number } = {}): Uint8Array {
+function rom({ at = 0x100, version = 3, address = 0x0200_0000, size = 64, inbox = 0x0200_0040, inboxSize = 12, section }: { at?: number; version?: number; address?: number; size?: number; inbox?: number; inboxSize?: number; section?: number } = {}): Uint8Array {
   const bytes = new Uint8Array(0x8000)
   const view = new DataView(bytes.buffer)
   bytes.set([...'PECTDBUG'].map((c) => c.charCodeAt(0)), at)
@@ -23,19 +23,28 @@ function rom({ at = 0x100, version = 2, address = 0x0200_0000, size = 64, inbox 
 
 describe('debug map', () => {
   it('has the layout the runtime writes, as the shared fixture holds it', () => {
-    expect(DEBUG_LAYOUTS[2]).toEqual(JSON.parse(readFileSync(`${FIXTURE}debug-layout.json`, 'utf8')))
+    expect(DEBUG_LAYOUTS[3]).toEqual(JSON.parse(readFileSync(`${FIXTURE}debug-layout.json`, 'utf8')))
   })
 
   it('reads the block address and layouts from the ROM record', () => {
     const result = readDebugMap(rom({ address: 0x0200_0080 }))
     expect(result).not.toBeNull()
     if (!result || 'problem' in result) throw new Error('expected a map')
-    expect(result.map.version).toBe(2)
+    expect(result.map.version).toBe(3)
     expect(result.map.state).toMatchObject({ address: 0x0200_0080, size: 64, stamp: 'PSGS' })
     expect(result.map.inbox).toEqual({ address: 0x0200_0040, size: 12, fields: [{ name: 'generation', offset: 0, type: 'u32' }, { name: 'changed', offset: 4, type: 'u32' }, { name: 'seen', offset: 8, type: 'u32' }] })
     expect(result.map.state.fields.find((f) => f.name === 'player')).toEqual({ name: 'player', offset: 20, type: 'body' })
     expect(result.map.body.fields.map((f) => f.name)).toEqual(['x', 'y', 'w', 'h', 'vx', 'vy', 'onGround', 'hitWall', 'hitCeiling'])
     expect(result.map.dataSection).toBeNull()
+  })
+
+  it('says where the start override is, from version 3', () => {
+    const result = readDebugMap(rom({ at: 0x100 }))
+    if (!result || 'problem' in result) throw new Error('expected a map')
+    expect(result.map.startOverride).toEqual({ address: ROM_ADDRESS + 0x100 + 28, size: 16, fields: [{ name: 'set', offset: 0, type: 'u32' }, { name: 'room', offset: 4, type: 'u32' }, { name: 'x', offset: 8, type: 'i32' }, { name: 'y', offset: 12, type: 'i32' }] })
+    const older = readDebugMap(rom({ version: 2 }))
+    if (!older || 'problem' in older) throw new Error('expected a map')
+    expect(older.map.startOverride).toBeNull()
   })
 
   it('gives the data section address when the ROM has one', () => {

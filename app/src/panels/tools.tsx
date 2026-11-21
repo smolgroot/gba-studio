@@ -14,9 +14,9 @@ import Chip from '@mui/material/Chip'
 import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import {
-  DEFAULT_TILEGEN, FORMAT_VERSION, TILEGEN_PRESETS, autotile, countColours, generateTileset, presetOptions, scaleOptions, slugify, tilegenCollision, uniqueId,
+  DEFAULT_TILEGEN, FORMAT_VERSION, TILEGEN_PRESETS, autotile, countColours, generateTileset, presetOptions, scaleOptions, slugify, tilegenCollisionClasses, uniqueId,
 } from '@pecten-studio/core'
-import type { BodyPattern, CollisionClass, GeneratedTileset, TilegenColours, TilegenOptions, TopStyle } from '@pecten-studio/core'
+import type { BodyPattern, GeneratedTileset, TilegenColours, TilegenOptions, TopStyle } from '@pecten-studio/core'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.ts'
 import { Checkbox, Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
@@ -370,29 +370,7 @@ function SaveSection({ sheet, options }: { sheet: GeneratedTileset; options: Til
       if (makeTileset) {
         const docs = useStudio.getState().bundle!.docs
         const project = docs.project
-        const classes: CollisionClass[] = [...(project?.collisionClasses ?? [])]
-        const fallback = classes[0]?.id
-        let added = false
-        // A tile with the project's first class needs nothing stored. Slopes need a class for
-        // each pair of floor heights; those the project lacks are added to it.
-        const collision = tilegenCollision(sheet, (kind, slope) => {
-          let found = slope
-            ? classes.find((c) => c.kind === 'slope' && c.slope?.left === slope.left && c.slope.right === slope.right)
-            : classes.find((c) => c.kind === kind)
-          if (!found && slope && project) {
-            const steep = Math.abs(slope.right - slope.left) === 8
-            found = {
-              id: uniqueId(`slope-${slope.left}-${slope.right}`, classes.map((c) => c.id)),
-              name: `${steep ? 'Slope' : 'Gentle slope'} ${slope.right > slope.left ? 'up' : 'down'} ${slope.left}→${slope.right}`,
-              colour: '#46a758',
-              kind: 'slope',
-              slope,
-            }
-            classes.push(found)
-            added = true
-          }
-          return found?.id === fallback ? undefined : found?.id
-        })
+        const { collision, classes, added } = tilegenCollisionClasses(sheet, project?.collisionClasses ?? [])
         if (project && added) commit('project', undefined, { ...project, collisionClasses: classes })
         const existing = Object.entries(docs.tilesets).find(([, t]) => t.image === path)
         tileset = existing?.[0] ?? uniqueId(slugify(title), Object.keys(docs.tilesets))

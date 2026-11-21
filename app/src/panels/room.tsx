@@ -9,6 +9,7 @@ import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import FormatColorFillIcon from '@mui/icons-material/FormatColorFill'
 import Grid4x4Icon from '@mui/icons-material/Grid4x4'
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined'
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined'
 import PanToolOutlinedIcon from '@mui/icons-material/PanToolOutlined'
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined'
 import RectangleOutlinedIcon from '@mui/icons-material/RectangleOutlined'
@@ -23,7 +24,7 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import SvgIcon from '@mui/material/SvgIcon'
 import Typography from '@mui/material/Typography'
-import { MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, resizeRoom, rleDecode, rleEncode, rleLength, roomSize } from '@pecten-studio/core'
+import { MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, resizeRoom, rleDecode, rleEncode, rleLength, roomSize, spotOfTile } from '@pecten-studio/core'
 import type { Background, CollisionClass, EntityType, Room, Sprite, Tileset } from '@pecten-studio/core'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
@@ -51,6 +52,7 @@ const TOOLS: ReadonlyArray<{ tool: Tool; title: string; key: string; icon: React
   { tool: 'fill', title: 'Fill (G)', key: 'g', icon: <FormatColorFillIcon /> },
   { tool: 'pick', title: 'Pick a tile from the map (I, or Alt + click)', key: 'i', icon: <ColorizeIcon /> },
   { tool: 'entity', title: 'Entities (N): click to place, drag to move, Delete to remove', key: 'n', icon: <PlaceOutlinedIcon /> },
+  { tool: 'play', title: 'Play from here (P): click a tile to start the game there', key: 'p', icon: <PlayCircleOutlineIcon /> },
   { tool: 'pan', title: 'Pan (H, or hold Space, or middle button)', key: 'h', icon: <PanToolOutlinedIcon /> },
 ]
 
@@ -189,6 +191,7 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
   const entityTypes = useStudio((s) => s.bundle?.docs.project?.entityTypes)
   const sprites = useStudio((s) => s.bundle?.docs.sprites)
   const commit = useStudio((s) => s.commit)
+  const playFromHere = useStudio((s) => s.playFromHere)
   const editor = useEditor()
   const { tool, stamp, hidden, showGrid, showCollision, showBackgrounds, set } = editor
   const layer = editor.layer === 'collision' ? 'collision' : Math.min(editor.layer, room.layers.length - 1)
@@ -383,6 +386,10 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
       if (!type) return
       commit('room', id, { ...room, entities: [...room.entities, { type, ...entityAt(cx, cy), props: {} }] })
       set({ entity: room.entities.length })
+    } else if (tool === 'play') {
+      // Starts the dev game in this room, standing on the clicked tile.
+      stroke.current = null
+      playFromHere(spotOfTile(id, cx, cy))
     } else if (tool === 'pick' || event.altKey) {
       stroke.current = null
       const value = target(w)[cy * w.cols + cx]!

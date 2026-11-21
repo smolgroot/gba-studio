@@ -22,8 +22,9 @@ use crate::physics::Body;
 pub const STAMP: u32 = u32::from_le_bytes(*b"PSGS");
 
 /// The version of the ROM record and of the block and inbox layouts. Raised when any
-/// changes, so a tool never reads one with the wrong layout. Version 2 added the inbox.
-pub const VERSION: u32 = 2;
+/// changes, so a tool never reads one with the wrong layout. Version 2 added the inbox,
+/// version 3 the start override.
+pub const VERSION: u32 = 3;
 
 /// What a tool can see of the game each frame. Every field is a 32-bit word, so the
 /// layout is the same on the console and on the host.
@@ -72,6 +73,43 @@ pub struct Inbox {
     pub generation: u32,
     pub changed: u32,
     pub seen: u32,
+}
+
+/// Where the studio wants the game to start, written into the emulator's copy of the
+/// ROM by "Play from here". Four words, all zero as built: `set` is 1 when the rest
+/// counts. `x` and `y` are in room pixels, where an entity of that room would stand
+/// (the middle of the bottom edge).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StartOverride {
+    pub set: u32,
+    pub room: u32,
+    pub x: i32,
+    pub y: i32,
+}
+
+/// A place to start the game: a room and a point in it, in room pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StartPoint {
+    pub room: u32,
+    pub x: i32,
+    pub y: i32,
+}
+
+/// The start the studio asked for, if any. Only builds with the debug map can have
+/// one: a release build has no record, so this is always `None` there. The caller
+/// checks that the room exists in its data.
+#[inline]
+pub fn start_override() -> Option<StartPoint> {
+    #[cfg(any(debug_assertions, feature = "debug-map"))]
+    {
+        // Volatile, so the compiler does not fold the zeros the ROM is built with:
+        // the studio changes them afterwards.
+        let o = unsafe { core::ptr::read_volatile(&map::RECORD.start) };
+        if o.set == 1 { Some(StartPoint { room: o.room, x: o.x, y: o.y }) } else { None }
+    }
+    #[cfg(not(any(debug_assertions, feature = "debug-map")))]
+    None
 }
 
 /// What changed in the data section since the game last looked.
@@ -145,7 +183,7 @@ impl Live {
 
 #[cfg(any(debug_assertions, feature = "debug-map"))]
 mod map {
-    use super::{GameState, Inbox, VERSION};
+    use super::{GameState, Inbox, StartOverride, VERSION};
     use core::cell::UnsafeCell;
 
     /// The block a tool reads. Only [`super::publish`] writes it.
@@ -167,7 +205,7 @@ mod map {
     pub(super) static INBOX: InboxCell = InboxCell(UnsafeCell::new(Inbox { generation: 0, changed: 0, seen: 0 }));
 
     /// The ROM record: magic, version, then the address and size of the block and of
-    /// the inbox. 28 bytes on the console.
+    /// the inbox, then the start override. 44 bytes on the console.
     #[repr(C)]
     pub(super) struct Record {
         pub(super) magic: [u8; 8],
@@ -176,6 +214,7 @@ mod map {
         pub(super) size: u32,
         pub(super) inbox: *const InboxCell,
         pub(super) inbox_size: u32,
+        pub(super) start: StartOverride,
     }
     // SAFETY: the record is never written; the pointer is only read back.
     unsafe impl Sync for Record {}
@@ -188,6 +227,7 @@ mod map {
         size: size_of::<GameState>() as u32,
         inbox: &INBOX,
         inbox_size: size_of::<Inbox>() as u32,
+        start: StartOverride { set: 0, room: 0, x: 0, y: 0 },
     };
 }
 
@@ -245,14 +285,22 @@ mod tests {
             field("changed", offset_of!(Inbox, changed), "u32"),
             field("seen", offset_of!(Inbox, seen), "u32"),
         ];
+        let start = [
+            field("set", offset_of!(StartOverride, set), "u32"),
+            field("room", offset_of!(StartOverride, room), "u32"),
+            field("x", offset_of!(StartOverride, x), "i32"),
+            field("y", offset_of!(StartOverride, y), "i32"),
+        ];
         format!(
-            "{{\n  \"version\": {VERSION},\n  \"stamp\": \"PSGS\",\n  \"size\": {},\n  \"fields\": [\n{}\n  ],\n  \"bodySize\": {},\n  \"body\": [\n{}\n  ],\n  \"inboxSize\": {},\n  \"inbox\": [\n{}\n  ]\n}}\n",
+            "{{\n  \"version\": {VERSION},\n  \"stamp\": \"PSGS\",\n  \"size\": {},\n  \"fields\": [\n{}\n  ],\n  \"bodySize\": {},\n  \"body\": [\n{}\n  ],\n  \"inboxSize\": {},\n  \"inbox\": [\n{}\n  ],\n  \"startSize\": {},\n  \"start\": [\n{}\n  ]\n}}\n",
             size_of::<GameState>(),
             state.join(",\n"),
             size_of::<Body>(),
             body.join(",\n"),
             size_of::<Inbox>(),
             inbox.join(",\n"),
+            size_of::<StartOverride>(),
+            start.join(",\n"),
         )
     }
 
@@ -286,6 +334,25 @@ mod tests {
         assert!(core::ptr::eq(map::RECORD.block, &map::BLOCK));
         assert!(core::ptr::eq(map::RECORD.inbox, &map::INBOX));
         assert_eq!(map::RECORD.inbox_size as usize, size_of::<Inbox>());
+    }
+
+    #[test]
+    fn the_record_has_no_start_until_the_studio_sets_one() {
+        assert_eq!(start_override(), None);
+        assert_eq!(size_of::<StartOverride>(), 16);
+        // The studio reads the override at byte 28 of the record, which holds on the
+        // console, where addresses are 32 bits.
+        #[cfg(target_pointer_width = "32")]
+        assert_eq!(core::mem::offset_of!(map::Record, start), 28);
+        // The studio writes the four words; the game reads them back.
+        let word = |v: i32| v.to_le_bytes();
+        let mut bytes = [0u8; 16];
+        for (i, v) in [1, 2, 24, 40].into_iter().enumerate() {
+            bytes[i * 4..i * 4 + 4].copy_from_slice(&word(v));
+        }
+        // SAFETY: only this test writes the record, on a copy it reads back from.
+        let o: StartOverride = unsafe { core::mem::transmute(bytes) };
+        assert_eq!(o, StartOverride { set: 1, room: 2, x: 24, y: 40 });
     }
 
     #[test]

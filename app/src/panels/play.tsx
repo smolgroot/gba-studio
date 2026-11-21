@@ -7,8 +7,8 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { applyLive, liveTaken, planLiveApply } from '@pecten-studio/core'
-import type { DebugMap } from '@pecten-studio/core'
+import { applyLive, liveTaken, planLiveApply, readDebugMap, startAt } from '@pecten-studio/core'
+import type { DebugMap, StartSpot } from '@pecten-studio/core'
 import { api, fileUrl } from '../api.ts'
 import type { PatchResult, RomInfo, ToolchainReport } from '../api.ts'
 import { Checkbox } from '../fields.tsx'
@@ -205,6 +205,11 @@ export function PlayView() {
   const loadedBytes = useRef<Uint8Array | null>(null)
   /** A live change the game has not taken yet, and the frames it has left to. */
   const pendingLive = useRef<{ map: DebugMap; generation: number; frames: number; rom: RomInfo } | null>(null)
+  /** Where the game was asked to start ("Play from here"), kept for restarts the studio makes itself. */
+  const startSpot = useRef<StartSpot | null>(null)
+  const [startNote, setStartNote] = useState<string | null>(null)
+  const playFrom = useStudio((s) => s.playFrom)
+  const clearPlayFrom = useStudio((s) => s.clearPlayFrom)
   const [patch, setPatch] = useState<PatchResult | null>(null)
   const patchedRevision = useRef(revision)
   const building = build?.running ?? false
@@ -224,6 +229,18 @@ export function PlayView() {
       loadedBytes.current = bytes
       pendingLive.current = null
       loadedModified.current = info.modified
+      // Before the first frame, so the game reads the spot as it begins.
+      const spot = startSpot.current
+      if (spot) {
+        const found = readDebugMap(bytes)
+        const problem = startAt(emulator.current, found && 'map' in found ? found.map : null, Object.keys(useStudio.getState().bundle?.docs.rooms ?? {}), spot)
+        if (problem) {
+          startSpot.current = null
+          setStartNote(null)
+          throw new Error(`Cannot play from here: ${problem.problem}.`)
+        }
+        setStartNote(`Started in room “${spot.room}” at ${spot.x}, ${spot.y}.`)
+      } else setStartNote(null)
       setRunning(true)
     } catch (e) {
       setError((e as Error).message)
@@ -256,6 +273,13 @@ export function PlayView() {
       setError((e as Error).message)
     }
   }, [start])
+  // "Play from here" in the map editor: start again at its spot.
+  useEffect(() => {
+    if (!playFrom || !rom) return
+    startSpot.current = playFrom.spot
+    clearPlayFrom()
+    void start(rom)
+  }, [playFrom, rom, start, clearPlayFrom])
   const romPath = rom?.path
   const romModified = rom?.modified
   useEffect(() => {
@@ -377,8 +401,8 @@ export function PlayView() {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, p: 2, overflow: 'auto', bgcolor: '#161616' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <Button variant="contained" startIcon={<PlayArrowIcon />} onClick={() => void start(rom)}>{running ? 'Restart' : 'Play'}</Button>
-        <Button variant="outlined" startIcon={<RestartAltIcon />} disabled={!running} onClick={() => { setRestarts((n) => n + 1); void start(rom) }}>Reset</Button>
+        <Button variant="contained" startIcon={<PlayArrowIcon />} onClick={() => { startSpot.current = null; void start(rom) }}>{running ? 'Restart' : 'Play'}</Button>
+        <Button variant="outlined" startIcon={<RestartAltIcon />} disabled={!running} onClick={() => { startSpot.current = null; setRestarts((n) => n + 1); void start(rom) }}>Reset</Button>
         {roms.dev && roms.release && (
           <Button variant="outlined" onClick={() => { setMode(mode === 'dev' ? 'release' : 'dev'); setRunning(false) }}>ROM: {mode}</Button>
         )}
@@ -388,6 +412,7 @@ export function PlayView() {
         <Checkbox checked={liveApply} onChange={setLiveApply}>Live apply</Checkbox>
       </Box>
       <Typography variant="body2" color="text.secondary">{romPath} · {(rom.size / 1024).toFixed(0)} KB · built {new Date(romModified ?? 0).toLocaleTimeString()}</Typography>
+      {startNote && <Typography variant="body2" color="text.secondary">{startNote} Play or Reset starts from the start room.</Typography>}
       {error && <Typography color="error" role="alert">{error}</Typography>}
       {patch?.status === 'patched' && (
         <Typography variant="body2" color="text.secondary">Patched in {patch.ms} ms · level data {patch.used.toLocaleString()} of {patch.capacity.toLocaleString()} bytes{applied ? ` · ${applied}` : ''}</Typography>

@@ -33,6 +33,8 @@ export interface Bundle {
 const SKIP_DIRS = new Set(['node_modules', 'target', 'dist', '.git', STUDIO_DIR])
 const ASSET_EXTENSIONS = new Set(['.png', '.aseprite', '.ase', '.mid', '.midi', '.sf2', '.xm', '.mod', '.wav'])
 const MAX_ASSETS = 5000
+/** Where tools put the pictures they make. The author's own files stay in `assets/`. */
+export const GENERATED_DIR = 'generated'
 
 export class ProjectFolder {
   readonly root: string
@@ -227,6 +229,26 @@ export class ProjectFolder {
     const temp = `${abs}.${process.pid}.tmp`
     await writeFile(temp, data)
     await rename(temp, abs)
+  }
+
+  /**
+   * Stores a picture a tool made, under `generated/` only: the author's `assets/` is never
+   * touched. Never replaces a file; a taken name gets -2, -3 and so on. Returns the path used.
+   */
+  async writeGenerated(rel: string, data: Buffer): Promise<string> {
+    const parts = rel.split('/')
+    if (parts[0] !== GENERATED_DIR || parts.length < 2 || !AssetPath.safeParse(rel).success || parts.some((p) => p.startsWith('.')) || !rel.endsWith('.png')) {
+      throw new HttpError(400, `generated files go in ${GENERATED_DIR}/ and are PNGs; ${rel} is not one`)
+    }
+    const stem = rel.slice(0, -'.png'.length)
+    let used = rel
+    for (let n = 2; existsSync(this.resolve(used)); n++) used = `${stem}-${n}.png`
+    const abs = this.resolve(used)
+    await mkdir(path.dirname(abs), { recursive: true })
+    const temp = `${abs}.${process.pid}.tmp`
+    await writeFile(temp, data)
+    await rename(temp, abs)
+    return used
   }
 
   private async writeJson(file: string, data: unknown): Promise<void> {

@@ -9,6 +9,7 @@ on [agb](https://agbrs.dev) with the `pecten_studio_rt` runtime.
 | Files | Made by | Rule |
 | --- | --- | --- |
 | `assets/` (PNG, MIDI, SF2, XM, MOD, WAV) | the author, by hand | Read only. Never regenerate, replace, resize or delete. |
+| `generated/` (PNG) | tools, for the agent | Made by `tileset_generate`, `pixel_art_convert`. Tools never replace a file here; the author may. |
 | `studio/rooms/`, `studio/world.json` | the author, in the studio | Change only what was asked for; leave the rest of a room as it is. |
 | `studio/project.json`, `tilesets/`, `sprites/`, `audio.json` | the author, in the studio | Same. |
 | `src/` | you and the author | The game's rules. |

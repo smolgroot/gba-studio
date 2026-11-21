@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_TILEGEN, TILEGEN_BLOCKS, TILEGEN_PRESETS, autotile, countColours, generateTileset, presetOptions, slopeTile, tilegenCollision, toBgr555 } from '../src/index.ts'
+import { DEFAULT_TILEGEN, TILEGEN_BLOCKS, TILEGEN_PRESETS, autotile, countColours, generateTileset, presetOptions, slopeTile, tilegenCollision, tilegenCollisionClasses, toBgr555 } from '../src/index.ts'
 import type { GeneratedTileset, TilegenOptions } from '../src/index.ts'
 
 /** Distinct GBA colours in each 8x8 tile, the most any tile has. */
@@ -140,5 +140,25 @@ describe('tileset generator', () => {
     // Past the map's edge counts as more ground, so the bottom row only opens upward.
     expect(tiles[3]).toEqual(['t', 'inner-tl', 'inner-tr', 't'])
     expect(autotile(3, 3, (x, y) => x === 1 && y === 1)[1]![1]).toBe('single')
+  })
+})
+
+describe('tilegenCollisionClasses', () => {
+  const base = [
+    { id: 'empty', name: 'Empty', colour: '#000000', kind: 'empty' as const },
+    { id: 'solid', name: 'Solid', colour: '#e5484d', kind: 'solid' as const },
+    { id: 'oneway', name: 'One-way', colour: '#f5d90a', kind: 'oneway' as const },
+    { id: 'hazard', name: 'Hazard', colour: '#d6409f', kind: 'hazard' as const },
+  ]
+  it('names a class for every collision tile, adding the slope classes the project lacks', () => {
+    const sheet = generateTileset({ ...DEFAULT_TILEGEN, blockSize: 8 })
+    const { collision, classes, added } = tilegenCollisionClasses(sheet, base)
+    expect(added).toBe(true)
+    expect(classes.length).toBeGreaterThan(base.length)
+    for (const id of Object.values(collision)) expect(classes.some((c) => c.id === id)).toBe(true)
+    // The first class is the default: it is never stored.
+    expect(Object.values(collision)).not.toContain('empty')
+    // A project that has the classes gets none added.
+    expect(tilegenCollisionClasses(sheet, classes).added).toBe(false)
   })
 })

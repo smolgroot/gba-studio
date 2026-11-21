@@ -5,8 +5,9 @@
 import { readSection } from './datasection.ts'
 
 const RECORD_MAGIC = [...'PECTDBUG'].map((c) => c.charCodeAt(0))
-/** Version 1 records are 20 bytes; version 2 adds the inbox's address and size. */
+/** Version 1 records are 20 bytes; version 2 adds the inbox's address and size (28), version 3 the start override (44). */
 const RECORD_SIZE = 20
+const START_AT = 28
 /** Where the GBA maps the cartridge: ROM offset 0 is this address. */
 export const ROM_ADDRESS = 0x0800_0000
 /** The two work RAMs the block can be in. */
@@ -51,12 +52,14 @@ interface Layout {
   body: readonly DebugField[]
   inboxSize?: number
   inbox?: readonly DebugField[]
+  startSize?: number
+  start?: readonly DebugField[]
 }
 
 /**
  * The layouts for each record version, as `pecten_studio_rt::debug` lays them out.
  * `codegen/fixture/debug-layout.json` holds the newest, and a runtime test checks
- * the Rust side against it. Version 2 added the inbox.
+ * the Rust side against it. Version 2 added the inbox, version 3 the start override.
  */
 export const DEBUG_LAYOUTS = {
   1: { version: 1, stamp: 'PSGS', size: 64, fields: BLOCK_FIELDS, bodySize: 36, body: BODY_FIELDS },
@@ -74,6 +77,27 @@ export const DEBUG_LAYOUTS = {
       { name: 'seen', offset: 8, type: 'u32' },
     ],
   },
+  3: {
+    version: 3,
+    stamp: 'PSGS',
+    size: 64,
+    fields: BLOCK_FIELDS,
+    bodySize: 36,
+    body: BODY_FIELDS,
+    inboxSize: 12,
+    inbox: [
+      { name: 'generation', offset: 0, type: 'u32' },
+      { name: 'changed', offset: 4, type: 'u32' },
+      { name: 'seen', offset: 8, type: 'u32' },
+    ],
+    startSize: 16,
+    start: [
+      { name: 'set', offset: 0, type: 'u32' },
+      { name: 'room', offset: 4, type: 'u32' },
+      { name: 'x', offset: 8, type: 'i32' },
+      { name: 'y', offset: 12, type: 'i32' },
+    ],
+  },
 } as const satisfies Record<number, Layout>
 
 /** The bits of the inbox's `changed` word, as `pecten_studio_rt::debug::Changes` reads them. */
@@ -82,7 +106,7 @@ export const LIVE_CHANGES = { tiles: 1, physics: 2, entities: 4, rooms: 8 } as c
 /** What `<rom>.debug.json` holds. */
 export interface DebugMap {
   /** The ROM record's version. */
-  version: 1 | 2
+  version: 1 | 2 | 3
   /** The game's state block in RAM: read `size` bytes at `address`. */
   state: {
     address: number
@@ -108,6 +132,12 @@ export interface DebugMap {
    * version 2; null before. Fields: `generation`, `changed` (bits of LIVE_CHANGES), `seen`.
    */
   inbox: { address: number; size: number; fields: DebugField[] } | null
+  /**
+   * Where a dev build reads its start from, in the ROM (record version 3; null before):
+   * `set` (1 to use it), `room` (index in the data section's room table), and `x`, `y` in
+   * room pixels. Zero as built. The studio writes it into the emulator's copy only.
+   */
+  startOverride: { address: number; size: number; fields: DebugField[] } | null
 }
 
 export type DebugMapResult = { map: DebugMap } | { problem: string } | null
@@ -147,15 +177,22 @@ export function readDebugMap(rom: Uint8Array): DebugMapResult {
     inbox = { address: inboxAddress, size: inboxSize, fields: layout.inbox.map((f) => ({ ...f })) }
   }
 
+  let startOverride: DebugMap['startOverride'] = null
+  if (layout.start) {
+    if (at + START_AT + layout.startSize! > rom.length) return { problem: 'the ROM ends inside its debug record; rebuild the game' }
+    startOverride = { address: ROM_ADDRESS + at + START_AT, size: layout.startSize!, fields: layout.start.map((f) => ({ ...f })) }
+  }
+
   const section = readSection(rom)
   return {
     map: {
-      version: version as 1 | 2,
+      version: version as 1 | 2 | 3,
       state: { address, size, stamp: layout.stamp, fields: layout.fields.map((f) => ({ ...f })) },
       body: { size: layout.bodySize, fields: layout.body.map((f) => ({ ...f })) },
       collected: { bitsPerWord: 32 },
       dataSection: section ? { address: ROM_ADDRESS + section.start } : null,
       inbox,
+      startOverride,
     },
   }
 }

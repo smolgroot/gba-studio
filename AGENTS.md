@@ -66,7 +66,8 @@ what ran and what failed; do not mark a story `Done` with failing checks.
   `physics` stay free of dependencies so they compile and test on the host.
 - **Authors' files are theirs.** Nothing under a game's `assets/` is created,
   changed or deleted by the studio except PNGs drawn in the pixel editor. MCP tools
-  never write under `assets/`.
+  never write under `assets/`. The generator tools put what they draw in `generated/`
+  instead, and never replace a file there.
 - **Every write is validated.** New document kinds get a schema, validation that
   feeds the Problems panel, and MCP tools that answer with the problems they left.
 - **Errors say what to do**, in the project's terms ("the tileset has 16 tiles,

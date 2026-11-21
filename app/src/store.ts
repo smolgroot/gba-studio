@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Audio, MultiKind, Project, Room, Sprite, Tileset, World } from '@pecten-studio/core'
+import type { Audio, MultiKind, Project, Room, Sprite, StartSpot, Tileset, World } from '@pecten-studio/core'
 import { api, watchFiles } from './api.ts'
 import { toolName } from './tools.ts'
 import type { AgentMessage, BuildMessage, BuildStatus, Bundle, RomStatus } from './api.ts'
@@ -123,6 +123,15 @@ interface StudioState {
   load: () => Promise<void>
   init: (name: string) => Promise<void>
   select: (selection: Selection) => void
+  /**
+   * A spot the author asked to play from (the map editor's "Play from here"); `n` counts
+   * requests so asking for the same spot again starts the game again. Null once the Play
+   * panel's Play or Reset button goes back to the start room.
+   */
+  playFrom: { spot: StartSpot; n: number } | null
+  /** Opens the Play panel and starts the game at a spot. */
+  playFromHere: (spot: StartSpot) => void
+  clearPlayFrom: () => void
   /** Starts following the disk; returns how to stop. */
   watch: () => () => void
   /** Replaces a document, remembers the old one for undo, and saves. Also creates new documents. */
@@ -200,6 +209,12 @@ export const useStudio = create<StudioState>((set, get) => {
       )
     },
     agent: null,
+    playFrom: null,
+    playFromHere: (spot) => {
+      set((state) => ({ playFrom: { spot, n: (state.playFrom?.n ?? 0) + 1 } }))
+      get().select({ kind: 'play' })
+    },
+    clearPlayFrom: () => set({ playFrom: null }),
     runBuild: async (mode) => {
       try {
         set({ build: await api.build(mode), saveError: null })

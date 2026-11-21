@@ -44,7 +44,8 @@ describe.skipIf(!ready)('the debug map a build writes', () => {
     expect(lines).toContain(`debug map: ${ROM}.debug.json`)
     const written = map(ROM)
     expect(written.rom).toBe(ROM)
-    expect(written.version).toBe(2)
+    expect(written.version).toBe(3)
+    expect(written.startOverride?.size).toBe(16)
     expect(written.inbox?.size).toBe(12)
     const ewram = RAM_REGIONS.ewram
     expect(written.state.address).toBeGreaterThanOrEqual(ewram.start)

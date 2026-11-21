@@ -176,7 +176,8 @@ any size in `assets/sprites/`, `assets/tilesets/` or `assets/backgrounds/`.
   collision, entities, world placement and physics are patched into the ROM in a
   fraction of a second, without a build (**Patch on change**), and go into the
   running game with the player where they are (**Live apply**, for games that poll
-  for it); changes that need a build say why and offer one. Keyboard: arrows, `X` is A, `Z` is B, `Enter` is
+  for it); changes that need a build say why and offer one. The map editor's
+  **Play from here** tool (`P`) starts a dev game in the clicked room, on the clicked tile. Keyboard: arrows, `X` is A, `Z` is B, `Enter` is
   Start, `Shift` is Select, `A` and `S` are L and R.
 - **ROM state in the top bar:** up to date, patched, or needs build with the
   reason (`Rust source changed: src/main.rs`, `new sprite "bat"`,
@@ -286,6 +287,7 @@ The endpoint refuses requests from other web pages, like the rest of the server.
 | `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
 | `entity_type_set`, `entity_type_remove` | Entity types and their typed properties |
 | `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
+| `tileset_generate`, `room_generate`, `pixel_art_convert` | The three generators: a tileset with collision, a room on it, a converted picture. Pictures go to `generated/` |
 | `sprite_create`, `sprite_set_animation`, `sprite_remove_animation`, `sprite_set_geometry` | Sprites from a sheet in the folder, their animations, anchor and hitbox |
 | `audio_add` | Add a WAV, XM, MOD or MIDI file in the folder as a sound effect or track |
 | `render_room`, `render_tileset`, `render_sprite` | Pictures: a room (optionally tinted by collision), a tileset or sprite sheet with its grid |
@@ -295,7 +297,8 @@ The endpoint refuses requests from other web pages, like the rest of the server.
 Every write is validated and answered with the problems it left in that file. Errors
 inside a tool come back as text the agent can act on ("the tileset has 16 tiles,
 numbered 0 to 15; there is no tile 99"). No tool creates, changes or deletes a file
-under `assets/`: agents can use the art and music that is there, not make it.
+under `assets/`: agents can use the art and music that is there, not make it. The
+generator tools write to `generated/` and never replace a file there.
 
 ## Making a game with it
 
