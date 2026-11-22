@@ -17,6 +17,7 @@ mod collectible;
 pub mod declare;
 mod door;
 mod hazard;
+pub mod live;
 mod patrol;
 mod platform;
 mod pool;
@@ -28,6 +29,7 @@ pub use checkpoint::Checkpoint;
 pub use collectible::Collectible;
 pub use door::Door;
 pub use hazard::Hazard;
+pub use live::{Attached, Dispatch, LiveEntities, LiveEntity, MAX_BEHAVIOURS};
 pub use patrol::Patrol;
 pub use platform::MovingPlatform;
 pub use pool::Pool;
@@ -230,5 +232,7 @@ pub struct Context<'a> {
     pub abilities: Abilities,
 }
 
+#[cfg(test)]
+mod live_tests;
 #[cfg(test)]
 mod tests;

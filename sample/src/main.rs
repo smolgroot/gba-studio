@@ -10,12 +10,13 @@
 //! the D-pad walks in every direction and the edges of the map are walls.
 //!
 //! What entities do comes from the runtime's behaviour library, as their types list it
-//! in the project. Coins and diamonds are collectibles: touching one takes it for good
-//! and adds its value to the count in the corner. The sentry bot is a patrol and a
-//! hazard: it walks back and forth around where it was placed, as far each way as its
-//! `patrol` says, and touching it hurts like spikes do: the hero goes back to where it
-//! entered the room. A new enemy or pickup that does these things is a new entity type
-//! in the studio with a sprite and behaviours; nothing here changes.
+//! in the project, and `data::update_entities` runs them: this file only says what
+//! their events mean. Coins and diamonds are collectibles: touching one takes it for
+//! good and adds its value to the count in the corner. The sentry bot is a patrol and
+//! a hazard: it walks back and forth around where it was placed, as far each way as
+//! its `patrol` says, and touching it hurts like spikes do: the hero goes back to
+//! where it entered the room. A new enemy or pickup that does these things is a new
+//! entity type in the studio with a sprite and behaviours; nothing here changes.
 //!
 //! Sound effects are the project's audio list, played by id: `jump`, `coin`, `diamond`
 //! and `damage`.
@@ -29,7 +30,7 @@
 use agb::input::{Button, ButtonController};
 use agb::sound::mixer::{Frequency, Mixer, SoundChannel};
 use pecten_studio_rt::{
-    behaviour::{Abilities, Actor, Behaviour, Collectible, Context, Event, Hazard, Patrol},
+    behaviour::{Abilities, Context, Dispatch, Event},
     data::{Collected, CollisionKind, SCREEN_H, SCREEN_W, World},
     debug::{self, GameState, Live},
     gfx::{AnimPlayer, WorldView},
@@ -166,6 +167,10 @@ fn main(mut gba: agb::Gba) -> ! {
     // What has been collected, and what it was worth. Coins stay taken after a respawn.
     let mut found = Collected::<ENTITY_WORDS>::new();
     let mut score = 0u32;
+    // Every entity with its behaviours, built from the ROM when its room is first near
+    // the hero and kept: the hero's room and those touching it are the active ones.
+    let entities = data::entities();
+    data::enter_room(entities, &world, room, |_| false);
     // Ticks since the game began: every placed entity animates off this one clock.
     let mut clock = 0u32;
     let mut top_down = physics.mode == PhysicsMode::TopDown;
@@ -202,6 +207,9 @@ fn main(mut gba: agb::Gba) -> ! {
             } else {
                 view.set_world(&world);
             }
+            // Entities may have moved, or be new: build them again, except those taken.
+            entities.clear();
+            data::enter_room(entities, &world, room, |index| found.has(index));
         }
         input.update();
         let direction = input.x_tri() as i32;
@@ -228,6 +236,7 @@ fn main(mut gba: agb::Gba) -> ! {
             Some(next) if next != room => {
                 room = next;
                 entry = walker.settled(body);
+                data::enter_room(entities, &world, room, |index| found.has(index));
                 // A room drawn with another tileset cannot share the screen: cut to it.
                 if !view.shows(room) {
                     view = WorldView::new(&world, gfx::ART, room, &mut graphics);
@@ -286,47 +295,49 @@ fn main(mut gba: agb::Gba) -> ! {
         view.show(&mut frame);
         let (feet_x, feet_y) = body.feet();
         hero.object(animation.frame(), feet_x - camera.0, feet_y - camera.1, faces_left).show(&mut frame);
-        // Every other entity whose type has a sprite stands where it was placed, in
-        // every room that is in view, playing its sprite's first animation, unless a
-        // behaviour moves it. A collectible is taken for good when the hero touches it,
-        // and a hazard hurts the hero it touches.
+        // The behaviours of the entities in view: a collectible is taken for good when
+        // the hero touches it, and a hazard hurts the hero it touches. The player start only
+        // marks where the game begins, so it leaves the table on the first frame.
         let mut hurt = false;
         let (held, pressed) = pecten_studio_rt::gfx::buttons(&input);
         let cx = Context { player: &body, clock, held, pressed, abilities: Abilities::NONE };
-        for (index, other) in world.rooms().enumerate() {
-            let Some((left, top)) = world.origin(index).filter(|_| view.shows(index)) else { continue };
-            if left >= camera.0 + SCREEN_W || top >= camera.1 + SCREEN_H || left + other.width() <= camera.0 || top + other.height() <= camera.1 {
+        data::update_entities(
+            entities,
+            &world,
+            &cx,
+            camera,
+            |kind, entity| {
+                if kind == EntityKind::PlayerStart {
+                    entity.actor.alive = false;
+                    Dispatch::Handled
+                } else {
+                    Dispatch::Behaviours
+                }
+            },
+            |kind, entity, event| match event {
+                Event::Collect { value } if found.take(entity.index as usize) => {
+                    score = score.saturating_add(value.max(0) as u32);
+                    play(&mut mixer, if kind == EntityKind::Diamond { audio::sfx::DIAMOND } else { audio::sfx::COIN });
+                }
+                Event::Hurt => hurt = true,
+                _ => {}
+            },
+        );
+        // Every entity whose type has a sprite, in the rooms in view, playing its
+        // sprite's first animation.
+        // They come room by room: whether the view shows a room is asked once per room.
+        let mut shown_room = (u16::MAX, false);
+        for entity in entities.visible(data::view(camera)) {
+            if entity.room != shown_room.0 {
+                shown_room = (entity.room, view.shows(entity.room as usize));
+            }
+            let Some(sheet) = gfx::ENTITY_SPRITES[entity.kind as usize].filter(|_| shown_room.1) else { continue };
+            let (x, y) = (entity.actor.x - camera.0, entity.actor.y - camera.1);
+            if !(-64..SCREEN_W + 64).contains(&x) || !(-64..SCREEN_H + 64).contains(&y) {
                 continue;
             }
-            for (number, entity) in other.entities().enumerate() {
-                let taken = world.entity_index(index, number);
-                if EntityKind::of(&entity) == Some(EntityKind::PlayerStart) || found.has(taken) {
-                    continue;
-                }
-                let Some(sheet) = gfx::ENTITY_SPRITES[entity.kind as usize] else { continue };
-                let mut actor = Actor::at(left + entity.x as i32, top + entity.y as i32, sheet.hitbox());
-                if let Some(mut patrol) = Patrol::from_entity(&entity) {
-                    patrol.update(&mut actor, &world, &cx);
-                }
-                let (x, y) = (actor.x - camera.0, actor.y - camera.1);
-                if !(-64..SCREEN_W + 64).contains(&x) || !(-64..SCREEN_H + 64).contains(&y) {
-                    continue;
-                }
-                if let Some(mut collectible) = Collectible::from_entity(&entity)
-                    && let Event::Collect { value } = collectible.update(&mut actor, &world, &cx)
-                    && found.take(taken)
-                {
-                    score = score.saturating_add(value.max(0) as u32);
-                    let diamond = EntityKind::of(&entity) == Some(EntityKind::Diamond);
-                    play(&mut mixer, if diamond { audio::sfx::DIAMOND } else { audio::sfx::COIN });
-                    continue;
-                }
-                if let Some(mut hazard) = Hazard::from_entity(&entity) {
-                    hurt |= hazard.update(&mut actor, &world, &cx) == Event::Hurt;
-                }
-                let shown = sheet.animations.first().map_or(0, |animation| animation.frame_at(clock));
-                sheet.object(shown, x, y, actor.faces_left).show(&mut frame);
-            }
+            let shown = sheet.animations.first().map_or(0, |animation| animation.frame_at(clock));
+            sheet.object(shown, x, y, entity.actor.faces_left).show(&mut frame);
         }
         if hurt {
             body = entry;

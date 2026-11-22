@@ -9,18 +9,18 @@ use alloc::vec;
 use alloc::vec::Vec;
 use declare::Declaration;
 
-const BOX: Hitbox = Hitbox { x: -4, y: -8, w: 8, h: 8 };
+pub(super) const BOX: Hitbox = Hitbox { x: -4, y: -8, w: 8, h: 8 };
 
-const PATROL: &[&Declaration] = &[&Patrol::DECLARATION];
-const COLLECTIBLE: &[&Declaration] = &[&Collectible::DECLARATION];
-const HAZARD: &[&Declaration] = &[&Hazard::DECLARATION];
+pub(super) const PATROL: &[&Declaration] = &[&Patrol::DECLARATION];
+pub(super) const COLLECTIBLE: &[&Declaration] = &[&Collectible::DECLARATION];
+pub(super) const HAZARD: &[&Declaration] = &[&Hazard::DECLARATION];
 const PROJECTILE: &[&Declaration] = &[&Projectile::DECLARATION];
 const SHOOTER: &[&Declaration] = &[&Shooter::DECLARATION];
 const PLATFORM: &[&Declaration] = &[&MovingPlatform::DECLARATION];
-const DOOR: &[&Declaration] = &[&Door::DECLARATION];
-const CHECKPOINT: &[&Declaration] = &[&Checkpoint::DECLARATION];
+pub(super) const DOOR: &[&Declaration] = &[&Door::DECLARATION];
+pub(super) const CHECKPOINT: &[&Declaration] = &[&Checkpoint::DECLARATION];
 const ABILITY: &[&Declaration] = &[&AbilityPickup::DECLARATION];
-const SPAWNER: &[&Declaration] = &[&Spawner::DECLARATION];
+pub(super) const SPAWNER: &[&Declaration] = &[&Spawner::DECLARATION];
 
 /// A world of one 8x4-cell room, the second screen of the map's top row, holding these
 /// entities. Entity type `n` has the behaviours `types[n]`. Each entity's properties are
@@ -28,27 +28,45 @@ const SPAWNER: &[&Declaration] = &[&Spawner::DECLARATION];
 /// first, then each behaviour's in declared order, with the value the entity names, or
 /// else the default, or else the lowest allowed.
 fn world_with(types: &[&[&'static Declaration]], entities: Vec<EntityData<'static>>) -> World<'static> {
+    let only = room(&["........", "........", "........", "########"], Some((1, 0)));
+    world_of_rooms(types, vec![(only, entities)])
+}
+
+/// A world of these rooms and their entities, laid out as [`world_with`] says.
+pub(super) fn world_of_rooms(
+    types: &[&[&'static Declaration]],
+    rooms: Vec<(crate::data::write::RoomData<'static>, Vec<EntityData<'static>>)>,
+) -> World<'static> {
     let behaviours_of = |kind: u16| types.get(kind as usize).copied().unwrap_or(&[]);
-    let entities = entities
+    let lay_out = |entities: Vec<EntityData<'static>>| {
+        entities
+            .into_iter()
+            .map(|mut entity| {
+                let behaviours = behaviours_of(entity.kind);
+                let named = core::mem::take(&mut entity.props);
+                let theirs = |name: &str| behaviours.iter().any(|b| b.prop(name).is_some());
+                entity.props = named.iter().filter(|(name, _)| !theirs(name)).cloned().collect();
+                for prop in behaviours.iter().flat_map(|b| b.props) {
+                    let value = named.iter().find(|(name, _)| *name == prop.name).map(|(_, value)| *value).unwrap_or(match (prop.default, prop.ty) {
+                        (Some(declare::PropValue::Int(value)), _) => Prop::Int(value),
+                        (Some(declare::PropValue::Bool(value)), _) => Prop::Bool(value),
+                        (None, declare::PropType::Int { min, .. }) => Prop::Int(min),
+                        (None, declare::PropType::Bool) => Prop::Bool(false),
+                    });
+                    entity.props.push((prop.name, value));
+                }
+                entity
+            })
+            .collect::<Vec<_>>()
+    };
+    let rooms: Vec<_> = rooms
         .into_iter()
-        .map(|mut entity| {
-            let behaviours = behaviours_of(entity.kind);
-            let named = core::mem::take(&mut entity.props);
-            let theirs = |name: &str| behaviours.iter().any(|b| b.prop(name).is_some());
-            entity.props = named.iter().filter(|(name, _)| !theirs(name)).cloned().collect();
-            for prop in behaviours.iter().flat_map(|b| b.props) {
-                let value = named.iter().find(|(name, _)| *name == prop.name).map(|(_, value)| *value).unwrap_or(match (prop.default, prop.ty) {
-                    (Some(declare::PropValue::Int(value)), _) => Prop::Int(value),
-                    (Some(declare::PropValue::Bool(value)), _) => Prop::Bool(value),
-                    (None, declare::PropType::Int { min, .. }) => Prop::Int(min),
-                    (None, declare::PropType::Bool) => Prop::Bool(false),
-                });
-                entity.props.push((prop.name, value));
-            }
-            entity
+        .map(|(mut room, entities)| {
+            room.entities = lay_out(entities);
+            room
         })
-        .collect::<Vec<_>>();
-    let mut only = room(&["........", "........", "........", "########"], Some((1, 0)));
+        .collect();
+    let entities: Vec<&EntityData> = rooms.iter().flat_map(|room| &room.entities).collect();
     // A type's own properties are the same for all its entities; take them from its first.
     let own =
         |kind: u16| entities.iter().find(|e| e.kind == kind).map_or(0, |e| e.props.len() - behaviours_of(kind).iter().map(|b| b.props.len()).sum::<usize>());
@@ -65,27 +83,26 @@ fn world_with(types: &[&[&'static Declaration]], entities: Vec<EntityData<'stati
                 .collect()
         })
         .collect();
-    only.entities = entities;
-    let mut data = world_data(vec![only]);
+    let mut data = world_data(rooms);
     data.behaviours = positions;
     let (bytes, _) = write(&data, None);
     World::new(Box::leak(bytes.into_boxed_slice()), &Limits::ANY).unwrap()
 }
 
-fn entity(x: i16, y: i16, props: Vec<(&'static str, Prop<'static>)>) -> EntityData<'static> {
+pub(super) fn entity(x: i16, y: i16, props: Vec<(&'static str, Prop<'static>)>) -> EntityData<'static> {
     entity_of(0, x, y, props)
 }
 
-fn entity_of(kind: u16, x: i16, y: i16, props: Vec<(&'static str, Prop<'static>)>) -> EntityData<'static> {
+pub(super) fn entity_of(kind: u16, x: i16, y: i16, props: Vec<(&'static str, Prop<'static>)>) -> EntityData<'static> {
     EntityData { kind, x, y, props }
 }
 
-fn cx(player: &Body, clock: u32) -> Context<'_> {
+pub(super) fn cx(player: &Body, clock: u32) -> Context<'_> {
     Context { player, clock, held: Buttons::default(), pressed: Buttons::default(), abilities: Abilities::NONE }
 }
 
 /// A player body far from everything.
-fn away() -> Body {
+pub(super) fn away() -> Body {
     Body::new(-1000, -1000, 8, 8)
 }
 

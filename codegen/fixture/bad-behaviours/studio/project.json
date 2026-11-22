@@ -11,6 +11,7 @@
     { "id": "own", "name": "Own", "colour": "#000000", "props": [{ "name": "value", "type": "int", "default": 1 }], "behaviours": [{ "id": "collectible" }] },
     { "id": "both", "name": "Both", "colour": "#000000", "behaviours": [{ "id": "shooter" }, { "id": "projectile" }] },
     { "id": "key", "name": "Key", "colour": "#000000", "behaviours": [{ "id": "ability-pickup" }] },
-    { "id": "boots", "name": "Boots", "colour": "#000000", "behaviours": [{ "id": "ability-pickup", "props": { "grants_ability": 3 } }] }
+    { "id": "boots", "name": "Boots", "colour": "#000000", "behaviours": [{ "id": "ability-pickup", "props": { "grants_ability": 3 } }] },
+    { "id": "many", "name": "Many", "colour": "#000000", "behaviours": [{ "id": "patrol" }, { "id": "collectible" }, { "id": "hazard" }, { "id": "checkpoint" }, { "id": "door" }] }
   ]
 }

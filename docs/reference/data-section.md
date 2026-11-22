@@ -175,13 +175,19 @@ order:
 | Picture | 16 | file path (string), distinct tiles (`u32`), palettes (`u32`) |
 | Track | 8 | id (string) |
 
+After the tracks, one `u32`: how many entities the game's table of live entities
+holds (`data::LIVE_ENTITIES`). A manifest that ends after the tracks was written by
+an older build: the number is not known, and a tool does not check it. The layout
+version is still 1.
+
 Tilesets and pictures are in the order the rooms number them: tilesets by id,
 pictures by path. The tile and palette counts let a tool check the GBA's video
 memory limits for a room without converting the pictures again.
 
 A new section can replace the old one without a build while the project's entity
 types (and their sprites), collision class ids, room ids, tilesets and their tile
-counts, background pictures and tracks are the same as these, in the same order.
+counts, background pictures and tracks are the same as these, in the same order,
+and while the project has no more entities than the game's table holds.
 
 ### Behaviours
 

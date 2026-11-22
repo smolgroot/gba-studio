@@ -57,6 +57,10 @@ pub struct Manifest<'a> {
     pub tilesets: Vec<ArtData<'a>>,
     pub pictures: Vec<ArtData<'a>>,
     pub tracks: Vec<&'a str>,
+    /// How many entities the game's table of live entities holds
+    /// (`behaviour::live::slots_for`), or `None` for a section from before it was
+    /// recorded, which ends the manifest after the tracks.
+    pub live_entities: Option<u32>,
 }
 
 /// Everything a section holds.
@@ -213,6 +217,9 @@ pub fn write(world: &WorldData, reserve: Option<usize>) -> (Vec<u8>, usize) {
     }
     for track in &manifest.tracks {
         strings.put(out, track);
+    }
+    if let Some(slots) = manifest.live_entities {
+        out.extend_from_slice(&slots.to_le_bytes());
     }
     sections[S_STRINGS] = strings.bytes;
 

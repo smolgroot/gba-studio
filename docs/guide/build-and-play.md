@@ -112,6 +112,7 @@ Some changes are compiled into the game, so only a build brings them in. The pan
 - tilesets, or the number of tiles in one;
 - background pictures;
 - music tracks;
+- more entities than the game has room for: "the game has room for 32 entities; the project now has 33". A build leaves room for a quarter more entities than the project has, and at least 16 more (see [In the frame loop](./making-a-game#in-the-frame-loop));
 - level data larger than the room the last build left for it. That room is the **Level data reserve** in [Project settings](./project-settings#level-data-reserve), and the [Build panel](#level-data-use) shows how much is left.
 
 ![The Play panel saying a change needs a build, with the Build dev button](/screenshots/play-needs-build.png)
@@ -130,7 +131,7 @@ With **Live apply** on, a patched change goes into the game that is running, so 
 | --- | --- |
 | Tiles or collision in a room | Draws the tiles in view again. Drawing a whole screen of tiles takes longer than a frame, so the game skips a couple of frames (about two on the sample). |
 | Physics | Uses the new settings from the next frame. |
-| Entities or their properties | Respawns only the entities that changed. A moved or new coin comes back; a coin you took that did not change stays taken, even when an entity added to an earlier room moves the numbers of the ones after it. |
+| Entities or their properties | Builds the entities again from the new data, except those already collected. A moved or new coin comes back; a coin you took that did not change stays taken, even when an entity added to an earlier room moves the numbers of the ones after it. |
 | A room's size, its place on the world map or its tileset, or a collision class | Makes its view of the rooms again, at the camera. |
 
 When the change can't go in live, the game restarts with the new ROM, as it does with **Live apply** off, and the line says why after "Restarted:":

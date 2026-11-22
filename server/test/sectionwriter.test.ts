@@ -41,6 +41,17 @@ describe('the data section', () => {
     expect(section.manifest.tilesets).toEqual([{ id: 'tiles', tiles: 16, palettes: expect.any(Number) as number }])
     expect(section.manifest.pictures.map((p) => p.id)).toEqual(['assets/sky.png'])
     expect(section.manifest.entityTypes.find((t) => t.id === 'player-start')?.sprite).toBe('hero')
+    // data::LIVE_ENTITIES: three entities and room for 16 more, rounded up to 32.
+    expect(section.manifest.liveEntities).toBe(32)
+  })
+
+  it('reads a manifest from before the live entity count as not knowing it, and writes it back the same', () => {
+    const older = writeSection(load(FIXTURE), { ...section.manifest, liveEntities: null }, section.capacity)
+    if ('problems' in older) throw new Error(older.problems.join('\n'))
+    expect(older.used).toBe(section.used - 4)
+    const read = readSection(older.bytes)!
+    expect(read.manifest.liveEntities).toBeNull()
+    expect(read.manifest.tracks).toEqual(section.manifest.tracks)
   })
 
   it('is written byte for byte as codegen writes it', () => {
@@ -93,5 +104,16 @@ describe('what needs a build rather than a patch', () => {
     expect(reasons).toContain('music track "boss" is new')
     expect(reasons).toContain('background picture "assets/stars.png" is new')
     expect(reasons).toContain('tileset "tiles" now has 32 tiles, the game has 16')
+  })
+
+  it('asks for a build when the project has more entities than the game has room for', () => {
+    const docs = load(FIXTURE)
+    const room = docs.rooms.entry!
+    const placed = Object.values(docs.rooms).reduce((n, r) => n + r.entities.length, 0)
+    for (let i = placed; i < 32; i++) room.entities.push({ type: room.entities[0]!.type, x: 40, y: 40, props: {} })
+    expect(needsBuild(docs, section, counts)).toEqual([])
+    room.entities.push({ type: room.entities[0]!.type, x: 40, y: 40, props: {} })
+    expect(needsBuild(docs, section, counts)).toEqual(['the game has room for 32 entities; the project now has 33'])
+    expect(needsBuild(docs, { ...section, manifest: { ...section.manifest, liveEntities: null } }, counts)).toEqual([])
   })
 })

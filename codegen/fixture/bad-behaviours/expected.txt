@@ -6,6 +6,7 @@ studio/project.json: entity type "slow": patrol is "far"; it is a whole number f
 studio/project.json: entity type "slow": patrol_pace is 0; it is a whole number from 1 to 255
 studio/project.json: entity type "own" has its own property "value", which behaviour "collectible" also has; rename its own
 studio/project.json: entity type "both": behaviours "shooter" and "projectile" both have property "shot_speed"; a type can have only one of them
+studio/project.json: entity type "many" has 5 behaviours; an entity can have at most 4
 studio/rooms/a.json: entity 0 (key): grants_ability has no value; behaviour "ability-pickup" needs it, and the type does not set it
 studio/rooms/a.json: entity 2 (boots): grants_ability is 40; it is a whole number from 0 to 31
 studio/rooms/a.json: entity 3 (slow): patrol is true; it is a whole number from 0 to 4096

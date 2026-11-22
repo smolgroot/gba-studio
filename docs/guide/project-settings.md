@@ -51,13 +51,13 @@ Click a type's behaviours to open them. Each behaviour is a card with its name, 
 - **Run earlier** and **Run later** (the arrows) change the order the game runs the type's behaviours in. Put **Hazard** after the behaviour that moves the entity, so it hurts where the entity is now.
 - The bin removes the behaviour from the type.
 
-**Add a behaviour…** below the cards lists the behaviours the type does not have, each with what it does. Pick one to add it at the end. A behaviour that shares a property with one the type has is listed but cannot be picked, with the reason, for example "Projectile (shares shot_speed with Shooter)": a type can have only one of them, so give shots a type of their own.
+**Add a behaviour…** below the cards lists the behaviours the type does not have, each with what it does. Pick one to add it at the end. A behaviour that shares a property with one the type has is listed but cannot be picked, with the reason, for example "Projectile (shares shot_speed with Shooter)": a type can have only one of them, so give shots a type of their own. A type has at most 4 behaviours: once it has 4, every behaviour is listed but cannot be picked, with "the type has 4, the most it can have". The game keeps room for 4 behaviours on every entity while it runs, so each one more would cost every entity memory.
 
 Every change is one undo step. A placed entity can set its own value for a behaviour's property; see [Entities](./rooms#entities).
 
 ### Making an enemy
 
-An enemy needs no Rust in the sample game, because its loop asks every entity for each behaviour it plays, whatever its type:
+An enemy needs no Rust in the sample game, because its loop runs every behaviour each entity's type lists (see [In the frame loop](./making-a-game#in-the-frame-loop)):
 
 1. Import the enemy's PNG as a [sprite](./sprites).
 2. Add an entity type here and give it the sprite.

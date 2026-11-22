@@ -53,6 +53,8 @@ describe('changing a type\'s behaviours', () => {
     expect(behaviourBlocker(shooter, 'projectile')).toBe('shares shot_speed with Shooter')
     expect(behaviourBlocker(shooter, 'shooter')).toBe('the type has it')
     expect(behaviourBlocker(shooter, 'hazard')).toBeUndefined()
+    const full = { ...shooter, behaviours: ['patrol', 'hazard', 'door', 'shooter'].map((id) => ({ id, props: {} })) }
+    expect(behaviourBlocker(full, 'checkpoint')).toBe('the type has 4, the most it can have')
   })
 })
 

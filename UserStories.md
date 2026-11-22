@@ -83,7 +83,7 @@ Notes / open questions
 | US-011a | Behaviour declarations, the `behaviours` field and its problems | E2 | P0 | Done | M |
 | US-011b | Behaviour properties read by position | E2 | P0 | Done | M |
 | US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Done | M |
-| US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Planned | M |
+| US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Done | M |
 | US-014 | Prefabs with per-instance overrides | E2 | P1 | Proposed | M |
 | US-015 | Edit collision classes in the interface | E2 | P1 | Proposed | S |
 | US-016 | Edit entity property definitions in the interface | E2 | P1 | Proposed | S |
@@ -404,19 +404,24 @@ Acceptance criteria
 - [x] A new patrolling enemy can be made from a PNG with no Rust change, and plays.
 
 #### US-013 · Generated entity dispatch, no hand-written match
-**Priority** P0 · **Status** Planned · **Size** M · **Depends on** US-012
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-012
 **Touches** codegen, runtime, sample
 
 As a programmer, I want codegen to write the loop that updates every live entity
 with its behaviours, so that adding a type never means editing a `match`.
 
 Acceptance criteria
-- [ ] `include_data!()` gives an `update_entities` (or similar) that calls each
+- [x] `include_data!()` gives an `update_entities` (or similar) that calls each
   entity's behaviours.
-- [ ] A game can still handle a kind itself before or instead of the generated code.
-- [ ] Behaviour settings are read from the ROM once and kept with each live entity,
+- [x] A game can still handle a kind itself before or instead of the generated code.
+- [x] Behaviour settings are read from the ROM once and kept with each live entity,
   not every frame, and the sample's average frame is no slower than before US-010a
-  (296 hundred cycles; moved here from US-011, see `design/US-011.md`).
+  (296 hundred cycles; moved here from US-011, see `design/US-011.md`). (287 on the
+  US-010 run, from 302 for US-011b; headless pictures identical.)
+
+Entities are built when their room is first entered or touches the one entered, and
+kept, so a room left is as it was on coming back. A type has at most 4 behaviours.
+Design: `design/US-013.md`.
 
 #### US-014 · Prefabs with per-instance overrides
 **Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-012

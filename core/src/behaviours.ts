@@ -2,10 +2,10 @@
 // declarations, and the values written for each entity. Codegen does the same in
 // codegen/src/behaviours.rs, in the same words: both are tested against
 // codegen/fixture/bad-behaviours/expected.txt.
-import { BEHAVIOURS } from './behaviourschema.ts'
+import { BEHAVIOURS, MAX_BEHAVIOURS } from './behaviourschema.ts'
 import type { EntityType, Room } from './schema.ts'
 
-export { BEHAVIOURS }
+export { BEHAVIOURS, MAX_BEHAVIOURS }
 
 export type BehaviourDeclaration = (typeof BEHAVIOURS)[number]
 type PropSchema = { type: 'integer'; minimum: number; maximum: number; default?: number; description: string } | { type: 'boolean'; default?: boolean; description: string }
@@ -47,6 +47,7 @@ export function behaviourTypeProblems(types: EntityType[]): string[] {
   const problems: string[] = []
   for (const type of types) {
     const t = type.id
+    if (type.behaviours.length > MAX_BEHAVIOURS) problems.push(`entity type "${t}" has ${type.behaviours.length} behaviours; an entity can have at most ${MAX_BEHAVIOURS}`)
     for (const [i, used] of type.behaviours.entries()) {
       const declaration = behaviourDeclaration(used.id)
       if (!declaration) {
@@ -216,6 +217,7 @@ export function setBehaviourValue(type: EntityType, id: string, name: string, va
 /** Why a behaviour cannot be added to a type, in a few words; undefined if it can. */
 export function behaviourBlocker(type: EntityType, id: string): string | undefined {
   if (type.behaviours.some((b) => b.id === id)) return 'the type has it'
+  if (type.behaviours.length >= MAX_BEHAVIOURS) return `the type has ${MAX_BEHAVIOURS}, the most it can have`
   const names = behaviourFields(id).map((f) => f.name)
   for (const { declaration } of known(type)) {
     const shared = (declaration.order as readonly string[]).find((n) => names.includes(n))

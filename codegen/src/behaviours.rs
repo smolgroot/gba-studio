@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use pecten_studio_rt::behaviour::declare::{Declaration, PropDecl, PropType, PropValue};
-use pecten_studio_rt::behaviour::{DECLARATIONS, declaration};
+use pecten_studio_rt::behaviour::{DECLARATIONS, MAX_BEHAVIOURS, declaration};
 use pecten_studio_rt::data::Prop;
 use serde_json::{Value, json};
 
@@ -43,6 +43,9 @@ pub fn check_types(types: &[EntityType], problems: &mut Vec<String>) {
     let mut add = |message: String| problems.push(format!("studio/project.json: {message}"));
     for ty in types {
         let t = &ty.id;
+        if ty.behaviours.len() > MAX_BEHAVIOURS {
+            add(format!("entity type \"{t}\" has {} behaviours; an entity can have at most {MAX_BEHAVIOURS}", ty.behaviours.len()));
+        }
         for (i, used) in ty.behaviours.iter().enumerate() {
             let Some(declared) = declaration(&used.id) else {
                 add(format!("entity type \"{t}\" has unknown behaviour \"{}\"; the behaviours are {}", used.id, names(DECLARATIONS.iter().map(|d| d.id))));
@@ -212,6 +215,9 @@ pub fn schema_module() -> String {
         "// Generated from the runtime's behaviour declarations (runtime/src/behaviour/) by\n\
          // `cargo run -p pecten_studio_build --bin behaviours-schema`. Do not edit: codegen's\n\
          // tests fail when this file and the declarations differ.\n\
+         \n\
+         /** The most behaviours an entity type can have: an entity keeps this many while the game runs. */\n\
+         export const MAX_BEHAVIOURS = {MAX_BEHAVIOURS}\n\
          \n\
          /** Every behaviour the runtime has: its id in projects, its number in the ROM, and a JSON Schema of its properties. */\n\
          export const BEHAVIOURS = {json} as const\n"

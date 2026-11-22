@@ -28,7 +28,7 @@ A background is cut into 8x8 tiles like a tileset and keeps one of each tile tha
 
 | Macro | Gives | Needs |
 | --- | --- | --- |
-| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_SLOTS` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum | nothing |
+| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_SLOTS` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum; the table of live entities and the loop that runs their behaviours: `entities()`, `Entities`, `LIVE_ENTITIES`, `HITBOXES`, `enter_room`, `update_entities` and `view` (see [In the frame loop](#in-the-frame-loop)) | nothing |
 | `include_gfx!()` | `gfx::TILESETS`, `BACKGROUNDS`, `ART` (both together, for the views), one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
 | `include_audio!()` | `audio::TRACKS`, `SFX` and index constants | `agb_tracker` in the game |
 
@@ -67,7 +67,7 @@ let mut found = Collected::<ENTITY_WORDS>::new();
 
 - **`data` and `physics`**, with no dependencies, which also compile for the host so game rules can be unit tested without a console. `Body` moves a box through collision cells: walls, ceilings, one-way platforms (with drop-through) and 45 degree and gentler slopes, in sub-pixel steps. Given the `World`, it moves in world pixels and walks from a room into the next without noticing. `World::camera_target` keeps the camera on rooms.
 - **Collectibles:** `Body::overlaps` tests the player against a box, `Collected` keeps a bit for every entity that has been taken, and `SpriteSheet::hitbox_at` gives a placed entity's box.
-- **`behaviour`:** ready-made behaviours for placed entities: patrol, collectible, hazard, projectile and shooter, moving platform, door, checkpoint, ability pickup and spawner, and a fixed-size `Pool` for what is made while the game runs. See [Behaviours](#behaviours) below.
+- **`behaviour`:** ready-made behaviours for placed entities: patrol, collectible, hazard, projectile and shooter, moving platform, door, checkpoint, ability pickup and spawner; `LiveEntities`, the fixed-size table that keeps every entity with its behaviours while the game runs; and a fixed-size `Pool` for what is made while the game runs. See [Behaviours](#behaviours) below.
 - **`gfx`** (behind the `agb` feature): `WorldView` draws every room that shares a tileset as one scrolling space, streaming tiles in as the camera moves; `RoomView` draws a single room; `SpriteSheet` and `AnimPlayer` animate sprites, and `Animation::frame_at` animates many entities off one clock.
 - **Backgrounds:** a view draws a room's pictures behind everything, each scrolled by its share of the camera's movement. Call `view.set_backgrounds(room, &graphics)` when the player enters another room.
 - **`debug`:** `debug::publish` copies the game's state (frame count, room, camera, player, collected bits) to one place in RAM, where tools reading the emulator's memory find it through the [debug map](../reference/debug-map). Call it once a frame, after everything has moved:
@@ -139,7 +139,7 @@ fn from_settings(settings: &Settings) -> Option<Self> {
 }
 ```
 
-`entity.behaviours()` gives every behaviour the entity's type has, in the type's order, as `(number, settings)` pairs, for a game that dispatches on the numbers itself.
+`entity.behaviours()` gives every behaviour the entity's type has, in the type's order, as `(number, settings)` pairs, for a game that dispatches on the numbers itself. **`Attached`** is any one of the runtime's behaviours: `Attached::from_settings(number, &settings)` builds the one with that number, and its `update` runs it. That is what the [table of live entities](#in-the-frame-loop) keeps for each entity.
 
 ### Actors, context and events
 
@@ -186,13 +186,13 @@ Each behaviour has an id, the name an entity type lists it by in `project.json` 
 | `AbilityPickup` | `ability-pickup` | `grants_ability`: the ability it gives, 0 to 31. It has no default: the type or each placed entity must set it. | When the player touches it: `Grant { ability }`, once, and the actor is no longer alive. |
 | `Spawner` | `spawner` | `spawn_every`: frames between spawns, 1 to 3600, 120 if not set. `max_alive`: how many of its children may be alive at once, 0 to 255, 3 if not set. | Every `spawn_every` frames, while fewer than `max_alive` of its children are alive, `Spawn { x, y }` with its feet. |
 
-An entity has a behaviour only when its type lists it in `project.json`. A property of its own with a behaviour's property name, such as `value` or `patrol`, does not make it one. A hazard and a checkpoint read no properties, but they too are given only to the types that list them. So a game can ask every entity for every behaviour it uses, and each entity answers only for its own.
+An entity has a behaviour only when its type lists it in `project.json`. A property of its own with a behaviour's property name, such as `value` or `patrol`, does not make it one. A hazard and a checkpoint read no properties, but they too are given only to the types that list them. So a game can ask every entity for every behaviour it uses, and each entity answers only for its own. The generated `data::update_entities` does this for you; see [In the frame loop](#in-the-frame-loop).
 
-One entity can have several behaviours. Update them in order on the same actor. Put `Hazard` after the behaviour that moves the actor, so it hurts where the actor is now. The sample's sentry bot is a `Patrol` and then a `Hazard`.
+One entity can have up to 4 behaviours. Update them in order on the same actor. Put `Hazard` after the behaviour that moves the actor, so it hurts where the actor is now. The sample's sentry bot is a `Patrol` and then a `Hazard`.
 
-A `Collectible` is not alive after it is taken, but the actor only lasts as long as you keep it. To keep an entity taken after the player leaves the room, record it in `Collected`, as below. The same goes for an `AbilityPickup`, and for a door you want to stay open.
+A `Collectible` is not alive after it is taken. The table of live entities keeps it so until the game restarts or a live apply builds the entities again, so to keep an entity taken for good (and to save it), record it in `Collected`, as below. The same goes for an `AbilityPickup`, and for a door you want to stay open.
 
-`Patrol`, `Collectible`, `Hazard`, `Projectile`, `Shooter`, `MovingPlatform` and `AbilityPickup` keep nothing between frames that they cannot work out again, so you can build them from the entity every frame. `Door`, `Checkpoint` and `Spawner` keep state (whether the door is open, whether the checkpoint was reached, how many children are alive), so keep their structs between frames, with their actors.
+`Door`, `Checkpoint` and `Spawner` keep state (whether the door is open, whether the checkpoint was reached, how many children are alive). The table of live entities keeps every behaviour with its actor between frames, so this needs nothing from you. If you build behaviours yourself with `from_entity`, keep these three between frames; the others keep nothing they cannot work out again, so they can be built every frame.
 
 ### Giving a type its behaviours
 
@@ -215,9 +215,10 @@ Give a type its behaviours in [Project settings](./project-settings#behaviours),
 - A property left out takes the behaviour's default, so here every sentry bot has a `patrol_pace` of 2.
 - A placed entity overrides a value with a property of the same name in its own `props`, for example `"patrol": 64` on one sentry bot that walks further.
 - List them in the order they are meant to run on the actor: `hazard` after the behaviour that moves it.
+- A type has at most 4. The table of live entities keeps room for 4 behaviours on each entity, whatever its type, so a higher limit would cost every entity more memory (see [Cost](#cost)).
 - A type that lists no behaviours has an empty list, so projects made before behaviours could be listed load as they were.
 
-The build writes each listed behaviour's properties into the [data section](../reference/data-section#entity) after the type's own, with the placed entity's value, the type's, or the default, and records which behaviours each type has and where their properties start (the [behaviours part](../reference/data-section#behaviours)). That is how `from_entity` finds them: listing `shooter` on a type makes every entity of it a shooter, with a `fire_every` of 60 unless you set another. The game's code still decides which behaviours it asks for and what it does with their events, as in the loop below.
+The build writes each listed behaviour's properties into the [data section](../reference/data-section#entity) after the type's own, with the placed entity's value, the type's, or the default, and records which behaviours each type has and where their properties start (the [behaviours part](../reference/data-section#behaviours)). That is how the game finds them: listing `shooter` on a type makes every entity of it a shooter, with a `fire_every` of 60 unless you set another. The generated loop runs every behaviour a type lists; the game's code decides what their events do, as in the loop below.
 
 An agent gives and takes behaviours with the `entity_type_add_behaviour` and `entity_type_remove_behaviour` tools (see [Command line and MCP](./agents#behaviours)). `pecten-studio schema` prints each behaviour's id, number, summary and properties as JSON Schema, under `behaviours`.
 
@@ -234,19 +235,85 @@ The studio checks listed behaviours, and every problem is an error, the same wor
 | A required property with no value on the type or the placed entity | entity 0 (key): grants_ability has no value; behaviour "ability-pickup" needs it, and the type does not set it |
 | A type's own property with the name of one of its behaviours' | entity type "own" has its own property "value", which behaviour "collectible" also has; rename its own |
 | Two behaviours of one type with the same property | entity type "both": behaviours "shooter" and "projectile" both have property "shot_speed"; a type can have only one of them |
+| More than 4 behaviours on one type | entity type "many" has 5 behaviours; an entity can have at most 4 |
 
 `shooter` and `projectile` both read `shot_speed`, so a type can have only one of them: give shots a type of their own.
 
 ### In the frame loop
 
-The sample builds an actor for each entity in view, every frame, from where the entity was placed, and asks each one for the behaviours it uses. It does not check entity types: a coin's type lists `collectible`, a sentry bot's `patrol` and `hazard`, and the others give `None`. Because the patrol follows the clock, nothing needs to be kept between frames except the collected bits:
+`include_data!()` writes the loop that runs every entity's behaviours, so a game names no behaviour and matches no entity type to run one. A new type with behaviours needs no change to the game's code.
+
+The entities live in one table, `data::Entities`, which has a slot for every entity of the world:
+
+- `data::entities()` gives the table. It is a `static`, so it sits in EWRAM, not on the stack. Call it once and keep the reference: a second call stops the game with a message.
+- `data::enter_room(entities, &world, room, skip)` makes `room` and the rooms touching it on the world map the active ones. Call it when the game starts and each time the player enters another room. Each entity is built from the ROM the first time its room is active: its actor at its feet, its type's hitbox and its behaviours with their settings. It is then kept, so a room the player leaves and comes back to is as they left it: a door stays open and a checkpoint stays reached. `skip` takes an entity's number in the world and says to leave it out, such as one already in `Collected`.
+- `data::update_entities(entities, &world, &cx, camera, before, event)` runs one frame of every living entity in the active rooms that the camera shows. `camera` is its top-left corner in world pixels. The other active rooms' entities wait, as they are, until the camera comes to them.
+- `entities.visible(data::view(camera))` gives the same entities, room by room, to draw.
+
+For each entity, `update_entities` first calls `before(kind, &mut entity)`, with its `EntityKind`. That is the place for what is special to a type. It answers `Dispatch::Behaviours` to run the type's behaviours, in the type's order, or `Dispatch::Handled` when the game has done the entity's frame itself, and none of them run. Then every event the behaviours give goes to `event(kind, &mut entity, event)`, where the game decides what it means.
+
+The sample's loop is this one call. The player start only marks where the game begins, so it takes it off the table on the first frame:
 
 ```rust
-use pecten_studio_rt::behaviour::{Abilities, Actor, Behaviour, Collectible, Context, Event, Hazard, Patrol};
+use pecten_studio_rt::behaviour::{Abilities, Context, Dispatch, Event};
 
+let entities = data::entities();
+data::enter_room(entities, &world, room, |_| false);
+
+// In the frame loop, after the player has moved:
 let (held, pressed) = pecten_studio_rt::gfx::buttons(&input);
 let cx = Context { player: &body, clock, held, pressed, abilities: Abilities::NONE };
 let mut hurt = false;
+data::update_entities(
+    entities,
+    &world,
+    &cx,
+    camera,
+    |kind, entity| {
+        if kind == EntityKind::PlayerStart {
+            entity.actor.alive = false;
+            Dispatch::Handled
+        } else {
+            Dispatch::Behaviours
+        }
+    },
+    |kind, entity, event| match event {
+        Event::Collect { value } if found.take(entity.index as usize) => {
+            score = score.saturating_add(value.max(0) as u32);
+        }
+        Event::Hurt => hurt = true,
+        _ => {}
+    },
+);
+for entity in entities.visible(data::view(camera)) {
+    let Some(sheet) = gfx::ENTITY_SPRITES[entity.kind as usize] else { continue };
+    // draw the sprite at entity.actor.x - camera.0, entity.actor.y - camera.1,
+    // flipped if entity.actor.faces_left
+}
+```
+
+When the player enters another room, call `data::enter_room` again. The sample has no abilities yet, so it passes `Abilities::NONE`; a game that has them passes the player's own.
+
+A **`LiveEntity`** is one slot of the table:
+
+- `actor`, where it is, and whether it is still alive. A dead one is skipped and not drawn.
+- `kind`, its type's number. `EntityKind::of_live(&entity)` names it.
+- `room`, the room it was placed in, and `index`, its number in the world, the bit it has in `Collected`.
+- `behaviours`, up to 4 `Attached`, in the type's order. `entity.behaviours()` and `entity.behaviours_mut()` go through them.
+
+The table also has `active()` and `active_mut()`, every living entity of the active rooms, on screen or not; `get(index)` and `get_mut(index)`, one entity by its number in the world, if it has been built; and `clear()`, which forgets them all, so each is built again from the ROM when its room is next entered.
+
+After a [live apply](./build-and-play#live-apply) that changed entities, they may have moved, or be new. The sample calls `entities.clear()` and then `data::enter_room` with `|index| found.has(index)`, so every entity is built again from the new data and those already collected stay collected. State that is only in the table, such as an open door, starts again.
+
+`data::LIVE_ENTITIES` is the number of slots: the project's entities and a quarter more, at least 16 more, rounded up to 16. The spare slots are for entities placed while the game runs, by a live apply. When the project has more entities than that, a live apply needs a build: "the game has room for 32 entities; the project now has 33". `data::HITBOXES` gives each type's hitbox, taken from its sprite, as an offset from its feet; a type with no sprite has an empty one, which touches nothing. `entities.dropped()` counts entities and behaviours the last `enter_room` had no room for; both are 0 unless the ROM was changed past what the studio allows.
+
+#### Without the table
+
+`from_entity` is the lower-level way: build a behaviour from a placed entity yourself, update it, and act on its event. The behaviours read their settings from the ROM each time they are built. A game that does this builds an actor for each entity in view and asks it for each behaviour it uses:
+
+```rust
+use pecten_studio_rt::behaviour::{Actor, Behaviour, Collectible, Event, Hazard, Patrol};
+
 for (number, entity) in world.room(room).entities().enumerate() {
     let taken = world.entity_index(room, number);
     if found.has(taken) {
@@ -271,7 +338,7 @@ for (number, entity) in world.room(room).entities().enumerate() {
 }
 ```
 
-Here `left` and `top` are the room's place on the world map, from `world.origin(room)`, and `taken` is the entity's number across rooms, the bit it has in `Collected`. A collectible already taken is skipped before any behaviour runs. The sample has no abilities yet, so it passes `Abilities::NONE`; a game that has them passes the player's own.
+Here `left` and `top` are the room's place on the world map, from `world.origin(room)`, and `taken` is the entity's number across rooms. Built this way every frame, a door, checkpoint or spawner forgets its state; keep those structs between frames.
 
 ### Shots and spawned enemies
 
@@ -285,16 +352,15 @@ Shots and spawned enemies are not in the data section, so they need somewhere to
 When a shooter gives `Fire(shot)`, `shot.launch(hitbox)` gives the actor and the projectile that fly it, ready for a pool. The shot starts at the shooter's middle, so anchor shot sprites in their middle.
 
 ```rust
-use pecten_studio_rt::behaviour::{Pool, Projectile, Shooter};
+use pecten_studio_rt::behaviour::{Actor, Event, Pool, Projectile};
 
 let mut shots: Pool<(Actor, Projectile), 8> = Pool::new();
 
-// In the frame loop, with `cx` built as above. For each shooter in view:
-if let Some(mut shooter) = Shooter::from_entity(&entity)
-    && let Event::Fire(shot) = shooter.update(&mut actor, &world, &cx)
-{
+// In the frame loop, in the `event` hook of `data::update_entities`:
+|kind, entity, event| match event {
     // A full pool gives the shot back: it is not fired.
-    let _ = shots.add(shot.launch(SHOT_SHEET.hitbox()));
+    Event::Fire(shot) => { let _ = shots.add(shot.launch(SHOT_SHEET.hitbox())); }
+    _ => {}
 }
 
 // Then, once a frame, every shot flies:
@@ -305,7 +371,7 @@ for (_, (actor, projectile)) in shots.iter_mut() {
 shots.retain(|(actor, _)| actor.alive);
 ```
 
-Here `SHOT_SHEET` is the shot's sprite sheet. A spawner works the same way: when it gives `Spawn { x, y }`, make the child's actor with `Actor::at(x, y, hitbox)` and add it to a pool, with its behaviours. Keep the spawner's slot with each child. When a child dies, or the pool is full and it could not be made, call `spawner.despawned()` so the spawner does not count it.
+Here `SHOT_SHEET` is the shot's sprite sheet, and `cx` the frame's `Context`. A spawner works the same way: when it gives `Spawn { x, y }`, make the child's actor with `Actor::at(x, y, hitbox)` and add it to a pool, with its behaviours. Keep the spawner's number in the world (`entity.index`) with each child. When a child dies, or the pool is full and it could not be made, find the spawner with `entities.get_mut(index)` and call `despawned()` on its `Attached::Spawner`, so it does not count it.
 
 The GBA shows at most 128 sprites at once, and everything else on screen needs some of them, so choose `N` with the sprites you have to spare.
 
@@ -316,42 +382,47 @@ Moving platforms and closed doors keep the player out of where they are, so they
 - `platform.carry(&actor, &mut body, &before)` lands a falling body on the platform's top and moves a body standing there along with it. A body going up passes through from below, as through a one-way platform, so the player can jump onto it and off it. It returns whether the body is on the platform. Update the platform first, in the same frame: the update sets the actor's `vx` and `vy` to its move, which `carry` gives to the body.
 - `door.block(&actor, &mut body, &before)` pushes the body back out of a closed door, on the side it came from, and sets `hit_wall`, `on_ground` or `hit_ceiling` as `Body::step` would. It returns whether it pushed. An open door does nothing.
 
-```rust
-use pecten_studio_rt::behaviour::{Door, MovingPlatform};
+The table of live entities runs the platforms and doors with the others, from the body where it is after `Body::step`. Then go through the active entities for them:
 
-// Kept between frames, filled when the room is entered.
-let mut platforms: Pool<(Actor, MovingPlatform), 4> = Pool::new();
-let mut doors: Pool<(Actor, Door), 4> = Pool::new();
+```rust
+use pecten_studio_rt::behaviour::Attached;
 
 // In the frame loop:
 let before = body;
 body.step(&world, input.is_pressed(Button::Down));
-for (_, (actor, platform)) in platforms.iter_mut() {
-    platform.update(actor, &world, &Context { player: &body, clock, held, pressed, abilities });
-    platform.carry(actor, &mut body, &before);
-}
-for (_, (actor, door)) in doors.iter_mut() {
-    if door.update(actor, &world, &Context { player: &body, clock, held, pressed, abilities }) == Event::Opened {
-        // play a sound, record it in `Collected` to keep it open
+let cx = Context { player: &body, clock, held, pressed, abilities };
+data::update_entities(entities, &world, &cx, camera, |_, _| Dispatch::Behaviours, |_, entity, event| {
+    if event == Event::Opened {
+        // play a sound, record entity.index in `Collected` to keep it open
     }
-    door.block(actor, &mut body, &before);
+});
+for entity in entities.active_mut() {
+    let actor = entity.actor;
+    for behaviour in entity.behaviours_mut() {
+        match behaviour {
+            Attached::MovingPlatform(platform) => { platform.carry(&actor, &mut body, &before); }
+            Attached::Door(door) => { door.block(&actor, &mut body, &before); }
+            _ => {}
+        }
+    }
 }
-// Then build `cx` from the body where it ends up, for the other behaviours.
 ```
 
-Here `abilities` is the game's `Abilities`. Each `Context` lasts for one call, because `carry` and `block` change the body it looks at. A closed door counts as touched when the player stands right against it, since its own blocking keeps them from overlapping it.
+Here `abilities` is the game's `Abilities`. The platform's update has set its actor's `vx` and `vy` to its move, which `carry` gives to the body. A closed door counts as touched when the player stands right against it, since its own blocking keeps them from overlapping it. A game that builds behaviours itself with `from_entity` does the same with its own platforms and doors: update the platform, then `carry`, and keep each door between frames.
 
 When a checkpoint gives `Checkpoint { x, y }`, keep the point and put the player back there with `Body::standing_at(x, y, w, h)`. When an ability pickup gives `Grant { ability }`, call `abilities.grant(ability)`, and pass the abilities in each frame's `Context` so doors can see them.
 
 ### Cost
 
-A frame at 60 frames a second has about 280,000 cycles. `from_entity` compares no names: it looks through the few behaviours the entity's type has for the one asked for, and reads that behaviour's settings by position from the ROM. Asking an entity for a behaviour its type does not have costs only the look. Done for every entity in view, every frame, the reads add up a little: the sample's frame takes 30,100 cycles on average, 500 more than when its sentry bot, coins and diamonds were written by hand, and nearly all of the difference is reading settings from the ROM. A game that keeps the structs between frames, as `Door`, `Checkpoint` and `Spawner` need anyway, reads them once.
+A frame at 60 frames a second has about 280,000 cycles. The table of live entities reads each entity's position and behaviour settings from the ROM once, when it is built. Each frame, an entity costs its behaviours' updates and nothing more. The sample's frame takes 28,700 cycles on average, less than when its sentry bot, coins and diamonds were written by hand (29,600). `from_entity` compares no names either: it looks through the few behaviours the entity's type has for the one asked for, and reads that behaviour's settings by position from the ROM. Done for every entity in view, every frame, those reads add up a little: the sample took 30,200 cycles that way.
 
 The library itself takes no RAM. Each behaviour struct is a few bytes, an actor 36, and a pool holds room for `N` things whether or not they are in use, all on the game's side. IWRAM is 32 KB and EWRAM 256 KB, so a pool of eight shots, under 400 bytes, is small, but size pools to what a room needs.
 
+The table of live entities is in EWRAM, 108 bytes a slot, with room for 4 behaviours in each whatever the type has. The sample's 32 slots take 3,532 bytes. A world of 500 entities gets 640 slots, about 69 KB of the 256 KB.
+
 ## The sample game
 
-`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp, respawns on spikes, walks from one room into the next while the camera scrolls, collects coins and diamonds, and is sent back by a patrolling sentry bot. Its `src/main.rs` is about 360 lines, with the sentry bot, coins and diamonds taken from the [behaviours](#behaviours) their types list in `studio/project.json`. It has no shooters, moving platforms, doors, checkpoints, ability pickups or spawners yet, so it does not use those behaviours. Because its loop asks every entity for patrol, collectible and hazard whatever its type, a new enemy or pickup needs no change to `main.rs`: give a type a sprite and those behaviours, place it, and build (see [Making an enemy](./project-settings#making-an-enemy)). It builds from its own folder, with the nightly toolchain pinned in `sample/rust-toolchain.toml` and `agb-gbafix` installed:
+`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp, respawns on spikes, walks from one room into the next while the camera scrolls, collects coins and diamonds, and is sent back by a patrolling sentry bot. Its `src/main.rs` is about 360 lines, with the sentry bot, coins and diamonds taken from the [behaviours](#behaviours) their types list in `studio/project.json`. It has no shooters, moving platforms, doors, checkpoints, ability pickups or spawners yet, and does nothing with their events. Its loop is one `data::update_entities` call, which runs whatever behaviours each type lists, so a new enemy or pickup needs no change to `main.rs`: give a type a sprite and patrol and hazard, or collectible, place it, and build (see [Making an enemy](./project-settings#making-an-enemy)). It builds from its own folder, with the nightly toolchain pinned in `sample/rust-toolchain.toml` and `agb-gbafix` installed:
 
 ```sh
 cd sample && cargo build        # or press Build dev in the studio

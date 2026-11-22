@@ -82,7 +82,7 @@ Run `validate` after changing anything under `studio/`.
 ## In the game code
 
 ```rust
-pecten_studio_rt::include_data!();   // data::world(), EntityKind, ENTITY_SLOTS, room and class constants
+pecten_studio_rt::include_data!();   // data::world(), EntityKind, entities(), enter_room, update_entities, room and class constants
 pecten_studio_rt::include_gfx!();    // gfx::ART, TILESETS, BACKGROUNDS, SPRITE_<NAME>, ENTITY_SPRITES
 pecten_studio_rt::include_audio!();  // audio::TRACKS, SFX (needs agb_tracker)
 ```
@@ -104,3 +104,13 @@ The Physics tab of the studio saves `physics` in `studio/project.json`: the game
 (`platformer` or `topdown`) and how it moves. The game gets it from `world.physics()`.
 `physics::PlatformerController` and `physics::TopDownController` apply it, so use
 them rather than hard-coding gravity or speeds.
+
+Entities run their behaviours through a table the build generates. Take it once with
+`let entities = data::entities();`, call `data::enter_room(entities, &world, room, |i| found.has(i))`
+at the start and whenever the player enters a room, and once a frame
+`data::update_entities(entities, &world, &cx, camera, before, event)`. The table keeps each
+entity's state, so a room left and come back to is as it was. `before` gets each
+entity's `EntityKind` first and answers `Dispatch::Handled` to do its frame in
+the game's own code instead of its behaviours, or `Dispatch::Behaviours`. `event`
+gets what the behaviours report (`Event::Collect`, `Event::Hurt`, ...). Draw from
+`entities.visible(data::view(camera))`: only rooms the camera shows run and are drawn. A type has at most 4 behaviours.

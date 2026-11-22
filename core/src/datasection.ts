@@ -37,6 +37,8 @@ export interface Manifest {
   tilesets: Art[]
   pictures: Art[]
   tracks: string[]
+  /** How many entities the game keeps live at most; null for a ROM built before this was recorded. */
+  liveEntities?: number | null
 }
 
 /** A data section found in a ROM. */
@@ -118,6 +120,8 @@ export function readSection(rom: Uint8Array): Section | null {
     tilesets: take(tilesets, 16, art),
     pictures: take(pictures, 16, art),
     tracks: take(tracks, 8, str),
+    // Recorded after the tracks since US-013: an older manifest ends there.
+    liveEntities: at + 4 <= part(S_MANIFEST) + u32(HEADER + S_MANIFEST * 8 + 4) ? u32(at) : null,
   }
   return { start, version, used, capacity, manifest, classes: records(S_CLASSES, CLASS).map(str), rooms: records(S_ROOMS, ROOM).map(str) }
 }
@@ -164,6 +168,9 @@ export function needsBuild(docs: Documents, section: Section, tileCounts: Record
   }
   changed('background picture', compiled.pictures.map((p) => p.id), pictureList(docs))
   changed('music track', compiled.tracks, (docs.audio?.tracks ?? []).map((t) => t.id))
+  // The game's table of live entities is sized at its build (data::LIVE_ENTITIES).
+  const entities = Object.values(docs.rooms).reduce((count, room) => count + room.entities.length, 0)
+  if (compiled.liveEntities != null && entities > compiled.liveEntities) reasons.push(`the game has room for ${compiled.liveEntities} entities; the project now has ${entities}`)
   return reasons
 }
 
@@ -434,6 +441,7 @@ export function writeSection(docs: Documents, compiled: Manifest, capacity: numb
     manifest.u32(art.tiles, art.palettes)
   }
   for (const track of compiled.tracks) strings.put(manifest, track)
+  if (compiled.liveEntities != null) manifest.u32(compiled.liveEntities)
   parts[S_STRINGS]!.bytes = strings.bytes
 
   // Each type's behaviours, and where their properties start among its entities'.

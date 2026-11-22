@@ -609,6 +609,19 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
         ids.enumerate().map(|(i, id)| format!("        pub const {}: {kind} = {i};\n", constant(id))).collect::<String>()
     };
     let kinds: Vec<String> = types.iter().map(|t| variant(&t.id)).collect();
+    // The table of live entities has room for these and some placed while the game runs.
+    let live_entities = pecten_studio_rt::behaviour::live::slots_for(rooms.iter().map(|room| room.entities.len()).sum());
+    // Each type's hitbox from its sprite, as `SpriteSheet::hitbox` gives it; empty without one.
+    let hitboxes: Vec<String> = types
+        .iter()
+        .map(|t| {
+            let (x, y, w, h) = t.sprite.as_ref().and_then(|id| docs.sprites.get(id)).map_or((0, 0, 0, 0), |sprite| {
+                let (left, top, w, h) = sprite.hitbox.as_ref().map_or((0, 0, sprite.frame.width, sprite.frame.height), |h| (h.x, h.y, h.width, h.height));
+                (left - sprite.anchor.x, top - sprite.anchor.y, w, h)
+            });
+            format!("Hitbox {{ x: {x}, y: {y}, w: {w}, h: {h} }}")
+        })
+        .collect();
     let world = WorldData {
         classes: classes
             .iter()
@@ -633,6 +646,7 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
                 .map(|(file, (_, cost))| ArtData { id: file, tiles: cost.map_or(0, |c| c.0 as u32), palettes: cost.map_or(0, |c| c.1 as u32) })
                 .collect(),
             tracks: docs.audio.tracks.iter().map(|t| t.id.as_str()).collect(),
+            live_entities: Some(live_entities as u32),
         },
     };
     let (section, used) = pecten_studio_rt::data::write::write(&world, docs.project.build.data_reserve.map(|bytes| bytes as usize));
@@ -641,6 +655,7 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
     let data = format!(
         r#"{header}#[allow(dead_code, unused_imports)]
 pub mod data {{
+    use pecten_studio_rt::behaviour::{{Context, Dispatch, Event, Hitbox, LiveEntities, LiveEntity}};
     use pecten_studio_rt::data::{{Entity, Limits, World}};
 
     #[repr(C, align(4))]
@@ -691,11 +706,89 @@ pub mod data {{
         }}
     }}
 
+    impl EntityKind {{
+        /// The kind of a live entity.
+        pub fn of_live(entity: &LiveEntity) -> Option<EntityKind> {{
+            Self::ALL.get(entity.kind as usize).copied()
+        }}
+    }}
+
     /// Room indices, as `World::room` takes them.
     pub mod room {{
 {room_consts}    }}
+
+    /// Each entity type's hitbox, from its sprite, as an offset from its feet. A type
+    /// with no sprite has an empty one, which touches nothing.
+    pub static HITBOXES: [Hitbox; {kind_count}] = [{hitboxes}];
+
+    /// How many entities the table of live entities holds: the project's, and room for
+    /// more placed while the game runs. The studio asks for a build past this.
+    pub const LIVE_ENTITIES: usize = {live_entities};
+
+    /// Every entity of the world while the game runs, with its behaviours.
+    pub type Entities = LiveEntities<LIVE_ENTITIES>;
+
+    /// The game's table of live entities. It is a static, which agb puts in EWRAM.
+    ///
+    /// # Panics
+    /// If called a second time: keep the reference it gave.
+    pub fn entities() -> &'static mut Entities {{
+        static mut TABLE: Entities = Entities::new();
+        static mut TAKEN: bool = false;
+        // SAFETY: the GBA has one core and no interrupt handler calls this. The flag is
+        // set before the reference is made, so a second call panics instead of
+        // making another.
+        unsafe {{
+            assert!(!TAKEN, "data::entities() gives the table once; keep the reference it gave");
+            TAKEN = true;
+            &mut *(&raw mut TABLE)
+        }}
+    }}
+
+    /// Makes `room` and the rooms touching it the active ones, building their entities
+    /// the first time. `skip` leaves out an entity by its number in the world, such as
+    /// one the game has collected, after [`LiveEntities::clear`].
+    pub fn enter_room(entities: &mut Entities, world: &World, room: usize, skip: impl Fn(usize) -> bool) {{
+        entities.enter(world, room, |kind| HITBOXES.get(kind as usize).copied().unwrap_or_default(), skip);
+    }}
+
+    /// What the camera, its top-left corner at `camera` in world pixels, shows: the area
+    /// [`update_entities`] runs and [`LiveEntities::visible`] takes.
+    pub const fn view(camera: (i32, i32)) -> (i32, i32, i32, i32) {{
+        (camera.0, camera.1, pecten_studio_rt::data::SCREEN_W, pecten_studio_rt::data::SCREEN_H)
+    }}
+
+    /// One frame of every entity in the active rooms that the camera, its top-left
+    /// corner at `camera` in world pixels, shows. `before` is the game's own code for
+    /// an entity, run first: it answers [`Dispatch::Handled`] to stand in for the
+    /// entity's behaviours, or [`Dispatch::Behaviours`] to run them, in the order its
+    /// type lists them. Every event they give goes to `event`.
+    pub fn update_entities(
+        entities: &mut Entities,
+        world: &World,
+        cx: &Context,
+        camera: (i32, i32),
+        mut before: impl FnMut(EntityKind, &mut LiveEntity) -> Dispatch,
+        mut event: impl FnMut(EntityKind, &mut LiveEntity, Event),
+    ) {{
+        entities.update(
+            world,
+            cx,
+            view(camera),
+            |entity| match EntityKind::of_live(entity) {{
+                Some(kind) => before(kind, entity),
+                None => Dispatch::Handled,
+            }},
+            |entity, happened| {{
+                if let Some(kind) = EntityKind::of_live(entity) {{
+                    event(kind, entity, happened);
+                }}
+            }},
+        );
+    }}
 }}
 "#,
+        hitboxes = hitboxes.join(", "),
         section_len = section.len(),
         entity_slots = section.len() / ENTITY,
         section_file = out_file("studio_data.bin"),
@@ -826,6 +919,13 @@ mod tests {
         assert!(data.contains("PlayerStart,"));
         assert!(data.contains("pub const ENTRY: usize = 0;"));
         assert!(data.contains("pub const ENTITY_SLOTS: usize = "), "{data}");
+        // The dispatch: three entities, so 16 spare, rounded to 32. The hero's hitbox is
+        // its sprite's, from its anchor; the sign has no sprite.
+        assert!(data.contains("pub const LIVE_ENTITIES: usize = 32;"), "{data}");
+        assert!(data.contains("HITBOXES: [Hitbox; 2] = [Hitbox { x: -4, y: -14, w: 9, h: 14 }, Hitbox { x: 0, y: 0, w: 0, h: 0 }];"), "{data}");
+        for item in ["pub type Entities = LiveEntities<LIVE_ENTITIES>;", "pub fn entities()", "pub fn enter_room(", "pub fn update_entities("] {
+            assert!(data.contains(item), "{item} in {data}");
+        }
         assert!(data.contains("Limits { entity_kinds: "), "{data}");
         assert!(!data.contains("pub static ROOMS"), "rooms are in the section, not in code: {data}");
 
@@ -1031,5 +1131,18 @@ mod tests {
         assert!(text.contains("unknown tileset \"missing\""), "{text}");
         assert!(text.contains("start room \"nowhere\" does not exist"), "{text}");
         fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn the_sample_runs_behaviours_through_the_generated_dispatch() {
+        // US-013: the sample's loop is data::update_entities; it names no behaviour and
+        // matches no entity type to run one.
+        let main = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../sample/src/main.rs")).unwrap();
+        assert!(main.contains("data::update_entities("));
+        for name in pecten_studio_rt::behaviour::DECLARATIONS.iter().map(|d| d.id) {
+            let ty: String = name.split('-').map(|w| w[..1].to_uppercase() + &w[1..]).collect();
+            assert!(!main.contains(&format!("{ty}::")) && !main.contains(&format!("{ty},")), "main.rs names {ty}");
+        }
+        assert!(!main.contains("from_entity"));
     }
 }

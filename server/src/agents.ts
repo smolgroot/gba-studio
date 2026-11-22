@@ -87,7 +87,7 @@ Run \`validate\` after changing anything under \`studio/\`.
 ## In the game code
 
 \`\`\`rust
-pecten_studio_rt::include_data!();   // data::world(), EntityKind, ENTITY_SLOTS, room and class constants
+pecten_studio_rt::include_data!();   // data::world(), EntityKind, entities(), enter_room, update_entities, room and class constants
 pecten_studio_rt::include_gfx!();    // gfx::ART, TILESETS, BACKGROUNDS, SPRITE_<NAME>, ENTITY_SPRITES
 pecten_studio_rt::include_audio!();  // audio::TRACKS, SFX (needs agb_tracker)
 \`\`\`
@@ -109,6 +109,16 @@ The Physics tab of the studio saves \`physics\` in \`studio/project.json\`: the 
 (\`platformer\` or \`topdown\`) and how it moves. The game gets it from \`world.physics()\`.
 \`physics::PlatformerController\` and \`physics::TopDownController\` apply it, so use
 them rather than hard-coding gravity or speeds.
+
+Entities run their behaviours through a table the build generates. Take it once with
+\`let entities = data::entities();\`, call \`data::enter_room(entities, &world, room, |i| found.has(i))\`
+at the start and whenever the player enters a room, and once a frame
+\`data::update_entities(entities, &world, &cx, camera, before, event)\`. The table keeps each
+entity's state, so a room left and come back to is as it was. \`before\` gets each
+entity's \`EntityKind\` first and answers \`Dispatch::Handled\` to do its frame in
+the game's own code instead of its behaviours, or \`Dispatch::Behaviours\`. \`event\`
+gets what the behaviours report (\`Event::Collect\`, \`Event::Hurt\`, ...). Draw from
+\`entities.visible(data::view(camera))\`: only rooms the camera shows run and are drawn. A type has at most 4 behaviours.
 `
 }
 
@@ -188,10 +198,10 @@ Behaviour is Rust in \`src/\`, on agb and \`pecten_studio_rt\`:
 
 - \`data::world()\`, \`data::EntityKind\`, \`data::class::*\` come from
   \`include_data!()\`. Read the world once at the start; \`world.room(i)\` and
-  \`room.entities()\` give rooms and entities. Ask an entity for a library behaviour
-  with \`Patrol::from_entity(&entity)\` and the like (\`pecten_studio_rt::behaviour\`):
-  it answers only for types that list it. Match on \`EntityKind::of(&entity)\` for
-  what is special to a type; read its own typed properties with
+  \`room.entities()\` give rooms and entities. \`data::update_entities\` runs every
+  entity's library behaviours (\`pecten_studio_rt::behaviour\`) as its type lists
+  them; its \`before\` hook gets the \`EntityKind\`, for what is special to a type,
+  and can stand in for the behaviours. Read a type's own typed properties with
   \`entity.int("name")\`, \`.bool\`, \`.str\`.
 - \`physics::Body\` moves through \`&world\` in world pixels: walls, one-way
   platforms, slopes. \`gfx::WorldView\` draws the rooms; \`gfx::AnimPlayer\` plays a
@@ -199,8 +209,8 @@ Behaviour is Rust in \`src/\`, on agb and \`pecten_studio_rt\`:
   \`physics::PlatformerController\` and \`physics::TopDownController\`.
 - Adding an entity type: \`entity_type_set\` in the project, then
   \`entity_type_add_behaviour\` for each library behaviour it has. Code in \`src/\` is
-  needed only for what the library does not do, or if the game's loop does not yet
-  ask every entity for those behaviours. After a project change, rebuild before
+  needed only for what the library does not do, or if the game's loop does not call
+  \`data::update_entities\`. After a project change, rebuild before
   relying on new constants: they are generated.
 - The data and physics half of the runtime runs on the host. Put rules there and
   test them with \`cargo test\` before trying them on the ROM.

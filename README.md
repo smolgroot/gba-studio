@@ -344,7 +344,7 @@ The game brings the result in with three macros:
 
 | Macro | Gives | Needs |
 | --- | --- | --- |
-| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_SLOTS` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum | nothing |
+| `include_data!()` | `data::world()`, which reads the level data from the ROM and returns the `World`; `ENTITY_SLOTS` and `LIMITS`; `room::*` and `class::*` index constants; an `EntityKind` enum; the table of live entities and the loop that runs their behaviours: `entities()`, `Entities`, `LIVE_ENTITIES`, `HITBOXES`, `enter_room`, `update_entities` and `view` | nothing |
 | `include_gfx!()` | `gfx::TILESETS`, `BACKGROUNDS`, `ART` (both together, for the views), one `SPRITE_<NAME>` per sprite with its frames and animations | the `agb` feature |
 | `include_audio!()` | `audio::TRACKS`, `SFX` and index constants | `agb_tracker` in the game |
 
@@ -379,8 +379,13 @@ and audio stay compiled. The game reads the section once at start with
   placed entity give it, read by position with no name lookups, with an `update`
   for one frame that moves an `Actor` and answers with an `Event` (`Hurt`,
   `Collect`, `Grant`, `Checkpoint`, `Fire`, `Spawn`, `Opened`). The
-  game decides what an event does. `Abilities` is a set of 32 abilities that doors
-  check, and `Pool` a fixed-size home for shots and spawned enemies. No dependencies,
+  game decides what an event does. `LiveEntities` keeps every entity with its
+  behaviours (at most 4) while the game runs, built from the ROM once when its room
+  is first near the player, so a room left is as it was on coming back; the
+  generated `data::update_entities` runs the ones on screen, with a hook for the
+  game's own code before each entity and one for every event. `Abilities` is a set
+  of 32 abilities that doors check, and `Pool` a fixed-size home for shots and
+  spawned enemies. No dependencies,
   no allocation, tested on the host.
 - `gfx` (behind the `agb` feature) has `WorldView`, which draws every room that
   shares a tileset as one scrolling space, streaming tiles in as the camera moves;
@@ -405,7 +410,7 @@ respawns on spikes, walks from one room into the next while the camera scrolls
 across in front of a sky and hills that drift at a quarter and half of its speed,
 collects coins and diamonds that add to a count in the corner, and is sent back to
 where it entered the room by a patrolling sentry bot. Its `src/main.rs` is
-about 360 lines.
+about 360 lines, and names no behaviour: one `data::update_entities` call runs them.
 
 A collectible is an entity type with a sprite that lists the `collectible` behaviour,
 with its `value`: the sample takes any such entity the hero touches. To add another
@@ -496,6 +501,10 @@ Honest list of what does not work yet:
   `pecten-studio` command.
 - **Darkening:** one level for all of a room's dimmed layers; each layer is dimmed or
   not. Sprites are never dimmed. A change is not applied live to a running game.
+- **Behaviours:** an entity type has at most 4; the game keeps room for 4 on every
+  entity. The table of live entities takes 108 bytes of EWRAM a slot, with room for
+  a quarter more entities than the project has (at least 16 more), so 500 entities
+  take about 69 KB. More entities than that need a build, not a live apply.
 - **Budgets:** the studio does not yet show palette, tile or sprite budgets while you
   draw; the build helper reports them when it runs.
 - **Tilesets** are one 16-colour-palette set per tile (up to 16 palettes). The
@@ -536,7 +545,7 @@ Roughly in order. Each item is useful on its own. The full, prioritised list is 
 ### Runtime
 
 - Camera helpers (room bounds, screen transitions between rooms, shake).
-- Entity helpers: spawning from room data, activation near the camera.
+- Entity helpers: waking entities by their distance from the camera.
 - Save data for what the player has found and opened, keyed by room and entity.
 - Door and ability-gate patterns for the Metroidvania loop.
 - Headless test helpers on the Pecten core, so a game can test "the player can

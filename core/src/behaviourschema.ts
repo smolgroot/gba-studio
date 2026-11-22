@@ -2,6 +2,9 @@
 // `cargo run -p pecten_studio_build --bin behaviours-schema`. Do not edit: codegen's
 // tests fail when this file and the declarations differ.
 
+/** The most behaviours an entity type can have: an entity keeps this many while the game runs. */
+export const MAX_BEHAVIOURS = 4
+
 /** Every behaviour the runtime has: its id in projects, its number in the ROM, and a JSON Schema of its properties. */
 export const BEHAVIOURS = [
   {
