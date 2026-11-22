@@ -50,7 +50,19 @@ With the Entities tool, pick an **entity type** in the *Entity to place* list of
 - edit its position and typed properties in Properties;
 - press `Delete` to remove the selected entity.
 
-Entities are placed by their feet: the middle of the bottom edge. An entity type with a sprite shows that sprite on the map. Add and recolour entity types in [Project settings](./project-settings).
+Entities are placed by their feet: the middle of the bottom edge. An entity type with a sprite shows that sprite on the map. Add and recolour entity types, and give them behaviours, in [Project settings](./project-settings#behaviours).
+
+### Values set on one entity {#entity-overrides}
+
+When the selected entity's type has [behaviours](./project-settings#behaviours), **Selected entity** in Properties shows a heading for each one under the type's own properties, with its fields. A field shows the type's value, or the behaviour's default, until you set one for this entity. One sentry bot can walk further or slower than the others this way.
+
+![The room panel with a sentry bot selected: patrol shows its type's value, and patrol_pace is set on this entity, marked, with a reset button](/screenshots/entity-overrides.png)
+
+- Type a value to set it on this entity only. Its name then turns blue and has a reset button beside it, and when you hover the name it says what the type has ("Set on this entity; Sentry bot has 2").
+- The reset button removes this entity's value, so it follows the type again. Typing the type's value back does the same.
+- Changing the entity's type clears all its own values.
+
+Every change is one undo step.
 
 ## Room properties
 

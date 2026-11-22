@@ -78,8 +78,10 @@ Run \`validate\` after changing anything under \`studio/\`.
 - Collision comes from the tileset: each tile has a collision class. A room can
   override single cells.
 - An entity is a type, a position in pixels (its feet: the middle of its bottom
-  edge), and the properties its type defines. What an entity does is code in \`src/\`:
-  match on the generated \`data::EntityKind\`.
+  edge), and the properties its type defines. What an entity does comes from its
+  type's behaviours, from the runtime's library (patrol, collectible, hazard, door
+  and the rest; see \`entity_type_add_behaviour\`), and from code in \`src/\`, which
+  can match on the generated \`data::EntityKind\` for what is special to a type.
 - Ids are lowercase letters, digits, \`-\` and \`_\`, and are the file names.
 
 ## In the game code
@@ -158,7 +160,9 @@ A working order that avoids mistakes:
    With no art yet: \`tileset_generate\` makes a tileset (picture and collision) under
    \`generated/\`, then \`room_generate\` lays out a room on it; \`pixel_art_convert\`
    shrinks a picture from the folder to GBA colours.
-   For new kinds of things in rooms: \`entity_type_set\`.
+   For new kinds of things in rooms: \`entity_type_set\`, then
+   \`entity_type_add_behaviour\` for what it does (its description lists every
+   behaviour with its properties); \`entity_type_remove_behaviour\` takes one away.
 4. **Check.** Every change answers with the problems left in that file. Run
    \`validate\` at the end. Render the room again and look at it.
 5. **Show.** \`studio_open\` puts what you changed in front of the author. Their
@@ -184,15 +188,20 @@ Behaviour is Rust in \`src/\`, on agb and \`pecten_studio_rt\`:
 
 - \`data::world()\`, \`data::EntityKind\`, \`data::class::*\` come from
   \`include_data!()\`. Read the world once at the start; \`world.room(i)\` and
-  \`room.entities()\` give rooms and entities. Match on \`EntityKind::of(&entity)\` to give a type its behaviour;
-  read its typed properties with \`entity.int("name")\`, \`.bool\`, \`.str\`.
+  \`room.entities()\` give rooms and entities. Ask an entity for a library behaviour
+  with \`Patrol::from_entity(&entity)\` and the like (\`pecten_studio_rt::behaviour\`):
+  it answers only for types that list it. Match on \`EntityKind::of(&entity)\` for
+  what is special to a type; read its own typed properties with
+  \`entity.int("name")\`, \`.bool\`, \`.str\`.
 - \`physics::Body\` moves through \`&world\` in world pixels: walls, one-way
   platforms, slopes. \`gfx::WorldView\` draws the rooms; \`gfx::AnimPlayer\` plays a
   sprite's animations by name. \`world.physics()\` holds the Physics tab's numbers, for
   \`physics::PlatformerController\` and \`physics::TopDownController\`.
-- Adding an entity type is two steps: \`entity_type_set\` in the project, then its
-  behaviour in code. After a project change, rebuild before relying on new
-  constants: they are generated.
+- Adding an entity type: \`entity_type_set\` in the project, then
+  \`entity_type_add_behaviour\` for each library behaviour it has. Code in \`src/\` is
+  needed only for what the library does not do, or if the game's loop does not yet
+  ask every entity for those behaviours. After a project change, rebuild before
+  relying on new constants: they are generated.
 - The data and physics half of the runtime runs on the host. Put rules there and
   test them with \`cargo test\` before trying them on the ROM.
 `

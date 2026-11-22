@@ -76,7 +76,11 @@ Open a room to paint it.
 - **Entities:** place them with a click, drag them, edit their position and typed
   properties in Properties, delete them with `Delete`. They are placed by their feet
   (the middle of the bottom edge). An entity type with a sprite shows that sprite on
-  the map.
+  the map. A placed entity can set its own values for its type's behaviours, with a
+  button to reset each to the type's.
+- **Behaviours:** give an entity type ready-made behaviours (patrol, collectible,
+  hazard, door and others) in Project settings, each with a form for its properties,
+  in the order the game runs them. A new enemy needs no Rust in the sample game.
 - **Room properties:** name, size in whole screens (shrinking asks first and undo
   brings the cut-off part back), tileset, music track and backgrounds.
 - **Guides:** a tile grid and lines at every screen boundary (240x160 pixels).
@@ -289,6 +293,7 @@ The endpoint refuses requests from other web pages, like the rest of the server.
 | `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset, music, backgrounds and darkening, arrange the world map |
 | `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
 | `entity_type_set`, `entity_type_remove` | Entity types and their typed properties |
+| `entity_type_add_behaviour`, `entity_type_remove_behaviour` | Give an entity type a behaviour or change its values; take one away |
 | `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
 | `tileset_generate`, `room_generate`, `pixel_art_convert` | The three generators: a tileset with collision, a room on it, a converted picture. Pictures go to `generated/` |
 | `sprite_create`, `sprite_set_animation`, `sprite_remove_animation`, `sprite_set_geometry` | Sprites from a sheet in the folder, their animations, anchor and hitbox |
@@ -369,9 +374,9 @@ and audio stay compiled. The game reads the section once at start with
   `SpriteSheet::hitbox_at` gives a placed entity's box.
 - `behaviour` has ready-made behaviours for placed entities: `Patrol`, `Collectible`,
   `Hazard`, `Projectile` and `Shooter`, `MovingPlatform`, `Door`, `Checkpoint`,
-  `AbilityPickup` and `Spawner`. An entity type lists its behaviours in
-  `studio/project.json`. Each is a plain struct built from the settings the type and
-  the placed entity give it, read by position with no name lookups, with an `update`
+  `AbilityPickup` and `Spawner`. An entity type lists its behaviours, given in
+  Project settings. Each is a plain struct built from the settings the type and the
+  placed entity give it, read by position with no name lookups, with an `update`
   for one frame that moves an `Actor` and answers with an `Event` (`Hurt`,
   `Collect`, `Grant`, `Checkpoint`, `Fire`, `Spawn`, `Opened`). The
   game decides what an event does. `Abilities` is a set of 32 abilities that doors
@@ -405,9 +410,9 @@ about 360 lines.
 A collectible is an entity type with a sprite that lists the `collectible` behaviour,
 with its `value`: the sample takes any such entity the hero touches. To add another
 kind (a ruby, a key), import its PNG as a sprite, add the entity type in Project
-settings, give it `"behaviours": [{ "id": "collectible", "props": { "value": 10 } }]`
-in `studio/project.json`, and place it in rooms with the entities tool; no Rust
-changes. The sentry bot lists `patrol` and `hazard` the same way. It builds from its own folder, with the nightly toolchain pinned in
+settings, give it the Collectible behaviour with its value, and place it in rooms with
+the entities tool; no Rust changes. An enemy is made the same way with Patrol and
+Hazard, as the sentry bot is. It builds from its own folder, with the nightly toolchain pinned in
 `sample/rust-toolchain.toml` and `agb-gbafix` installed (`cargo install agb-gbafix`):
 
 ```sh
@@ -421,6 +426,9 @@ about 2808).
 Its art is flat-colour placeholders. Regenerate the sample project with
 `node scripts/make-sample-assets.ts` and `node scripts/make-sample-project.ts`
 (the second refuses to overwrite an existing project unless given `--force`).
+`node scripts/check-new-enemy.ts` checks, on a copy of the sample and with the MCP
+tools only, that a new patrolling enemy made from a PNG builds and plays with no Rust
+change (it needs the sample's toolchain; the cold build takes a minute or two).
 
 ## Project format
 
@@ -461,7 +469,7 @@ studio/rooms/<id>.json      size in screens, up to 3 tile layers, up to 2 backgr
 | `codegen/` | `pecten_studio_build`: the build-script helper that turns a project into Rust data. |
 | `runtime/` | `pecten_studio_rt`: data types, physics and agb drawing for games. |
 | `sample/` | A small game made from a studio project. |
-| `scripts/` | Generates the sample project; copies the Pecten core into the app. |
+| `scripts/` | Generates the sample project; copies the Pecten core into the app; takes the docs' screenshots; checks a new enemy end to end. |
 
 The Play panel uses a build of the Pecten emulator core kept in `app/public/wasm`.
 After rebuilding Pecten, `scripts/sync-pecten.sh` copies the new build in.
@@ -476,7 +484,7 @@ Honest list of what does not work yet:
   helper only converts PNG sheets for now.
 - **Collision classes and entity property definitions** are edited in
   `studio/project.json`, not in the interface. (Entity types can be added, renamed,
-  recoloured and given a sprite in Project settings.)
+  recoloured and given a sprite and behaviours in Project settings.)
 - **Map editor:** no selection, copy and paste, flip, or autotiling yet. Resizing a
   room keeps its top-left corner.
 - **Backgrounds:** the map editor shows them still; only the built game moves them.
@@ -551,4 +559,5 @@ for PNGs as it is redrawn.
 ### Left out on purpose
 
 - A music sequencer. Compose in a DAW or tracker.
-- Visual scripting of game logic. Behaviour is Rust in your game.
+- Visual scripting of game logic. Entities do what their behaviours from the runtime's
+  library and the Rust in your game say.

@@ -35,6 +35,7 @@ import type { Stamp, Tool } from '../editor.ts'
 import { Field, Fields, NumberInput, SelectInput, TextInput } from '../fields.tsx'
 import { useHistoryDepth, useStudio } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
+import { BehaviourOverrides } from './behaviours.tsx'
 import { ImportButton } from './common.tsx'
 import { DimLevel, DimToggle } from './dim.tsx'
 import { Divider, GridOverlay, Message, ToolButton, Viewport, useImage } from './views.tsx'
@@ -895,6 +896,7 @@ export function RoomProperties({ id }: { id: string }) {
               )
             })}
           </Fields>
+          {type && <BehaviourOverrides type={type} props={entity.props} onChange={(props) => updateEntity({ props })} />}
           <Box sx={{ px: 2, pb: 2 }}>
             <Button
               color="error"

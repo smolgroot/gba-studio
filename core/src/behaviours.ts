@@ -141,3 +141,103 @@ export function behaviourValues(type: EntityType, entityProps: Record<string, Va
   }
   return out
 }
+
+// Editing: what Project settings, the room panel and the MCP tools do to behaviours.
+
+/** One field of a behaviour's form, from its declaration. */
+export interface BehaviourField {
+  name: string
+  summary: string
+  kind: 'int' | 'bool'
+  min?: number
+  max?: number
+  default: number | boolean | undefined
+  /** It has no default: a type or each placed entity must set it. */
+  required: boolean
+}
+
+/** The fields of a behaviour's form, in the order it declares its properties; none for an unknown id. */
+export function behaviourFields(id: string): BehaviourField[] {
+  const declaration = behaviourDeclaration(id)
+  if (!declaration) return []
+  return behaviourProps(declaration).map(({ name, schema }) =>
+    schema.type === 'integer'
+      ? { name, summary: schema.description, kind: 'int', min: schema.minimum, max: schema.maximum, default: schema.default, required: schema.default === undefined }
+      : { name, summary: schema.description, kind: 'bool', default: schema.default, required: schema.default === undefined },
+  )
+}
+
+/** A behaviour's id in words: `moving-platform` is "Moving platform". */
+export function behaviourLabel(id: string): string {
+  const words = id.replace(/-/g, ' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
+ * The type with a behaviour added, or with new values merged into one it has, which
+ * keeps its place. A new one goes at the end, or before the behaviour `before`.
+ */
+export function withBehaviour(type: EntityType, id: string, props: Record<string, Value> = {}, before?: string): EntityType {
+  const has = type.behaviours.find((b) => b.id === id)
+  if (has) return { ...type, behaviours: type.behaviours.map((b) => (b.id === id ? { ...b, props: { ...b.props, ...props } } : b)) }
+  const behaviours = [...type.behaviours]
+  const at = before === undefined ? -1 : behaviours.findIndex((b) => b.id === before)
+  behaviours.splice(at < 0 ? behaviours.length : at, 0, { id, props: { ...props } })
+  return { ...type, behaviours }
+}
+
+export function withoutBehaviour(type: EntityType, id: string): EntityType {
+  return { ...type, behaviours: type.behaviours.filter((b) => b.id !== id) }
+}
+
+/** Moves a behaviour one place earlier (-1) or later (1) in the order the game runs them; the same type if it cannot. */
+export function moveBehaviour(type: EntityType, id: string, by: -1 | 1): EntityType {
+  const from = type.behaviours.findIndex((b) => b.id === id)
+  const to = from + by
+  if (from < 0 || to < 0 || to >= type.behaviours.length) return type
+  const behaviours = [...type.behaviours]
+  ;[behaviours[from], behaviours[to]] = [behaviours[to]!, behaviours[from]!]
+  return { ...type, behaviours }
+}
+
+/** Sets the type's value for a behaviour property. A value equal to the default, or none, is left out. */
+export function setBehaviourValue(type: EntityType, id: string, name: string, value: number | boolean | undefined): EntityType {
+  const field = behaviourFields(id).find((f) => f.name === name)
+  return {
+    ...type,
+    behaviours: type.behaviours.map((b) => {
+      if (b.id !== id) return b
+      const { [name]: _, ...rest } = b.props
+      return { ...b, props: value === undefined || value === field?.default ? rest : { ...rest, [name]: value } }
+    }),
+  }
+}
+
+/** Why a behaviour cannot be added to a type, in a few words; undefined if it can. */
+export function behaviourBlocker(type: EntityType, id: string): string | undefined {
+  if (type.behaviours.some((b) => b.id === id)) return 'the type has it'
+  const names = behaviourFields(id).map((f) => f.name)
+  for (const { declaration } of known(type)) {
+    const shared = (declaration.order as readonly string[]).find((n) => names.includes(n))
+    if (shared) return `shares ${shared} with ${behaviourLabel(declaration.id)}`
+  }
+  return undefined
+}
+
+/**
+ * What a placed entity's behaviour field shows: its own value if it overrides it,
+ * else the type's, else the default (undefined when it is required and nobody sets it).
+ * `inherited` is what it would be without its own.
+ */
+export function shownBehaviourValue(type: EntityType, entityProps: Record<string, Value>, id: string, name: string): { value: Value | undefined; inherited: Value | undefined; overridden: boolean } {
+  const use = type.behaviours.find((b) => b.id === id)
+  const inherited = use?.props[name] ?? behaviourFields(id).find((f) => f.name === name)?.default
+  const own = entityProps[name]
+  return { value: own ?? inherited, inherited, overridden: own !== undefined }
+}
+
+/** A placed entity's props with a behaviour property overridden, or with the override removed (undefined). */
+export function behaviourOverride(entityProps: Record<string, Value>, name: string, value: Value | undefined): Record<string, Value> {
+  const { [name]: _, ...rest } = entityProps
+  return value === undefined ? rest : { ...rest, [name]: value }
+}

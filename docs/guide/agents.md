@@ -76,6 +76,7 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 | `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset, music, backgrounds and darkening, arrange the world map |
 | `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
 | `entity_type_set`, `entity_type_remove` | Entity types and their typed properties |
+| `entity_type_add_behaviour`, `entity_type_remove_behaviour` | Give an entity type a behaviour or change its values; take one away |
 | `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
 | `tileset_generate`, `room_generate`, `pixel_art_convert` | The studio's three generators: a whole tileset with its collision, a room laid out on it, a picture converted to GBA colours. Pictures go to `generated/` |
 | `sprite_create`, `sprite_set_animation`, `sprite_remove_animation`, `sprite_set_geometry` | Sprites from a sheet in the folder, their animations, anchor and hitbox |
@@ -83,8 +84,6 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 | `render_room`, `render_tileset`, `render_sprite` | Pictures: a room (optionally tinted by collision), a tileset or sprite sheet with its grid |
 | `build`, `patch_rom`, `run_rom` | Build the ROM; put changed level data into the built ROM without a build; run it headless for given frames and held buttons and get a picture after each step |
 | `studio_view`, `studio_open` | What the author has open; put an item in front of them (studio endpoint only) |
-
-An entity type's [behaviours](./making-a-game#giving-a-type-its-behaviours) are set by writing `project` with `write_document`; `entity_type_set` keeps the ones a type has. The answer lists the problems left in `project.json`, such as an unknown behaviour or a value out of range. A placed entity overrides a behaviour's value through `props` in `entity_add` and `entity_update`, which answer with the problems in its room. `validate` lists them all, and `pecten-studio schema` gives each behaviour's properties under `behaviours`.
 
 `room_update` darkens layers (see [Darkening layers](./rooms#darkening-layers)) with three parameters: `dimLevel`, from 0 to 16; `dimLayers`, the tile layers to darken, by number (0 is the back layer) or name, which replaces the set, so `[]` turns dimming off for all tile layers; and `dim` on each entry of `backgrounds`. `project_overview` shows which layers are dimmed and the level.
 
@@ -95,6 +94,16 @@ Every write is validated and answered with the problems it left in that file. Er
 ::: warning Art and music are yours
 No tool creates, changes or deletes a file under `assets/`: agents can use the art and music that is there, not make it.
 :::
+
+### Behaviours {#behaviours}
+
+`entity_type_add_behaviour` takes a `type`, a `behaviour` id and optional `props`, the type's values for the behaviour's properties. A new behaviour goes last in the order the game runs them, or ahead of the one named in `before`. When the type already has the behaviour, it keeps its place and `props` are merged into its values. The tool's description lists every [behaviour](./making-a-game#the-behaviours) with its properties, ranges and defaults, so an agent does not have to guess them.
+
+`entity_type_remove_behaviour` takes a `type` and a `behaviour`. Placed entities keep the values they set for its properties; the answer says how many still do, and `validate` then reports them.
+
+Both answer with the problems left in `project.json`, such as a value out of range. `entity_type_set` keeps the behaviours a type has. A placed entity sets its own value for a behaviour's property through `props` in `entity_add` and `entity_update`, which answer with the problems in its room. `entity_update`'s `props` replace all of the entity's own values, those of its type's properties and of its behaviours, so pass the ones to keep. `pecten-studio schema` gives each behaviour's properties under `behaviours`.
+
+An agent can make a new enemy this way with no Rust: `sprite_create` from a PNG in the folder, `entity_type_set` with the sprite, `entity_type_add_behaviour` with `patrol` and then `hazard`, `entity_add`, `build`, and `run_rom` to see it walk.
 
 ### Making a tileset and a room with no art
 

@@ -41,6 +41,7 @@ import { useSidebar } from '../sidebar.ts'
 import type { SectionTitle } from '../sidebar.ts'
 import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
+import { TypeBehaviours, behaviourNames } from './behaviours.tsx'
 import { MidiView } from './midi.tsx'
 import { PhysicsEditor } from './physics.tsx'
 import { PixelEditor } from './pixel.tsx'
@@ -484,6 +485,8 @@ export function DocumentPanel({ selection }: { selection: Selection }) {
 }
 
 function ProjectSettings() {
+  // Entity types whose behaviours are shown.
+  const [open, setOpen] = useState<string[]>([])
   const project = useStudio((s) => s.bundle?.docs.project)
   const sprites = useStudio((s) => s.bundle?.docs.sprites)
   const commit = useStudio((s) => s.commit)
@@ -494,6 +497,7 @@ function ProjectSettings() {
   )
   const setType = (index: number, patch: Partial<Project['entityTypes'][number]>) => update({ entityTypes: project.entityTypes.map((t, i) => (i === index ? { ...t, ...patch } : t)) })
   const cell = { px: 2, py: 0.75, minWidth: 0 } as const
+  const toggle = (id: string) => setOpen((ids) => (ids.includes(id) ? ids.filter((o) => o !== id) : [...ids, id]))
   return (
     <Box sx={{ height: '100%', overflow: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, minHeight: BAR.tool, borderBottom: '1px solid #111', bgcolor: 'background.default' }}><UndoButtons /></Box>
@@ -523,7 +527,7 @@ function ProjectSettings() {
       </Fields>
       <Empty>The reserve is room kept free after the level data in a built ROM, so a project that grows a little can still be patched in without a build. It takes effect at the next build; the Build panel shows how much is used.</Empty>
       <Heading>Entity types</Heading>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(100px, 1.5fr) minmax(100px, 1fr) max-content', alignItems: 'center' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(100px, 1.5fr) minmax(100px, 1fr) minmax(100px, 1fr) max-content', alignItems: 'center' }}>
         {project.entityTypes.map((type, index) => (
           <Box key={type.id} sx={{ display: 'contents' }}>
             <Box sx={cell}>
@@ -534,8 +538,25 @@ function ProjectSettings() {
               <SelectInput label={`Sprite of ${type.name}`} value={type.sprite ?? ''} onChange={(sprite) => setType(index, { sprite: sprite || undefined })} options={[{ value: '', label: 'No sprite' }, ...Object.entries(sprites ?? {}).map(([value, s]) => ({ value, label: s.name }))]} />
             </Box>
             <Box sx={cell}>
+              <Button
+                size="small"
+                aria-expanded={open.includes(type.id)}
+                aria-label={`Behaviours of ${type.name}: ${behaviourNames(type)}`}
+                startIcon={open.includes(type.id) ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                onClick={() => toggle(type.id)}
+                sx={{ justifyContent: 'flex-start', maxWidth: '100%', color: type.behaviours.length ? 'text.primary' : 'text.secondary', textTransform: 'none' }}
+              >
+                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{behaviourNames(type)}</Box>
+              </Button>
+            </Box>
+            <Box sx={cell}>
               <IconButton aria-label={`Delete entity type ${type.name}`} onClick={() => update({ entityTypes: project.entityTypes.filter((_, i) => i !== index) })}><DeleteOutlinedIcon /></IconButton>
             </Box>
+            {open.includes(type.id) && (
+              <Box sx={{ gridColumn: '1 / -1' }}>
+                <TypeBehaviours type={type} onChange={(next) => setType(index, next)} />
+              </Box>
+            )}
           </Box>
         ))}
       </Box>
@@ -548,7 +569,7 @@ function ProjectSettings() {
           Add entity type
         </Button>
       </Box>
-      <Empty>An entity type is a kind of thing placed in rooms: an enemy, a pickup, a door. What it does is written in the game's code. Typed properties are edited in studio/project.json for now.</Empty>
+      <Empty>An entity type is a kind of thing placed in rooms: an enemy, a pickup, a door. What it does comes from its behaviours, which the game runs in the order listed, and from the game's own code. A placed entity can set its own values for them in the room's panel. Typed properties of a type's own are edited in studio/project.json for now.</Empty>
       <Heading>Collision classes</Heading>
       <Box component="dl" sx={{ m: 0, px: 2, py: 1, display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: 3, rowGap: 0.5 }}>
         {project.collisionClasses.map((c) => (

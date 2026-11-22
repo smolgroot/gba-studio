@@ -82,8 +82,8 @@ Notes / open questions
 | US-011 | Behaviours declare their properties to codegen | E2 | P0 | Done | M |
 | US-011a | Behaviour declarations, the `behaviours` field and its problems | E2 | P0 | Done | M |
 | US-011b | Behaviour properties read by position | E2 | P0 | Done | M |
-| US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Proposed | M |
-| US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Proposed | M |
+| US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Done | M |
+| US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Planned | M |
 | US-014 | Prefabs with per-instance overrides | E2 | P1 | Proposed | M |
 | US-015 | Edit collision classes in the interface | E2 | P1 | Proposed | S |
 | US-016 | Edit entity property definitions in the interface | E2 | P1 | Proposed | S |
@@ -108,6 +108,7 @@ Notes / open questions
 | US-044 | Undo for deleting rooms, tilesets and sprites | E5 | P1 | Proposed | S |
 | US-045 | Pinch zoom and finger painting | E5 | P3 | Proposed | M |
 | US-046 | Darken layers and backgrounds for contrast | E5 | P1 | Done | M |
+| US-047 | Theme colours on Typography that this MUI ignores | E5 | P2 | Proposed | S |
 | US-050 | Font import and text drawing | E6 | P1 | Proposed | M |
 | US-051 | Dialogue boxes and a dialogue file format | E6 | P1 | Proposed | L |
 | US-052 | HUD layout editor | E6 | P2 | Proposed | L |
@@ -388,7 +389,7 @@ Acceptance criteria
   target of 296 moved to US-013, by the author's decision.)
 
 #### US-012 · Attach behaviours to entity types in the studio
-**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-011
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-011
 **Touches** app, core, server (MCP tools)
 
 As an author, I want to give an entity type one or more behaviours and fill in
@@ -396,14 +397,14 @@ their properties in Properties, so that I can make a new enemy without opening
 Rust.
 
 Acceptance criteria
-- [ ] Project settings lists behaviours to add to an entity type; each shows a form
+- [x] Project settings lists behaviours to add to an entity type; each shows a form
   generated from its declaration.
-- [ ] Placed entities show the behaviour properties and can override them.
-- [ ] MCP has `entity_type_add_behaviour` and `entity_type_remove_behaviour`.
-- [ ] A new patrolling enemy can be made from a PNG with no Rust change, and plays.
+- [x] Placed entities show the behaviour properties and can override them.
+- [x] MCP has `entity_type_add_behaviour` and `entity_type_remove_behaviour`.
+- [x] A new patrolling enemy can be made from a PNG with no Rust change, and plays.
 
 #### US-013 · Generated entity dispatch, no hand-written match
-**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-012
+**Priority** P0 · **Status** Planned · **Size** M · **Depends on** US-012
 **Touches** codegen, runtime, sample
 
 As a programmer, I want codegen to write the loop that updates every live entity
@@ -761,6 +762,24 @@ Tasks
    `cargo test` and build `sample/`.
 
 ---
+
+#### US-047 · Theme colours on Typography that this MUI ignores
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** app
+
+As an author, I want secondary labels and hints in the studio to be grey as
+designed, so that labels and values are told apart at a glance.
+
+Found in US-012: MUI 9.5 takes palette keys (`primary`, `textSecondary`) for
+`Typography`'s `color` prop, not paths such as `text.secondary`. So every `Field`
+label, and other text given `color="text.secondary"`, shows in the light text
+colour. The marked label of US-012 sets its colour through `sx` and is not
+affected.
+
+Acceptance criteria
+- [ ] Text meant to be secondary or primary in colour is, wherever `color=` is given
+  a palette path (found by search, with a test or lint that keeps it so).
+- [ ] The documentation screenshots that show changed text are retaken.
 
 ## E6 · Text and interface
 

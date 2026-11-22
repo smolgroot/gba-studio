@@ -22,6 +22,8 @@ import { parseArgs } from 'node:util'
 type Action =
   /** An accessible name (aria-label or label) first, then a button's name, then visible text. `within` is a CSS selector to look in. */
   | { click: string; within?: string }
+  /** Clicks at a point of the page, in CSS pixels, or of the first element `within` matches, from its top-left: a placed entity on the map. */
+  | { clickAt: { x: number; y: number }; within?: string }
   /** A key, as Playwright names them: "Control+z", "g". */
   | { press: string }
   /** Milliseconds. */
@@ -222,6 +224,10 @@ function target(page: Page, name: string, within?: string) {
 
 async function act(page: Page, action: Action): Promise<void> {
   if ('click' in action) await target(page, action.click, action.within).click()
+  else if ('clickAt' in action) {
+    if (action.within) await page.locator(action.within).first().click({ position: action.clickAt })
+    else await page.mouse.click(action.clickAt.x, action.clickAt.y)
+  }
   else if ('hover' in action) await target(page, action.hover, action.within).hover()
   else if ('press' in action) await page.keyboard.press(action.press)
   else if ('fill' in action) {

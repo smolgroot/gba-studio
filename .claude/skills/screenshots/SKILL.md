@@ -21,7 +21,8 @@ The list's project is Diamond Hands, at `../diamond-hands/project` (a checkout o
 its own repository next to this one), so routes name its rooms and sprites
 (`room:badlands`, `sprite:wassie`). A shot can name another project with
 `"project"`: the three about patching use `sample`, because Diamond Hands never
-reads its level data from the ROM and so can't be patched. Each project is copied
+reads its level data from the ROM and so can't be patched, and the behaviour shots
+use it because its entity types have behaviours. Each project is copied
 and served in turn. The play shots need the project's dev ROM. The build-panel shot
 runs the project's real build command.
 
@@ -73,6 +74,7 @@ Actions:
 | --- | --- |
 | `{ "click": "Show collision" }` | Clicks by accessible name (aria-label or label), then button name, then visible text. Add `"within": "<css>"` when the name is used twice: the Play panel's own button is `{ "click": "Play", "within": ".dv-content-container:has(canvas)" }`. |
 | `{ "hover": "…" }` | Hovers, matched the same way. |
+| `{ "clickAt": { "x": 632, "y": 370 } }` | Clicks at a point of the page, in CSS pixels, for what has no name, such as a placed entity on the map. With `"within": "<css>"`, the point is from the top-left of the first element that matches. Points change with the viewport and layout, so give the shot a fixed `viewport` and check the picture. |
 | `{ "press": "Control+z" }` | A key, as Playwright names it. |
 | `{ "fill": "Name", "text": "door" }` | Types into a field. |
 | `{ "select": "Image", "option": "assets/tiles.png" }` | Picks in a drop-down. |

@@ -10,6 +10,7 @@ import { KEY_BITS, runRom } from './emulator.ts'
 import { describePatch, patchRom, romStatus, staleNote } from './patch.ts'
 import { HttpError } from './project.ts'
 import { documents, problemLines, saveAndReport, tool } from './toolkit.ts'
+import { BEHAVIOUR_TOOLS } from './behaviourtools.ts'
 import { GENERATOR_TOOLS } from './generators.ts'
 import type { ProjectFolder } from './project.ts'
 import { effectiveCollision, encodePng, loadPng, renderRoom, renderSheet, renderTileset, roomCells, scale } from './render.ts'
@@ -293,7 +294,7 @@ export const TOOLS: Tool[] = [
 
   tool(
     'entity_update',
-    'Moves an entity or changes its type or properties. Entities are numbered from 0 in the order read_document lists them.',
+    'Moves an entity or changes its type or properties. props replaces all of the entity\'s own values: its type\'s properties, and any of its type\'s behaviour properties it sets differently from the type. Entities are numbered from 0 in the order read_document lists them.',
     z.object({ room: Id, index: z.number().int().min(0), type: Id.optional(), x: z.number().int().min(0).optional(), y: z.number().int().min(0).optional(), props: z.record(z.string(), z.union([z.number().int(), z.boolean(), z.string()])).optional() }),
     async ({ room: id, index, ...patch }, context) => {
       const { docs } = await documents(context)
@@ -501,7 +502,7 @@ export const TOOLS: Tool[] = [
 
   tool(
     'entity_type_set',
-    'Adds an entity type to the project, or changes the one with that id: its name, colour in the editor, sprite, and the typed properties each placed entity carries. What the type does in the game is Rust code matching on data::EntityKind.',
+    'Adds an entity type to the project, or changes the one with that id: its name, colour in the editor, sprite, and the typed properties each placed entity carries. Its behaviours (patrol, collectible, hazard and the rest) are kept: give and take them with entity_type_add_behaviour and entity_type_remove_behaviour. Anything else it does is the game\'s Rust code, matching on data::EntityKind.',
     z.object({
       id: Id,
       name: z.string().min(1).optional(),
@@ -620,6 +621,7 @@ export const TOOLS: Tool[] = [
       return { text: `Ran ${rom.path}. One picture per step, enlarged 2x:\n${lines.join('\n')}${note ? `\n\n${note}` : ''}`, images: screens.map((screen) => encodePng(scale(screen, 2))) }
     },
   ),
+  ...BEHAVIOUR_TOOLS,
   ...GENERATOR_TOOLS,
 ]
 

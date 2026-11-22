@@ -120,13 +120,13 @@ export function OptionalNumberInput({ value, onCommit, parse, label, placeholder
   )
 }
 
-export function SelectInput<T extends string>({ value, onChange, options, label, disabled }: { value: T; onChange: (value: T) => void; options: ReadonlyArray<{ value: T; label: string }>; label: string; disabled?: boolean }) {
+export function SelectInput<T extends string>({ value, onChange, options, label, disabled }: { value: T; onChange: (value: T) => void; options: ReadonlyArray<{ value: T; label: string; disabled?: boolean }>; label: string; disabled?: boolean }) {
   return (
     <Box component="select" aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as T)} sx={{ ...controlSx, px: 1 }}>
       {/* A value that is not among the choices (a deleted tileset, say) still shows, marked. */}
       {!options.some((o) => o.value === value) && <option value={value}>{value ? `${value} (missing)` : 'Choose…'}</option>}
       {options.map((option) => (
-        <option key={option.value} value={option.value}>{option.label}</option>
+        <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
       ))}
     </Box>
   )
@@ -146,10 +146,12 @@ export function Checkbox({ checked, onChange, children }: { checked: boolean; on
 export function Fields({ children }: { children: ReactNode }) {
   return <Box sx={{ px: 2, py: 1.5, display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', columnGap: 3, rowGap: 1, alignItems: 'center' }}>{children}</Box>
 }
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+/** A label and its controls. A `marked` label stands out, with `mark` as its tooltip: a value set here rather than inherited. */
+export function Field({ label, children, marked, mark }: { label: string; children: ReactNode; marked?: boolean; mark?: string }) {
   return (
     <>
-      <Typography color="text.secondary" noWrap>{label}</Typography>
+      {/* The mark is set through sx: this MUI's color prop takes palette keys, not paths such as primary.main. */}
+      <Typography color="text.secondary" title={marked ? mark : undefined} noWrap sx={marked ? { color: 'primary.main' } : undefined}>{label}</Typography>
       <Box sx={{ minWidth: 0, display: 'flex', gap: 1, alignItems: 'center' }}>{children}</Box>
     </>
   )

@@ -32,16 +32,40 @@ An entity is a thing placed in a room: a player start, an enemy, a pickup. Its *
 - a **colour**, used on the map when the type has no sprite;
 - a **name**;
 - a **sprite**, or "No sprite";
+- its **behaviours**, by name ("Patrol, Hazard"), or "No behaviours": click them to open the type's behaviours below the row;
 - a bin to delete the type.
 
-Use the **+** at the end of the list to add a type. Types can be added, renamed, recoloured and given a sprite here. Their typed properties (integer, boolean, text or one of a list), their [behaviours](./making-a-game#giving-a-type-its-behaviours) and the project's collision classes are defined in `studio/project.json`, not yet in the interface; see the [project format](../reference/project-format).
+Use **Add entity type** at the end of the list to add a type. Types can be added, renamed, recoloured, given a sprite and given behaviours here. Their typed properties of their own (integer, boolean, text or one of a list) and the project's collision classes are defined in `studio/project.json`, not yet in the interface; see the [project format](../reference/project-format).
+
+### Behaviours {#behaviours}
+
+A behaviour is something an entity does that the runtime already knows how to do: patrol, hurt the player, be collected, open as a door. The list of behaviours and their properties is in [Behaviours](./making-a-game#the-behaviours).
+
+![Project settings with the sentry bot's behaviours open: patrol and hazard, each with its form](/screenshots/entity-behaviours.png)
+
+Click a type's behaviours to open them. Each behaviour is a card with its name, what it does, and a field for each of its properties:
+
+- Each field is a whole number in the range the behaviour allows. Type a value and press `Enter` or leave the field; a value outside the range is brought to its nearest end.
+- The field shows the behaviour's default until you change it. A value equal to the default is not written to `project.json`, so the type follows the default if it changes.
+- A property with no default, such as `grants_ability` of **Ability pickup**, is empty and says **Required: 0 to 31**. A value outside the range is refused, with the reason under the field. The type, or every placed entity of it, must set it; until then the [Problems panel](./interface#problems) lists it.
+- **Run earlier** and **Run later** (the arrows) change the order the game runs the type's behaviours in. Put **Hazard** after the behaviour that moves the entity, so it hurts where the entity is now.
+- The bin removes the behaviour from the type.
+
+**Add a behaviour…** below the cards lists the behaviours the type does not have, each with what it does. Pick one to add it at the end. A behaviour that shares a property with one the type has is listed but cannot be picked, with the reason, for example "Projectile (shares shot_speed with Shooter)": a type can have only one of them, so give shots a type of their own.
+
+Every change is one undo step. A placed entity can set its own value for a behaviour's property; see [Entities](./rooms#entities).
+
+### Making an enemy
+
+An enemy needs no Rust in the sample game, because its loop asks every entity for each behaviour it plays, whatever its type:
+
+1. Import the enemy's PNG as a [sprite](./sprites).
+2. Add an entity type here and give it the sprite.
+3. Open its behaviours and add **Patrol**, then **Hazard**. Set `patrol` to how far it walks each way, in pixels.
+4. Place it in a room with the entities tool, and build.
+
+It walks back and forth where it was placed, and sends the hero back when they touch. The sample's sentry bot is made this way.
 
 ### Adding a collectible
 
-A collectible is an entity type with a sprite that lists the `collectible` [behaviour](./making-a-game#giving-a-type-its-behaviours), with its `value`. To add another kind (a ruby, a key): import its PNG as a [sprite](./sprites), add the entity type here, and give it the behaviour in `studio/project.json`, under the type's `behaviours`:
-
-```json
-"behaviours": [{ "id": "collectible", "props": { "value": 10 } }]
-```
-
-Then place it in rooms with the entities tool. No Rust changes are needed in the sample game, which takes any entity whose type lists `collectible` when the hero touches it. An enemy is made the same way: the sample's sentry bot lists `patrol` and `hazard`. A property of the type's own named `value` does not make it a collectible. The studio has no panel for behaviours yet, so they are edited in `studio/project.json`.
+A collectible is an entity type with a sprite and the **Collectible** behaviour, with its `value`. To add another kind (a ruby, a key): import its PNG as a [sprite](./sprites), add the entity type here, add **Collectible** to its behaviours and set its `value`. Then place it in rooms with the entities tool. The sample game takes any entity whose type has **Collectible** when the hero touches it. A property of the type's own named `value` does not make it a collectible.

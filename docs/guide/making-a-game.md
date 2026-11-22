@@ -196,7 +196,7 @@ A `Collectible` is not alive after it is taken, but the actor only lasts as long
 
 ### Giving a type its behaviours
 
-An entity type lists its behaviours in `studio/project.json`, under `behaviours`, by id, with the type's values for their properties:
+Give a type its behaviours in [Project settings](./project-settings#behaviours), where each one has a form, and set a placed entity's own values in the [room panel](./rooms#entity-overrides). The type keeps them in `studio/project.json`, under `behaviours`, by id, with the type's values for their properties:
 
 ```json
 {
@@ -219,7 +219,7 @@ An entity type lists its behaviours in `studio/project.json`, under `behaviours`
 
 The build writes each listed behaviour's properties into the [data section](../reference/data-section#entity) after the type's own, with the placed entity's value, the type's, or the default, and records which behaviours each type has and where their properties start (the [behaviours part](../reference/data-section#behaviours)). That is how `from_entity` finds them: listing `shooter` on a type makes every entity of it a shooter, with a `fire_every` of 60 unless you set another. The game's code still decides which behaviours it asks for and what it does with their events, as in the loop below.
 
-The studio has no panel for behaviours yet. Edit `studio/project.json`, or have an agent write it with the `write_document` tool (see [Command line and MCP](./agents)). `pecten-studio schema` prints each behaviour's id, number, summary and properties as JSON Schema, under `behaviours`.
+An agent gives and takes behaviours with the `entity_type_add_behaviour` and `entity_type_remove_behaviour` tools (see [Command line and MCP](./agents#behaviours)). `pecten-studio schema` prints each behaviour's id, number, summary and properties as JSON Schema, under `behaviours`.
 
 The behaviours declare their properties once, next to their code in the runtime (`Behaviour::DECLARATION`, all of them in `behaviour::DECLARATIONS`). The studio reads them from `core/src/behaviourschema.ts`, which is written from the declarations by `cargo run -p pecten_studio_build --bin behaviours-schema`. When you change a declaration in the studio's own repository, run it again: `cargo test` fails while the file is out of date. A project can list only the behaviours in `behaviour::DECLARATIONS`, so a new one is added there, in the studio's repository, with a number of its own and a `from_settings` that reads its properties in the order it declares them.
 
@@ -351,7 +351,7 @@ The library itself takes no RAM. Each behaviour struct is a few bytes, an actor 
 
 ## The sample game
 
-`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp, respawns on spikes, walks from one room into the next while the camera scrolls, collects coins and diamonds, and is sent back by a patrolling sentry bot. Its `src/main.rs` is about 360 lines, with the sentry bot, coins and diamonds taken from the [behaviours](#behaviours) their types list in `studio/project.json`. It has no shooters, moving platforms, doors, checkpoints, ability pickups or spawners yet, so it does not use those behaviours. It builds from its own folder, with the nightly toolchain pinned in `sample/rust-toolchain.toml` and `agb-gbafix` installed:
+`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp, respawns on spikes, walks from one room into the next while the camera scrolls, collects coins and diamonds, and is sent back by a patrolling sentry bot. Its `src/main.rs` is about 360 lines, with the sentry bot, coins and diamonds taken from the [behaviours](#behaviours) their types list in `studio/project.json`. It has no shooters, moving platforms, doors, checkpoints, ability pickups or spawners yet, so it does not use those behaviours. Because its loop asks every entity for patrol, collectible and hazard whatever its type, a new enemy or pickup needs no change to `main.rs`: give a type a sprite and those behaviours, place it, and build (see [Making an enemy](./project-settings#making-an-enemy)). It builds from its own folder, with the nightly toolchain pinned in `sample/rust-toolchain.toml` and `agb-gbafix` installed:
 
 ```sh
 cd sample && cargo build        # or press Build dev in the studio
@@ -360,3 +360,5 @@ cd sample && cargo build        # or press Build dev in the studio
 Built with `cargo build --features measure`, the sample shows how long each frame's work takes in place of the score: the worst frame so far on top and the average below, both in hundreds of CPU cycles. A frame at 60 frames a second has about 2808 of them, so a number near that means the game is about to drop frames.
 
 Its art is flat-colour placeholders. Regenerate the sample project with `node scripts/make-sample-assets.ts` and `node scripts/make-sample-project.ts` (the second refuses to overwrite an existing project unless given `--force`).
+
+In the studio's own repository, `node scripts/check-new-enemy.ts` checks that end to end on a copy of the sample, with the MCP tools only: it draws a 16x16 PNG, makes a sprite and an entity type with patrol and hazard, places it, builds, and runs the ROM to see the enemy walk and send the hero back. It needs the sample's toolchain, and the cold build takes a minute or two.
