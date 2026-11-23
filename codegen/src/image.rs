@@ -282,6 +282,55 @@ mod tests {
         assert!(palette_file(&Image::from_pixels(17, 1, vec![rgb(1); 17])).is_err());
     }
 
+    /// An image of `codegen/fixture/budget.json`: colours as `#rrggbb` or `#rrggbbaa`,
+    /// rows of colour numbers, `.` for transparent.
+    fn fixture_image(case: &serde_json::Value) -> Image {
+        let colours: Vec<[u8; 4]> = case["colours"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                let hex = c.as_str().unwrap().trim_start_matches('#');
+                let byte = |n: usize| hex.get(n * 2..n * 2 + 2).map_or(255, |b| u8::from_str_radix(b, 16).unwrap());
+                [byte(0), byte(1), byte(2), byte(3)]
+            })
+            .collect();
+        let rows: Vec<Vec<[u8; 4]>> = case["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row.as_str().unwrap().split(' ').map(|p| if p == "." { CLEAR } else { colours[p.parse::<usize>().unwrap()] }).collect())
+            .collect();
+        Image::from_pixels(rows[0].len() as u32, rows.len() as u32, rows.concat())
+    }
+
+    /// The studio counts tiles and palettes as the build does: both read this fixture.
+    #[test]
+    fn counts_the_shared_budget_fixture() {
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/fixture/budget.json")).unwrap();
+        let fixture: serde_json::Value = serde_json::from_str(&text).unwrap();
+        for case in fixture["images"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let image = fixture_image(case);
+            let check = |what: &str, got: Result<(usize, usize), String>| {
+                let expected = &case[what];
+                match (got, expected["error"].as_str()) {
+                    (Ok((tiles, palettes)), None) => {
+                        assert_eq!(
+                            (tiles as u64, palettes as u64),
+                            (expected["tiles"].as_u64().unwrap(), expected["palettes"].as_u64().unwrap()),
+                            "{name} as a {what}"
+                        )
+                    }
+                    (Err(error), Some(start)) => assert!(error.starts_with(start), "{name} as a {what}: {error}"),
+                    (got, _) => panic!("{name} as a {what}: got {got:?}, expected {expected}"),
+                }
+            };
+            check("tileset", tileset(&image).map(|t| (t.count(), t.palettes.len())));
+            check("background", background(&image).map(|p| (p.tiles.count(), p.tiles.palettes.len())));
+        }
+    }
+
     #[test]
     fn packs_tiles_into_nibbles_and_shares_a_palette() {
         // Two tiles side by side: the first all one colour, the second that colour and another.

@@ -13,7 +13,7 @@ The Build panel sits beside Problems below the editor.
 | **Stop** | Stops a running build. |
 | **Play...** | Opens the Play panel on the built ROM. |
 
-Output is streamed live. A failed build is marked and its exit code shown; a successful one says how long it took. The build helper reports every hardware problem in one run, in terms of your project: a tile with more than 15 colours, tiles needing more than 16 palettes, a tileset over 1024 tiles, a sprite sheet with too many colours, an animation using a frame the sheet does not have, or backgrounds that with the rooms' tiles need more than 4 layers, 16 palettes or the 1024 tiles video memory holds.
+Output is streamed live. A failed build is marked and its exit code shown; a successful one says how long it took. The build helper reports every hardware problem in one run, in terms of your project: a tile with more than 15 colours, tiles needing more than 16 palettes, a tileset over 1024 tiles, a sprite sheet with too many colours, an animation using a frame the sheet does not have, or backgrounds that with the rooms' tiles need more than 4 layers, 16 palettes or the 1024 tiles video memory holds. The studio counts background tiles and palettes as you paint and lists rooms and tilesets over them in Problems, so most of these show up before you build (see [Rooms](./rooms#tile-and-palette-budget)).
 
 The same builds can be run from the command line; see [Command line and MCP](./agents).
 

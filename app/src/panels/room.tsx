@@ -38,6 +38,7 @@ import { BAR, ui } from '../theme.ts'
 import { BehaviourOverrides } from './behaviours.tsx'
 import { ImportButton } from './common.tsx'
 import { DimLevel, DimToggle } from './dim.tsx'
+import { RoomBudgetReadout } from './budget.tsx'
 import { Divider, GridOverlay, Message, ToolButton, Viewport, useImage } from './views.tsx'
 
 function EraserIcon() {
@@ -159,7 +160,7 @@ export function RoomEditor({ id }: { id: string }) {
     : `${room.width}×${room.height} screens · ${room.entities.length} entities${entity !== null ? ' · 1 selected' : ''}`
 
   return (
-    <Viewport initialZoom={2} tools={tools} info={info} scroller={scroller} touchAction={tool === 'pan' ? 'pan-x pan-y' : 'none'}>
+    <Viewport initialZoom={2} tools={tools} info={info} status={<RoomBudgetReadout id={id} />} scroller={scroller} touchAction={tool === 'pan' ? 'pan-x pan-y' : 'none'}>
       {(zoom) => image && <Surface id={id} room={room} tileset={tileset} image={image} zoom={zoom} scroller={scroller} hover={hover} setHover={setHover} />}
     </Viewport>
   )

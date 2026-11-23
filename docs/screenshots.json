@@ -11,6 +11,7 @@
     { "name": "new-tileset", "description": "Importing a tileset from a PNG", "route": "world", "actions": [{ "click": "New tileset from a PNG" }, { "select": "Image", "option": "assets/tilesets/wood-cabin-tiles.png" }] },
     { "name": "sprite", "description": "The sprite editor with the live preview and animations", "route": "sprite:wassie" },
     { "name": "pixel-editor", "description": "The pixel editor drawing on a sprite sheet", "route": "asset:assets/sprites/blaster.png" },
+    { "name": "pixel-editor-budget", "description": "The pixel editor on a room background, with the tile and palette readout for the fullest room that uses it", "route": "asset:assets/backgrounds/city.png" },
     { "name": "new-image", "description": "Making a new blank image", "route": "world", "actions": [{ "click": "New blank image to draw" }, { "fill": "Name", "text": "door" }] },
     { "name": "audio", "description": "The Audio page listing tracks and sound effects", "route": "audio" },
     { "name": "project-settings", "description": "Project settings with build commands, the level data reserve and entity types", "route": "project" },

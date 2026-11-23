@@ -10,6 +10,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Field, Fields, SelectInput, TextInput } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { ui } from '../theme.ts'
+import { TilesetBudgetReadout } from './budget.tsx'
 import { UndoButtons } from './common.tsx'
 import { Divider, GridOverlay, Message, Viewport, useImage } from './views.tsx'
 
@@ -79,7 +80,7 @@ export function TilesetEditor({ id }: { id: string }) {
     </>
   )
   return (
-    <Viewport initialZoom={5} tools={tools} touchAction="none" info={`${image.width}×${image.height} px · ${cols * rows} tiles · ${colours} colours${misfit ? ' · size is not a multiple of 8' : ''}`}>
+    <Viewport initialZoom={5} tools={tools} touchAction="none" info={`${image.width}×${image.height} px · ${colours} colours${misfit ? ' · size is not a multiple of 8' : ''}`} status={<TilesetBudgetReadout id={id} />}>
       {(zoom) => (
         <Box
           className="checker"

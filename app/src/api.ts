@@ -1,4 +1,4 @@
-import type { DocKind, Documents, Problem } from '@pecten-studio/core'
+import type { ArtCosts, DocKind, Documents, Problem } from '@pecten-studio/core'
 
 export interface AssetFile {
   path: string
@@ -10,6 +10,8 @@ export interface Bundle {
   docs: Documents
   problems: Problem[]
   assets: AssetFile[]
+  /** Tiles and palettes of the tileset and background images, worked out by the server. */
+  art: ArtCosts
 }
 
 export interface RomInfo {

@@ -81,6 +81,17 @@ Import a PNG (or pick one in the folder) in the room's Properties for the **Back
 
 The GBA draws four layers, so tile layers and backgrounds together are at most four. The map shows backgrounds as they lie at the room's top-left corner (a toolbar button hides them); the [Play](./build-and-play) panel shows them moving.
 
+## Tile and palette budget
+
+The GBA's video memory holds 1024 background tiles and 16 background palettes. The right end of the toolbar shows what this room puts there, such as "703/1024 tiles · 9/16 palettes":
+
+- **Tiles:** the tiles used by every room drawn with the same tileset (they share video memory), plus the distinct tiles of this room's background pictures. A tile repeated in a picture counts once.
+- **Palettes:** the tileset's, plus each background picture's.
+
+The readout updates as soon as a stroke ends. It turns amber from 90% of a limit and red past it. Hover it to see how the count is made up.
+
+A room over a limit is listed in Problems on the room, with the build helper's wording, for example "its backgrounds need 16 palettes and tileset "tiles" 1, which is 17; the GBA has 16 for backgrounds. Use fewer colour combinations in the pictures". A background picture that cannot be converted is reported on the first room, by id, that shows it. To go back under, use fewer colours or fewer distinct tiles in the pictures, or paint with fewer different tiles.
+
 ## Darkening layers
 
 A dimmed layer is drawn darker, so what is in front of it stands out: a dialogue box, the player, a pause menu. You choose which layers are dimmed and how dark they are.

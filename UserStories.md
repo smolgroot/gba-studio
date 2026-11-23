@@ -96,7 +96,7 @@ Notes / open questions
 | US-024 | VRAM, palette and OAM viewers | E3 | P1 | Proposed | M |
 | US-025 | Game log in the studio | E3 | P1 | Proposed | S |
 | US-026 | Frame time and CPU readout | E3 | P2 | Proposed | M |
-| US-030 | Palette and tile budgets while painting | E4 | P0 | Proposed | M |
+| US-030 | Palette and tile budgets while painting | E4 | P0 | Done | M |
 | US-031 | Sprite and OAM budget per room | E4 | P1 | Proposed | M |
 | US-032 | ROM size breakdown | E4 | P1 | Proposed | S |
 | US-033 | Build messages shown on the item they are about | E4 | P1 | Proposed | M |
@@ -582,7 +582,7 @@ On the GBA the limits are the engine settings. They should be visible while
 working, not only when the build fails.
 
 #### US-030 · Palette and tile budgets while painting
-**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** —
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** —
 **Touches** core, app
 
 As an author, I want to see palettes and tiles used against the 16 palettes and
@@ -590,10 +590,10 @@ As an author, I want to see palettes and tiles used against the 16 palettes and
 that I stay inside them.
 
 Acceptance criteria
-- [ ] A readout in tileset, pixel and room editors updates within a second of a
+- [x] A readout in tileset, pixel and room editors updates within a second of a
   change.
-- [ ] Results match the build helper's for the same input (shared test fixtures).
-- [ ] Going over turns the readout red and adds a problem pointing at the item.
+- [x] Results match the build helper's for the same input (shared test fixtures).
+- [x] Going over turns the readout red and adds a problem pointing at the item.
 
 #### US-031 · Sprite and OAM budget per room
 **Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —

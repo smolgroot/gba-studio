@@ -48,7 +48,8 @@ listed under [Known limits](#known-limits) and the [roadmap](#roadmap).
 - Problems are collected across the whole project and listed in the Problems panel;
   click one to open the item it belongs to. They cover missing files, unknown
   references, rooms with the wrong amount of tile data, overlapping rooms on the
-  world map, sprite frames that are not a GBA size, and more.
+  world map, sprite frames that are not a GBA size, rooms and tilesets over the 1024
+  background tiles or 16 background palettes, and more.
 
 ### Map editor
 
@@ -67,6 +68,9 @@ Open a room to paint it.
 - **Darkening:** a tile layer or background can be set to dim, and the room has one
   level, 0 to 16, for all dimmed layers. The room panel has a toggle per layer and a
   Darkness slider; sprites are never dimmed.
+- **Budget:** the toolbar shows the background tiles and palettes the room needs
+  against the GBA's 1024 and 16, amber near a limit and red past it. The tileset and
+  pixel editors show the same as you paint.
 - **Stamps:** click a tile in the tileset palette, or drag across several to paint
   a block. Painting a stamp over an area repeats its pattern from where the stroke
   began.
@@ -505,8 +509,8 @@ Honest list of what does not work yet:
   entity. The table of live entities takes 108 bytes of EWRAM a slot, with room for
   a quarter more entities than the project has (at least 16 more), so 500 entities
   take about 69 KB. More entities than that need a build, not a live apply.
-- **Budgets:** the studio does not yet show palette, tile or sprite budgets while you
-  draw; the build helper reports them when it runs.
+- **Budgets:** the tileset, pixel and map editors show background tiles and palettes
+  as you paint, but not sprite tile memory or the 128 sprites yet.
 - **Tilesets** are one 16-colour-palette set per tile (up to 16 palettes). The
   runtime uses 4 bits a pixel throughout.
 - **One ROM at a time**, and the game logic in the sample is a skeleton:
@@ -535,8 +539,8 @@ Roughly in order. Each item is useful on its own. The full, prioritised list is 
 
 - Hear MIDI, XM and MOD in the studio, and show an audio size estimate.
 - Edit collision classes and entity property definitions in the interface.
-- Palette, tile and sprite budget readouts while editing, with the build helper's
-  messages shown next to the item they are about.
+- Sprite budget readouts while editing, and the build helper's messages shown next
+  to the item they are about.
 - Map editor: rectangular selection with copy, paste and flip; room templates;
   autotile brushes.
 - Aseprite preview and conversion, including its tags as animations.

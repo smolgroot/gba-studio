@@ -29,6 +29,7 @@ import { api, fileUrl } from '../api.ts'
 import { Field, Fields, NumberInput, TextInput } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { BAR, ui } from '../theme.ts'
+import { ImageBudgetReadout } from './budget.tsx'
 import { Divider, Message, ToolButton, Viewport } from './views.tsx'
 
 type Tool = 'pencil' | 'eraser' | 'line' | 'rect' | 'rectFill' | 'ellipse' | 'fill' | 'pick' | 'pan'
@@ -535,7 +536,7 @@ export function PixelEditor({ path }: { path: string }) {
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ flex: 1, minHeight: 0 }}>
-        <Viewport initialZoom={Math.max(2, Math.min(16, Math.floor(ui(320) / Math.max(img.width, img.height))))} maxZoom={MAX_ZOOM} tools={tools} info={info} scroller={scroller} touchAction="none">
+        <Viewport initialZoom={Math.max(2, Math.min(16, Math.floor(ui(320) / Math.max(img.width, img.height))))} maxZoom={MAX_ZOOM} tools={tools} info={info} status={<ImageBudgetReadout path={path} pixels={img} version={version} />} scroller={scroller} touchAction="none">
           {(zoom) => (
             <Box
               className="checker"

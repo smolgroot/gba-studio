@@ -71,11 +71,13 @@ const MAX_ZOOM = 12
  * Ctrl + wheel zooms; `scroller` gives the editors the scrolling element, to pan it.
  * Past 8x, zoom moves in steps of 4 so a high `maxZoom` is a few clicks away.
  */
-export function Viewport({ initialZoom, maxZoom = MAX_ZOOM, tools, info, scroller, touchAction = 'pan-x pan-y', children }: {
+export function Viewport({ initialZoom, maxZoom = MAX_ZOOM, tools, info, status, scroller, touchAction = 'pan-x pan-y', children }: {
   initialZoom: number
   maxZoom?: number
   tools?: ReactNode
   info?: ReactNode
+  /** Shown whole at the end of the bar, where `info` may be cut short: the budgets. */
+  status?: ReactNode
   scroller?: RefObject<HTMLDivElement | null>
   touchAction?: string
   children: (zoom: number) => ReactNode
@@ -105,6 +107,7 @@ export function Viewport({ initialZoom, maxZoom = MAX_ZOOM, tools, info, scrolle
         <Typography variant="body2" sx={{ width: '3.2em', textAlign: 'center' }}>{zoom * 100}%</Typography>
         <ToolButton title="Zoom in (Ctrl + wheel)" disabled={zoom >= maxZoom} onClick={() => setZoom(zoomIn(zoom))}><AddIcon /></ToolButton>
         <Typography variant="body2" color="text.secondary" noWrap sx={{ ml: 2, flex: 1, minWidth: 0 }}>{info}</Typography>
+        {status && <Typography variant="body2" component="div" sx={{ flexShrink: 0, ml: 1 }}>{status}</Typography>}
       </Box>
       <Box ref={area} sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 4, bgcolor: '#161616', touchAction }}>{children(zoom)}</Box>
     </Box>

@@ -1,4 +1,6 @@
 // Checks across documents: the references and sizes a single schema cannot see.
+import { budgetProblems } from './budget.ts'
+import type { ArtLookup } from './budget.ts'
 import { behaviourEntityProblems, behaviourTypeProblems, isBehaviourProp } from './behaviours.ts'
 import { rleLength } from './rle.ts'
 import { MAX_SCREEN_LAYERS, SCREEN, SPRITE_SIZES, docPath } from './schema.ts'
@@ -25,7 +27,11 @@ function duplicates(ids: string[]): string[] {
   return [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))]
 }
 
-export function validateProject(docs: Documents, assetExists: (path: string) => boolean): Problem[] {
+/**
+ * Every problem across the documents. With `art`, the cost of the tileset and
+ * background images, the tile and palette budgets are checked too.
+ */
+export function validateProject(docs: Documents, assetExists: (path: string) => boolean, art?: ArtLookup): Problem[] {
   const problems: Problem[] = []
   const add = (severity: Problem['severity'], file: string, message: string) => problems.push({ severity, file, message })
   const needAsset = (file: string, path: string) => {
@@ -148,5 +154,6 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
     for (const sfx of audio.sfx) needAsset(file, sfx.file)
   }
 
+  if (art) problems.push(...budgetProblems(docs, art))
   return problems
 }

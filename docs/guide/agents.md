@@ -89,7 +89,7 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 
 When the ROM `run_rom` runs is out of date, its answer ends with a line that says so, for example "This ROM is out of date: Rust source changed: src/main.rs. Run the build tool to see the change.", or, when only level data changed, a note to run `patch_rom`. An agent then knows the pictures do not show its last edit.
 
-Every write is validated and answered with the problems it left in that file. Errors inside a tool come back as text the agent can act on ("the tileset has 16 tiles, numbered 0 to 15; there is no tile 99").
+Every write is validated and answered with the problems it left in that file. `validate` and `pecten-studio validate` also report rooms and tilesets over the 1024 background tiles or 16 background palettes, and images the build could not convert, so an agent sees them without running a build. Errors inside a tool come back as text the agent can act on ("the tileset has 16 tiles, numbered 0 to 15; there is no tile 99").
 
 ::: warning Art and music are yours
 No tool creates, changes or deletes a file under `assets/`: agents can use the art and music that is there, not make it.

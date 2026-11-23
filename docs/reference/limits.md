@@ -10,7 +10,7 @@ An honest list of what does not work yet.
 - **Darkening:** one level for all of a room's dimmed layers, set per room. Each layer is dimmed or not; two layers cannot have different amounts. Sprites are never dimmed. A change to dimming counts as a change to the rooms for live apply: the game must make a new `WorldView` to show it.
 - **Behaviours:** an entity type has at most 4. The game keeps room for 4 on every entity, whatever its type.
 - **Live entities:** the game keeps every entity of the world in a table in EWRAM, 108 bytes a slot. A build makes room for the project's entities and a quarter more, at least 16 more, rounded up to 16: the sample's 32 slots take 3,532 bytes, and 500 entities would get 640 slots, about 69 KB of the 256 KB. When the project has more entities than that, patching the ROM or applying live needs a build.
-- **Budgets:** the studio does not yet show palette, tile or sprite budgets while you draw; the build helper reports them when it runs.
+- **Budgets:** the tileset, pixel and map editors show background tiles and palettes against the 1024 and 16 as you paint, and Problems lists a room or tileset over them. Sprite tile memory and the 128 sprites are not counted yet; the build helper reports sprite sheets with too many colours when it runs.
 - **Tilesets** are one 16-colour-palette set per tile (up to 16 palettes). The runtime uses 4 bits a pixel throughout.
 - **One ROM at a time**, and the game logic in the sample is a skeleton: coins and diamonds to collect and one kind of enemy, but no health, combat, doors or saving. Those are the game's job, built on the runtime.
 - **Deleting** a room, tileset or sprite removes its file and cannot be undone from the studio.

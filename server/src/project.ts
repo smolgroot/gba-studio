@@ -3,8 +3,9 @@ import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { AGENTS_FILE, SKILL_FILE, agentsGuide, claudeSkill, mcpServerEntry } from './agents.ts'
-import { AssetPath, Id, MULTI_DOCS, SINGLE_DOCS, STUDIO_DIR, docPath, newProject, schemaFor, validateProject } from '@pecten-studio/core'
-import type { DocKind, Documents, MultiKind, Problem, SingleKind } from '@pecten-studio/core'
+import { AssetPath, Id, MULTI_DOCS, SINGLE_DOCS, STUDIO_DIR, artKey, artLookup, backgroundCost, docPath, newProject, schemaFor, tilesetCost, validateProject } from '@pecten-studio/core'
+import type { ArtCosts, ArtResult, ArtUse, DocKind, Documents, MultiKind, Problem, SingleKind } from '@pecten-studio/core'
+import { PNG } from 'pngjs'
 
 export class HttpError extends Error {
   status: number
@@ -27,6 +28,8 @@ export interface Bundle {
   docs: Documents
   problems: Problem[]
   assets: AssetFile[]
+  /** Tiles and palettes of the tileset and background images, for the editors' budgets. */
+  art: ArtCosts
 }
 
 /** Folders never listed as assets: build output, dependencies, version control, and the documents themselves. */
@@ -39,8 +42,43 @@ export const GENERATED_DIR = 'generated'
 export class ProjectFolder {
   readonly root: string
 
+  /** Tile and palette costs of the images, kept until the file changes: decoding every PNG on each load would be slow. */
+  private costs = new Map<string, { stamp: string; tileset?: ArtResult; background?: ArtResult }>()
+
   constructor(root: string) {
     this.root = realpathSync(path.resolve(root))
+  }
+
+  /**
+   * What each tileset and background image costs in tiles and palettes, as the build
+   * helper counts it, by `artKey`. An image that is missing or not a PNG has no cost:
+   * the problems for that are reported elsewhere.
+   */
+  async artCosts(docs: Documents): Promise<ArtCosts> {
+    const found: ArtCosts = {}
+    const read = async (rel: string, as: ArtUse) => {
+      try {
+        const abs = this.resolve(rel)
+        const info = await stat(abs)
+        const stamp = `${info.mtimeMs}:${info.size}`
+        let entry = this.costs.get(abs)
+        if (entry?.stamp !== stamp) {
+          entry = { stamp }
+          this.costs.set(abs, entry)
+        }
+        if (!entry[as]) {
+          const png = PNG.sync.read(await readFile(abs))
+          entry[as] = (as === 'tileset' ? tilesetCost : backgroundCost)(png.data, png.width, png.height)
+        }
+        found[artKey(rel, as)] = entry[as]!
+      } catch {
+        // Missing, outside the folder or not a PNG: validation says so.
+      }
+    }
+    for (const tileset of Object.values(docs.tilesets)) await read(tileset.image, 'tileset')
+    const pictures = new Set(Object.values(docs.rooms).flatMap((room) => (room.backgrounds ?? []).map((b) => b.image)))
+    for (const picture of pictures) if (picture.toLowerCase().endsWith('.png')) await read(picture, 'background')
+    return found
   }
 
   /** An absolute path for `rel`, refused if it leaves the game folder, directly or through a symlink. */
@@ -113,8 +151,9 @@ export class ProjectFolder {
         return false
       }
     }
-    problems.push(...validateProject(docs, exists))
-    return { folder: path.basename(this.root), initialised, docs, problems, assets }
+    const art = await this.artCosts(docs)
+    problems.push(...validateProject(docs, exists, artLookup(art)))
+    return { folder: path.basename(this.root), initialised, docs, problems, assets, art }
   }
 
   private async listAssets(): Promise<AssetFile[]> {

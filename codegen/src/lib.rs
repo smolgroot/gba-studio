@@ -46,6 +46,20 @@ pub struct Report {
     pub inputs: Vec<PathBuf>,
     /// One line per thing converted, with the numbers that count on a GBA.
     pub summary: Vec<String>,
+    /// What each room puts in video memory, as the studio's readout shows it.
+    pub budgets: Vec<RoomBudget>,
+}
+
+/// The background tiles and palettes a room needs on screen: the tiles every room
+/// drawn with its tileset uses, its pictures' distinct tiles, and their palettes.
+#[derive(Debug, PartialEq, Eq)]
+pub struct RoomBudget {
+    /// The room's id.
+    pub room: String,
+    /// Tiles in video memory, of the 1024 there is room for.
+    pub tiles: usize,
+    /// Background palettes, of 16.
+    pub palettes: usize,
 }
 
 /// Everything wrong with the project, one line each.
@@ -446,8 +460,16 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
 
     // What a room's pictures share with the rooms on screen beside it: the console's
     // four backgrounds, its 16 background palettes and the tiles video memory holds.
+    let mut budgets = Vec::new();
     for (id, room) in &docs.rooms {
         let Some(tileset) = tileset_ids.iter().position(|t| **t == room.tileset) else { continue };
+        // Two layers of one picture share its tiles and palettes.
+        let files: BTreeSet<&str> = room.backgrounds.iter().map(|b| b.image.as_str()).collect();
+        let costs: Vec<PictureCost> = files.iter().filter_map(|file| pictures.get(file).and_then(|(_, cost)| *cost)).collect();
+        let palettes = tileset_palettes[tileset] + costs.iter().map(|c| c.1).sum::<usize>();
+        let tiles = used_tiles[tileset].len() + costs.iter().map(|c| c.0).sum::<usize>();
+        budgets.push(RoomBudget { room: id.clone(), tiles, palettes });
+        // Without pictures, the tileset's own checks above cover the room.
         if room.backgrounds.is_empty() {
             continue;
         }
@@ -461,10 +483,6 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
                 most_layers[tileset],
             ));
         }
-        // Two layers of one picture share its tiles and palettes.
-        let files: BTreeSet<&str> = room.backgrounds.iter().map(|b| b.image.as_str()).collect();
-        let costs: Vec<PictureCost> = files.iter().filter_map(|file| pictures.get(file).and_then(|(_, cost)| *cost)).collect();
-        let palettes = tileset_palettes[tileset] + costs.iter().map(|c| c.1).sum::<usize>();
         if palettes > PALETTES {
             problems.push(format!(
                 "{file}: its backgrounds need {} palettes and tileset \"{name}\" {}, which is {palettes}; the GBA has {PALETTES} for backgrounds. Use fewer colour combinations in the pictures",
@@ -472,7 +490,6 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
                 tileset_palettes[tileset],
             ));
         }
-        let tiles = used_tiles[tileset].len() + costs.iter().map(|c| c.0).sum::<usize>();
         if tiles > MAX_TILES {
             problems.push(format!(
                 "{file}: its backgrounds have {} distinct tiles and the rooms drawn with tileset \"{name}\" use {}, which is {tiles}; video memory holds {MAX_TILES}. Make the pictures smaller or more repetitive",
@@ -876,7 +893,7 @@ pub mod audio {{
         return Err(Error(failed));
     }
     summary.push(format!("audio: {} tracks, {} sound effects", track_rows.len(), sfx_rows.len()));
-    Ok(Report { inputs, summary })
+    Ok(Report { inputs, summary, budgets })
 }
 
 #[cfg(test)]
@@ -903,6 +920,28 @@ mod tests {
         assert_eq!(decode(&[5, 0], 3), None);
         assert_eq!(decode(&[2, 0, 1], 3), None);
         assert_eq!(decode(&[0, 1, 3, 0], 3), None);
+    }
+
+    /// Each room's tiles and palettes are the ones `codegen/fixture/budget.json` gives,
+    /// which the studio's readout is checked against too.
+    #[test]
+    fn room_budgets_match_the_shared_fixture() {
+        let project = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixture");
+        let fixture: serde_json::Value = serde_json::from_str(&fs::read_to_string(project.join("budget.json")).unwrap()).unwrap();
+        let out = std::env::temp_dir().join(format!("pecten-studio-build-budget-{}", std::process::id()));
+        let report = generate(&Options { project, out: out.clone() }).unwrap_or_else(|error| panic!("{error}"));
+        let expected: Vec<RoomBudget> = fixture["project"]["rooms"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(room, b)| RoomBudget {
+                room: room.clone(),
+                tiles: b["tiles"].as_u64().unwrap() as usize,
+                palettes: b["palettes"].as_u64().unwrap() as usize,
+            })
+            .collect();
+        assert_eq!(report.budgets, expected);
+        fs::remove_dir_all(out).ok();
     }
 
     /// The fixture project generates, and what comes out matches what was painted.

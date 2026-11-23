@@ -22,6 +22,14 @@ Pencil, eraser, line, rectangle, filled rectangle, ellipse, fill, colour picker 
 - **Starter**: a 16-colour starter palette.
 - Every colour you choose (picker, hex field, swatches, eyedropper) is snapped to the GBA's 15-bit palette — 5 bits a channel — so you can only paint colours the console can show. The number of distinct colours is shown in the top bar as you draw.
 
+## Tile and palette budget
+
+For an image used as a tileset or a room background, the right end of the top bar shows the fullest room that uses it, such as "Badlands: 703/1024 tiles · 9/16 palettes". It is counted from the pixels on screen as you paint, before the image is saved, the same way as the [room's own readout](./rooms#tile-and-palette-budget). An image no room uses yet is counted as a tileset. The readout turns amber from 90% of a limit and red past it; hover it to see what is counted. If the image could not be converted, it says "not convertible" and gives the reason.
+
+![The pixel editor on a room background, with the tile and palette readout for the fullest room that uses it](/screenshots/pixel-editor-budget.png)
+
+Sprite sheets have no readout: sprites use their own video memory and palettes.
+
 ## Grids and view
 
 Toggle a pixel grid and an 8x8 tile grid. The mouse position is shown in pixels and tiles. Zoom with the buttons. You can **resize** the image, keeping its top-left corner.
