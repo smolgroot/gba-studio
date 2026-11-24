@@ -20,18 +20,39 @@ body { overflow: hidden; overscroll-behavior: none; }
   --dv-drag-over-background-color: rgba(76, 159, 254, 0.25);
 }
 
-/* Rounded tabs, as in recent VS Code: the top corners curve and tabs sit slightly apart. */
-.dockview-theme-dark .dv-tabs-container { padding: 4px 4px 0; gap: 2px; }
+/* Tabs as chips, as in recent browsers and IDEs: each is a rounded pill with a gap around it, no
+   dividers, and the close button appears on hover. The active chip is lighter and has an accent edge. */
+.dockview-theme-dark .dv-tabs-container { padding: 4px 6px; gap: 4px; align-items: center; }
+.dockview-theme-dark .dv-tabs-container .dv-tab:not(:first-child)::before { display: none; }
 .dockview-theme-dark .dv-tab {
-  border-radius: 6px 6px 0 0;
-  margin-right: 2px;
+  height: 26px;
+  padding: 0 6px 0 12px;
+  margin: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
-  border: 1px solid #3a3a3a;
-  border-bottom: none;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
-.dockview-theme-dark .dv-tab.dv-active-tab { border-color: #4a4a4a; }
+.dockview-theme-dark .dv-tab.dv-inactive-tab:hover { background-color: #2c2c2c; color: #d0d0d0; }
+.dockview-theme-dark .dv-tab.dv-active-tab {
+  background-color: #383838;
+  border-color: rgba(76, 159, 254, 0.55);
+  color: #f2f2f2;
+}
+.dockview-theme-dark .dv-tab .dv-default-tab-action { border-radius: 4px; }
+.dockview-theme-dark .dv-tab .dv-default-tab-action:hover { border-radius: 4px; background-color: rgba(255, 255, 255, 0.14); }
+.dockview-theme-dark .dv-tab:focus-visible { outline: 2px solid #4c9ffe; outline-offset: -2px; }
 /* Panels and groups get softly rounded corners too. */
 .dockview-theme-dark .dv-groupview { border-radius: 6px; overflow: hidden; border: 1px solid #3a3a3a; }
+
+/* Thin scrollbars in the studio's greys. The standard properties cover Firefox and current Chromium
+   (Electron); the webkit rules are for older engines. The thumb brightens on hover. */
+* { scrollbar-width: thin; scrollbar-color: #4a4a4a transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
+*::-webkit-scrollbar-thumb { background: #4a4a4a; border-radius: 4px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: #6a6a6a; background-clip: content-box; }
+.dockview-theme-dark { --dv-tabs-container-scrollbar-color: #4a4a4a; }
 
 .pixelated { image-rendering: pixelated; }
 /* Transparent pixels show over a checkerboard, as in any image editor. */
@@ -46,3 +67,7 @@ body { overflow: hidden; overscroll-behavior: none; }
 /* Number fields without spinners: values are typed or nudged with the arrow keys. */
 input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
 input[type='number']::-webkit-outer-spin-button, input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.dockview-theme-dark .dv-tab .dv-default-tab { gap: 6px; }
+.dockview-theme-dark .dv-tab .dv-default-tab .dv-default-tab-content { margin-right: 0; }
+.dockview-theme-dark .dv-tab .dv-default-tab-action { padding: 3px; }
