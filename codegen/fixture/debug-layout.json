@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "stamp": "PSGS",
   "size": 64,
   "fields": [
@@ -49,6 +49,8 @@
     { "name": "y", "offset": 4, "type": "i32" },
     { "name": "vx", "offset": 16, "type": "i32" },
     { "name": "vy", "offset": 20, "type": "i32" },
+    { "name": "homeX", "offset": 8, "type": "i32" },
+    { "name": "homeY", "offset": 12, "type": "i32" },
     { "name": "facesLeft", "offset": 24, "type": "bool" },
     { "name": "alive", "offset": 25, "type": "bool" },
     { "name": "hitboxX", "offset": 26, "type": "i16" },
@@ -59,5 +61,13 @@
     { "name": "room", "offset": 38, "type": "u16" },
     { "name": "index", "offset": 40, "type": "u16" },
     { "name": "built", "offset": 42, "type": "bool" }
+  ],
+  "playerEditSize": 20,
+  "playerEdit": [
+    { "name": "set", "offset": 0, "type": "u32" },
+    { "name": "x", "offset": 4, "type": "i32" },
+    { "name": "y", "offset": 8, "type": "i32" },
+    { "name": "vx", "offset": 12, "type": "i32" },
+    { "name": "vy", "offset": 16, "type": "i32" }
   ]
 }

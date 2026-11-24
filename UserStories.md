@@ -91,9 +91,9 @@ Notes / open questions
 | US-017 | Entity references between entities | E2 | P1 | Proposed | M |
 | US-018 | Custom behaviours written in the game | E2 | P1 | Proposed | M |
 | US-020 | Symbol map of game state | E3 | P0 | Done | M |
-| US-021 | Live entity inspector in the Play panel | E3 | P0 | In progress | L |
+| US-021 | Live entity inspector in the Play panel | E3 | P0 | Done | L |
 | US-021a | Live entity list and selecting on the game screen | E3 | P0 | Done | M |
-| US-021b | Edit a live entity's numbers while the game runs | E3 | P0 | Proposed | M |
+| US-021b | Edit a live entity's numbers while the game runs | E3 | P0 | Done | M |
 | US-022 | Debug overlays on the game screen | E3 | P0 | Proposed | M |
 | US-023 | Pause, step a frame, rewind | E3 | P1 | Proposed | M |
 | US-024 | VRAM, palette and OAM viewers | E3 | P1 | Proposed | M |
@@ -542,7 +542,7 @@ Acceptance criteria
 - [x] Release builds can leave it out.
 
 #### US-021 · Live entity inspector in the Play panel
-**Priority** P0 · **Status** In progress · **Size** L · **Depends on** US-020
+**Priority** P0 · **Status** Done · **Size** L · **Depends on** US-020
 **Touches** app, Pecten core
 
 As an author, I want to see the live entities, their positions, velocities and
@@ -552,7 +552,7 @@ something behaves wrongly.
 Acceptance criteria
 - [x] A panel lists live entities, updated every frame, with the player first. (US-021a)
 - [x] Clicking one on the game screen selects it in the list. (US-021a)
-- [ ] Editing a number writes it to memory and the game uses it on the next frame.
+- [x] Editing a number writes it to memory and the game uses it on the next frame. (US-021b)
 
 Split into US-021a and US-021b, one branch each; this story is `Done` when both are.
 The criteria above are shared out between them unchanged. Design:
@@ -576,22 +576,29 @@ Acceptance criteria
 Design: `design/US-021.md`.
 
 #### US-021b · Edit a live entity's numbers while the game runs
-**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-021a
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-021a
 **Touches** runtime, core, app
 
 As an author, I want to change a live entity's or the player's numbers while the
 game runs, so that I can try a fix without rebuilding.
 
 Acceptance criteria
-- [ ] Editing a number writes it to memory and the game uses it on the next frame.
+- [x] Editing a number writes it to memory and the game uses it on the next frame.
+  (`writeLive` in `server/test/inspect.test.ts`; the sample's dev ROM run headless in
+  `server/test/debugmap.test.ts`: a coin moved onto the player is taken, a sentry's
+  home moved 40 pixels moves it 40, `alive` cleared takes an entity out, and the
+  player's x is where it was written, each on the next frame; the
+  `play-entities-edit` screenshot.)
 
-Open questions
-- The player's body is a local of the game's `main`; the block holds a copy, so a
-  write to the block does not reach the game. The player needs a way back in (an
-  address in the block, or a request through the inbox).
-- Properties as placed are in the ROM's data section and the behaviours' copies of
-  them are not laid out for tools. Is editing them live apply's job (US-003), leaving
-  this story to the entity's position, speed, facing and whether it is alive?
+Decided (the open questions, settled when the story was built; see
+`design/US-021.md`)
+- The player's body is a local of the game's `main`, which the compiler may keep in
+  registers, so the studio does not write it. It writes a player edit to RAM, found
+  through the debug record (version 5), and the game takes it once a frame with
+  `debug::apply_player_edit(&mut body)`.
+- Properties as placed stay live apply's job (US-003): edit them in the room. This
+  story edits an entity's position, speed, home (where a patrol walks around),
+  facing and whether it is alive, and the player's position and speed.
 
 #### US-022 · Debug overlays on the game screen
 **Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-020

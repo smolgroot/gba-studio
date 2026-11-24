@@ -6,7 +6,7 @@ import { DEBUG_LAYOUTS, ROM_ADDRESS, readDebugMap, readGameState } from '@pecten
 const FIXTURE = fileURLToPath(new URL('../../codegen/fixture/', import.meta.url))
 
 /** A ROM of zeros with a debug record at `at`, and optionally a data section at `section`. */
-function rom({ at = 0x100, version = 4, address = 0x0200_0000, size = 64, inbox = 0x0200_0040, inboxSize = 12, entities = 0x0200_0050, entitiesSize = 12, section }: { at?: number; version?: number; address?: number; size?: number; inbox?: number; inboxSize?: number; entities?: number; entitiesSize?: number; section?: number } = {}): Uint8Array {
+function rom({ at = 0x100, version = 5, address = 0x0200_0000, size = 64, inbox = 0x0200_0040, inboxSize = 12, entities = 0x0200_0050, entitiesSize = 12, player = 0x0200_0060, playerSize = 20, section }: { at?: number; version?: number; address?: number; size?: number; inbox?: number; inboxSize?: number; entities?: number; entitiesSize?: number; player?: number; playerSize?: number; section?: number } = {}): Uint8Array {
   const bytes = new Uint8Array(0x8000)
   const view = new DataView(bytes.buffer)
   bytes.set([...'PECTDBUG'].map((c) => c.charCodeAt(0)), at)
@@ -21,20 +21,24 @@ function rom({ at = 0x100, version = 4, address = 0x0200_0000, size = 64, inbox 
     view.setUint32(at + 44, entities, true)
     view.setUint32(at + 48, entitiesSize, true)
   }
+  if (version >= 5) {
+    view.setUint32(at + 52, player, true)
+    view.setUint32(at + 56, playerSize, true)
+  }
   if (section !== undefined) bytes.set(readFileSync(`${FIXTURE}expected/studio_data.bin`), section)
   return bytes
 }
 
 describe('debug map', () => {
   it('has the layout the runtime writes, as the shared fixture holds it', () => {
-    expect(DEBUG_LAYOUTS[4]).toEqual(JSON.parse(readFileSync(`${FIXTURE}debug-layout.json`, 'utf8')))
+    expect(DEBUG_LAYOUTS[5]).toEqual(JSON.parse(readFileSync(`${FIXTURE}debug-layout.json`, 'utf8')))
   })
 
   it('reads the block address and layouts from the ROM record', () => {
     const result = readDebugMap(rom({ address: 0x0200_0080 }))
     expect(result).not.toBeNull()
     if (!result || 'problem' in result) throw new Error('expected a map')
-    expect(result.map.version).toBe(4)
+    expect(result.map.version).toBe(5)
     expect(result.map.state).toMatchObject({ address: 0x0200_0080, size: 64, stamp: 'PSGS' })
     expect(result.map.inbox).toEqual({ address: 0x0200_0040, size: 12, fields: [{ name: 'generation', offset: 0, type: 'u32' }, { name: 'changed', offset: 4, type: 'u32' }, { name: 'seen', offset: 8, type: 'u32' }] })
     expect(result.map.state.fields.find((f) => f.name === 'player')).toEqual({ name: 'player', offset: 20, type: 'body' })
@@ -64,6 +68,26 @@ describe('debug map', () => {
     if (!older || 'problem' in older) throw new Error('expected a map')
     expect(older.map.version).toBe(3)
     expect(older.map.entities).toBeNull()
+    // Version 5 adds the entities' home to the slot; version 4 slots have none.
+    expect(result.map.entities?.slot.fields).toEqual(expect.arrayContaining([{ name: 'homeX', offset: 8, type: 'i32' }, { name: 'homeY', offset: 12, type: 'i32' }]))
+    const four = readDebugMap(rom({ version: 4 }))
+    if (!four || 'problem' in four) throw new Error('expected a map')
+    expect(four.map.entities?.slot.fields.map((f) => f.name)).not.toContain('homeX')
+  })
+
+  it('says where the player edit is, from version 5', () => {
+    const result = readDebugMap(rom({ player: 0x0200_0200 }))
+    if (!result || 'problem' in result) throw new Error('expected a map')
+    expect(result.map.playerEdit).toEqual({
+      address: 0x0200_0200,
+      size: 20,
+      fields: [{ name: 'set', offset: 0, type: 'u32' }, { name: 'x', offset: 4, type: 'i32' }, { name: 'y', offset: 8, type: 'i32' }, { name: 'vx', offset: 12, type: 'i32' }, { name: 'vy', offset: 16, type: 'i32' }],
+    })
+    const older = readDebugMap(rom({ version: 4 }))
+    if (!older || 'problem' in older) throw new Error('expected a map')
+    expect(older.map.playerEdit).toBeNull()
+    expect(readDebugMap(rom({ playerSize: 16 }))).toEqual({ problem: expect.stringContaining('player edit is 16 bytes') })
+    expect(readDebugMap(rom({ player: 0x0800_0000 }))).toEqual({ problem: expect.stringContaining('puts the player edit at 0x08000000') })
   })
 
   it('says what is wrong with an entity table it cannot use', () => {

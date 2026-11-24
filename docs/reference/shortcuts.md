@@ -55,3 +55,14 @@
 | `Enter` | Start |
 | `Shift` | Select |
 | `A` / `S` | L / R |
+
+## Entities list
+
+In a field of an open row of the Play panel's [Entities list](../guide/build-and-play#changing-numbers):
+
+| Key | Action |
+| --- | --- |
+| `Enter` | Write the value into the running game |
+| `Escape` | Leave the field without writing |
+
+While a field has the focus, keys go to it, not to the game.

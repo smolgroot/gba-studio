@@ -89,7 +89,7 @@ Open **Play** in the Project panel. It runs the built ROM on the [Pecten](https:
 | **Restart on rebuild** | Restart by itself when the ROM is rebuilt. |
 | **Patch on change** | While the game runs, put each saved change to the level data into the ROM without a build. On by default. |
 | **Live apply** | Put a patched change into the game that is running, instead of restarting it. On by default. See [Live apply](#live-apply). |
-| **Entities** | Show the list of the player and the live entities beside the game, and let you pick one on the game screen. On by default. See [Entities](#entities). |
+| **Entities** | Show the list of the player and the live entities beside the game, let you pick one on the game screen, and change its numbers while the game runs. On by default. See [Entities](#entities). |
 
 The panel names the ROM, its size and when it was built. On touch devices, on-screen buttons appear.
 
@@ -157,16 +157,27 @@ The first line says the frame, the room the player is in and the camera's top-le
 
 The list holds the entities of the player's room and of each room touching it on the [world map](./world-map), sharing an edge or a corner: the rooms the game is running. Entities that were taken or destroyed are not listed. Nor is the player start, which the sample takes off the table on the first frame. Shots and other things the game makes while it runs are not in the table, so they are not listed either.
 
-Click a row to select it and open it. An entity shows:
+Click a row to select it and open it. The numbers in an open row can be changed while the game runs (see [Changing numbers](#changing-numbers)). An entity shows:
 
 | Line | What it is |
 | --- | --- |
+| x, y | Its feet, in world pixels. |
+| vx, vy | Its speed, in whole pixels a frame. |
+| home x, home y | Where it was placed, in world pixels. A patrol walks around it. |
+| faces left | Ticked when it faces left. |
+| alive | Ticked while it is in the game. |
 | room | The room it was placed in. |
 | hitbox | Its size and where it sits from the feet, or "none (no sprite)" for a type with no sprite. |
-| facing | Left or right. |
 | Properties as placed | Its properties and those of its type's behaviours, as the running ROM gives them to the game. A behaviour that changes its settings as it runs keeps its own copy, which is not shown. |
 
-The player shows its size and whether it is on the ground or has hit a wall or a ceiling.
+The player shows:
+
+| Line | What it is |
+| --- | --- |
+| x, y | The top-left corner of its body, in world pixels. |
+| vx (1/256), vy (1/256) | Its speed, in 1/256 pixel a frame: 256 is one pixel a frame. |
+| size | Its width and height in pixels. |
+| state | Whether it is on the ground or has hit a wall or a ceiling, or "in the air". |
 
 You can also click a thing on the game screen. It is selected in the list, its row opens, and its box is outlined in blue on the screen. Where several boxes overlap, the smallest is picked, so a coin in front of a door can still be chosen. An entity with no sprite has no box, so it is picked by a small square standing on its feet. Clicking an empty spot clears the selection.
 
@@ -181,6 +192,40 @@ The list reads the game's memory through the [debug map](../reference/debug-map)
 | The game does not use the generated entity table (data::entities()), so there are no entities to list. | The game keeps its entities in its own way. Only the player is listed. |
 
 A game needs no code for the list: the generated `data::entities()` tells the studio where the table is (see [In the frame loop](./making-a-game#in-the-frame-loop)). It costs the game nothing a frame and nothing in a release build.
+
+#### Changing numbers
+
+To try a fix without a build, change a number in the open row while the game runs. A field shows the live value, which changes every frame, until you click into it; from then on it keeps what you type. Press `Enter` or leave the field to write the value, or press `Escape` to put the live value back. The game uses the new value on its next frame.
+
+![The entity list with a coin's x changed while the game runs, and the coin moved on the screen](/screenshots/play-entities-edit.png)
+
+| Key | What it does |
+| --- | --- |
+| `Enter` | Write the value you typed. Leaving the field does the same. |
+| `Escape` | Leave the field without writing, and show the live value again. |
+
+While a field has the focus, the keys you press go to it, not to the game.
+
+Tick or untick **faces left** to turn an entity round. Untick **alive** to take it out of the game: it leaves the list, as a coin you took does.
+
+A patrol sets its x from its home every frame, so a new x for it is lost on the next frame. Its row says "A patrol walks around its home and sets its x every frame: change its home to move it." Change **home x** or **home y** instead, and the patrol moves by as much.
+
+Only the numbers above can be changed here. The player's size and state, and an entity's room and hitbox, are read only. Properties as placed are changed in the room, as the list says: "Properties as placed: change them in the room, and Live apply puts them in" (see [Live apply](#live-apply)).
+
+A change made here is in the game's memory only. Restarting the game, or a live apply that changes entities, builds the entities again from the rooms. To keep a value, put it in the room.
+
+The player is a local of the game's code, which the studio cannot safely write, so it asks the game to take the change. The game does that with one call a frame, `debug::apply_player_edit` (see [Making a game with it](./making-a-game#the-runtime)). The sample makes this call. A game that does not call it never takes the change: its player stays as it was, and the list says “The game has not taken the change to the player”. Entities need no code.
+
+When a change can't be made, the row says "Not changed:" and why:
+
+| The row says | Why |
+| --- | --- |
+| Not changed: x must be a whole number. | The value has a fraction, or is not a number. |
+| Not changed: x must be from -2147483648 to 2147483647. | The game keeps each number in 32 bits, which hold no more than that. |
+| Not changed: #1 is no longer live: it was taken, or its room is no longer active. | The entity left the game before the value was written. |
+| Not changed: Build again to change it: this ROM was built by an older studio. Its debug map has no player edit. | The dev ROM was built before the player could be changed. Its entities' x, y, vx, vy, faces left and alive can still be changed; their home is not shown. |
+
+Changing numbers works on dev ROMs only, as the list does. It costs the game 20 bytes of EWRAM and one read a frame for the player, and nothing in a release build.
 
 ### Keyboard
 

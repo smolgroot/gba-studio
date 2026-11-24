@@ -7,7 +7,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { applyLive, indexSection, liveTaken, pickAt, planLiveApply, readDebugMap, readLive, rowBox, rowKey, startAt } from '@pecten-studio/core'
+import { applyLive, indexSection, liveTaken, pickAt, planLiveApply, readDebugMap, readLive, rowBox, rowKey, startAt, writeLive } from '@pecten-studio/core'
 import type { DebugMap, LiveView, SectionIndex, StartSpot } from '@pecten-studio/core'
 import { api, fileUrl } from '../api.ts'
 import type { PatchResult, RomInfo, ToolchainReport } from '../api.ts'
@@ -513,7 +513,21 @@ export function PlayView() {
             style={{ width: '100%', height: '100%', display: 'block', cursor: showEntities ? 'crosshair' : undefined }}
           />
         </Box>
-        {showEntities && <EntityList view={live} selected={selected} onSelect={setSelected} message={inspectMessage} />}
+        {showEntities && (
+          <EntityList
+            view={live}
+            selected={selected}
+            onSelect={setSelected}
+            message={inspectMessage}
+            // Between frames, as the loop only steps on the display clock: the game uses it on its next frame.
+            onChange={(key, field, value) => {
+              const core = emulator.current
+              const map = inspecting.current.map
+              if (!core || !map) return 'the game is not running'
+              return writeLive(core, map, key, field, value)?.problem ?? null
+            }}
+          />
+        )}
       </Box>
       <Typography variant="body2" color="text.secondary">Arrows move · X is A · Z is B · Enter is Start · Shift is Select · A and S are L and R</Typography>
       {touch && (

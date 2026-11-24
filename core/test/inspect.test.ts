@@ -11,6 +11,7 @@ const entity = (index: number, x: number, y: number, hitbox = { x: -8, y: -16, w
   y,
   vx: 0,
   vy: 0,
+  home: { x, y },
   facesLeft: false,
   hitbox,
   properties: [],
@@ -23,6 +24,7 @@ const view: LiveView = {
   room: 'entry',
   camera: { x: 100, y: 50 },
   note: null,
+  playerEditWaiting: false,
   rows: [
     { kind: 'player', x: 120, y: 60, w: 10, h: 14, vx: 0, vy: 0, onGround: true, hitWall: false, hitCeiling: false },
     entity(1, 200, 100),

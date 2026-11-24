@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { RAM_REGIONS, indexSection, readDebugMap, readGameState, readLive } from '@pecten-studio/core'
-import type { DebugMap, LiveEntityRow } from '@pecten-studio/core'
+import { RAM_REGIONS, indexSection, readDebugMap, readGameState, readLive, writeLive } from '@pecten-studio/core'
+import type { DebugMap, LiveEntityRow, LivePlayer, LiveView } from '@pecten-studio/core'
 import { Builder } from '../src/build.ts'
 import { ProjectFolder } from '../src/project.ts'
 
@@ -44,7 +44,7 @@ describe.skipIf(!ready)('the debug map a build writes', () => {
     expect(lines).toContain(`debug map: ${ROM}.debug.json`)
     const written = map(ROM)
     expect(written.rom).toBe(ROM)
-    expect(written.version).toBe(4)
+    expect(written.version).toBe(5)
     expect(written.startOverride?.size).toBe(16)
     expect(written.inbox?.size).toBe(12)
     expect(written.entities?.slot.size).toBe(108)
@@ -166,6 +166,61 @@ describe.skipIf(!ready)('the debug map a build writes', () => {
         expect(after.frame - start.frame).toBe(60)
         expect(after.rows[0]!.x).toBeGreaterThan(start.rows[0]!.x)
         expect(sentry(after.rows).x).not.toBe(sentry(start.rows).x)
+      } finally {
+        emulator.free()
+      }
+    })
+
+    it('takes a value changed in the list on the next frame', async () => {
+      await builder.run('dev')
+      const debug = map(ROM)
+      const bytes = new Uint8Array(readFileSync(file(ROM)))
+      const section = indexSection(bytes)
+      const mod = await import(pathToFileURL(CORE).href)
+      await mod.default({ module_or_path: await readFile(CORE.replace(/\.js$/, '_bg.wasm')) })
+      const emulator = new mod.WasmEmulator(bytes, false)
+      const read = () => {
+        const live: LiveView = readLive(emulator, debug, section)
+        if (live.state !== 'running') throw new Error(`expected a running game, got ${JSON.stringify(live)}`)
+        return { live, player: live.rows[0] as LivePlayer, entity: (index: number) => live.rows.find((r) => r.kind === 'entity' && r.index === index) as LiveEntityRow | undefined }
+      }
+      const change = (target: 'player' | number, field: string, value: number | boolean) => expect(writeLive(emulator, debug, target, field, value)).toBeNull()
+      try {
+        for (let i = 0; i < 120; i++) emulator.step_frame()
+
+        // A coin moved onto the player's feet is taken on the next frame: it leaves
+        // the list and its collected bit is set.
+        let now = read()
+        const coin = now.live.rows.find((r) => r.kind === 'entity' && r.type === 'coin') as LiveEntityRow
+        change(coin.index, 'x', now.player.x + Math.floor(now.player.w / 2))
+        change(coin.index, 'y', now.player.y + now.player.h)
+        emulator.step_frame()
+        now = read()
+        expect(now.entity(coin.index)).toBeUndefined()
+        const block = readGameState(debug, emulator.read_ram(debug.state.address, debug.state.size)) as any
+        const bits = emulator.read_ram(block.collected, block.collectedWords * 4)
+        expect(bits[coin.index >> 3]! & (1 << (coin.index & 7))).not.toBe(0)
+
+        // The sentry walks around its home: moving the home 40 pixels moves it 40.
+        const sentry = now.live.rows.find((r) => r.kind === 'entity' && r.type === 'sentry-bot') as LiveEntityRow
+        change(sentry.index, 'homeX', sentry.home!.x + 40)
+        emulator.step_frame()
+        now = read()
+        expect(Math.abs(now.entity(sentry.index)!.x - (sentry.x + 40))).toBeLessThanOrEqual(1)
+
+        // Taking an entity out by clearing alive.
+        const other = now.live.rows.find((r) => r.kind === 'entity' && r.index !== sentry.index) as LiveEntityRow
+        change(other.index, 'alive', false)
+        emulator.step_frame()
+        expect(read().entity(other.index)).toBeUndefined()
+
+        // The player, standing still on the floor, moved 30 pixels right.
+        const x = read().player.x + 30
+        change('player', 'x', x)
+        emulator.step_frame()
+        expect(read().player.x).toBe(x)
+        // The sample calls debug::apply_player_edit, so nothing is left waiting.
+        expect(read().live.playerEditWaiting).toBe(false)
       } finally {
         emulator.free()
       }

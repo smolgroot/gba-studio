@@ -5,10 +5,11 @@
 import { readSection } from './datasection.ts'
 
 const RECORD_MAGIC = [...'PECTDBUG'].map((c) => c.charCodeAt(0))
-/** Version 1 records are 20 bytes; version 2 adds the inbox's address and size (28), version 3 the start override (44), version 4 the entity table's cell (52). */
+/** Version 1 records are 20 bytes; version 2 adds the inbox's address and size (28), version 3 the start override (44), version 4 the entity table's cell (52), version 5 the player edit (60). */
 const RECORD_SIZE = 20
 const START_AT = 28
 const ENTITIES_AT = 44
+const PLAYER_AT = 52
 /** Where the GBA maps the cartridge: ROM offset 0 is this address. */
 export const ROM_ADDRESS = 0x0800_0000
 /** The two work RAMs the block can be in. */
@@ -59,6 +60,8 @@ interface Layout {
   table?: readonly DebugField[]
   slotSize?: number
   slot?: readonly DebugField[]
+  playerEditSize?: number
+  playerEdit?: readonly DebugField[]
 }
 
 const INBOX_FIELDS = [
@@ -71,6 +74,25 @@ const START_FIELDS = [
   { name: 'room', offset: 4, type: 'u32' },
   { name: 'x', offset: 8, type: 'i32' },
   { name: 'y', offset: 12, type: 'i32' },
+] as const
+
+const TABLE_FIELDS = [
+  { name: 'address', offset: 0, type: 'address' },
+  { name: 'slots', offset: 4, type: 'u32' },
+  { name: 'slotSize', offset: 8, type: 'u32' },
+] as const
+/** The slot's fields after the speed, the same in versions 4 and 5. */
+const SLOT_TAIL = [
+  { name: 'facesLeft', offset: 24, type: 'bool' },
+  { name: 'alive', offset: 25, type: 'bool' },
+  { name: 'hitboxX', offset: 26, type: 'i16' },
+  { name: 'hitboxY', offset: 28, type: 'i16' },
+  { name: 'hitboxW', offset: 30, type: 'u16' },
+  { name: 'hitboxH', offset: 32, type: 'u16' },
+  { name: 'kind', offset: 36, type: 'u16' },
+  { name: 'room', offset: 38, type: 'u16' },
+  { name: 'index', offset: 40, type: 'u16' },
+  { name: 'built', offset: 42, type: 'bool' },
 ] as const
 
 /**
@@ -123,11 +145,7 @@ export const DEBUG_LAYOUTS = {
     startSize: 16,
     start: START_FIELDS,
     tableSize: 12,
-    table: [
-      { name: 'address', offset: 0, type: 'address' },
-      { name: 'slots', offset: 4, type: 'u32' },
-      { name: 'slotSize', offset: 8, type: 'u32' },
-    ],
+    table: TABLE_FIELDS,
     // A slot of the table (`LiveEntity`): the actor's position (its feet), speed in
     // whole pixels a frame, facing, whether it is alive and its hitbox (offset from
     // the feet), then its type, room and number in the world, and whether the slot
@@ -138,16 +156,41 @@ export const DEBUG_LAYOUTS = {
       { name: 'y', offset: 4, type: 'i32' },
       { name: 'vx', offset: 16, type: 'i32' },
       { name: 'vy', offset: 20, type: 'i32' },
-      { name: 'facesLeft', offset: 24, type: 'bool' },
-      { name: 'alive', offset: 25, type: 'bool' },
-      { name: 'hitboxX', offset: 26, type: 'i16' },
-      { name: 'hitboxY', offset: 28, type: 'i16' },
-      { name: 'hitboxW', offset: 30, type: 'u16' },
-      { name: 'hitboxH', offset: 32, type: 'u16' },
-      { name: 'kind', offset: 36, type: 'u16' },
-      { name: 'room', offset: 38, type: 'u16' },
-      { name: 'index', offset: 40, type: 'u16' },
-      { name: 'built', offset: 42, type: 'bool' },
+      ...SLOT_TAIL,
+    ],
+  },
+  // Version 5: where the entity was placed (its home, which a patrol walks around) in
+  // the slot, and the player edit the game takes with `debug::apply_player_edit`.
+  5: {
+    version: 5,
+    stamp: 'PSGS',
+    size: 64,
+    fields: BLOCK_FIELDS,
+    bodySize: 36,
+    body: BODY_FIELDS,
+    inboxSize: 12,
+    inbox: INBOX_FIELDS,
+    startSize: 16,
+    start: START_FIELDS,
+    tableSize: 12,
+    table: TABLE_FIELDS,
+    slotSize: 108,
+    slot: [
+      { name: 'x', offset: 0, type: 'i32' },
+      { name: 'y', offset: 4, type: 'i32' },
+      { name: 'vx', offset: 16, type: 'i32' },
+      { name: 'vy', offset: 20, type: 'i32' },
+      { name: 'homeX', offset: 8, type: 'i32' },
+      { name: 'homeY', offset: 12, type: 'i32' },
+      ...SLOT_TAIL,
+    ],
+    playerEditSize: 20,
+    playerEdit: [
+      { name: 'set', offset: 0, type: 'u32' },
+      { name: 'x', offset: 4, type: 'i32' },
+      { name: 'y', offset: 8, type: 'i32' },
+      { name: 'vx', offset: 12, type: 'i32' },
+      { name: 'vy', offset: 16, type: 'i32' },
     ],
   },
 } as const satisfies Record<number, Layout>
@@ -158,7 +201,7 @@ export const LIVE_CHANGES = { tiles: 1, physics: 2, entities: 4, rooms: 8 } as c
 /** What `<rom>.debug.json` holds. */
 export interface DebugMap {
   /** The ROM record's version. */
-  version: 1 | 2 | 3 | 4
+  version: 1 | 2 | 3 | 4 | 5
   /** The game's state block in RAM: read `size` bytes at `address`. */
   state: {
     address: number
@@ -196,6 +239,11 @@ export interface DebugMap {
    * its table. `slot` is the layout of each slot.
    */
   entities: { address: number; size: number; fields: DebugField[]; slot: { size: number; fields: DebugField[] } } | null
+  /**
+   * Where the studio asks the game to change the player (record version 5; null
+   * before): `set` (1 while the request waits), `x`, `y`, `vx`, `vy`, as the body's.
+   */
+  playerEdit: { address: number; size: number; fields: DebugField[] } | null
 }
 
 export type DebugMapResult = { map: DebugMap } | { problem: string } | null
@@ -251,6 +299,16 @@ export function readDebugMap(rom: Uint8Array): DebugMapResult {
     entities = { address: cell, size: cellSize, fields: layout.table.map((f) => ({ ...f })), slot: { size: layout.slotSize!, fields: layout.slot!.map((f) => ({ ...f })) } }
   }
 
+  let playerEdit: DebugMap['playerEdit'] = null
+  if (layout.playerEdit) {
+    if (at + PLAYER_AT + 8 > rom.length) return { problem: 'the ROM ends inside its debug record; rebuild the game' }
+    const edit = view.getUint32(at + PLAYER_AT, true)
+    const editSize = view.getUint32(at + PLAYER_AT + 4, true)
+    if (editSize !== layout.playerEditSize) return { problem: `the ROM's debug record says the player edit is ${editSize} bytes, but version ${version} player edits are ${layout.playerEditSize}; rebuild the game with the studio's runtime` }
+    if (!inRam(edit, editSize)) return { problem: `the ROM's debug record puts the player edit at ${hex(edit)}, which is not in EWRAM or IWRAM; rebuild the game` }
+    playerEdit = { address: edit, size: editSize, fields: layout.playerEdit.map((f) => ({ ...f })) }
+  }
+
   const section = readSection(rom)
   return {
     map: {
@@ -262,6 +320,7 @@ export function readDebugMap(rom: Uint8Array): DebugMapResult {
       inbox,
       startOverride,
       entities,
+      playerEdit,
     },
   }
 }

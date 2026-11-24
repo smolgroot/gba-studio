@@ -1,6 +1,7 @@
-// The live entity list (US-021a): what a running game holds, read from the emulator's
-// memory through the debug map, and named from the running ROM's data section. See
-// design/US-021.md and docs/reference/debug-map.md.
+// The live entity list (US-021a, US-021b): what a running game holds, read from the
+// emulator's memory through the debug map and named from the running ROM's data
+// section, and changes to it written back. See design/US-021.md and
+// docs/reference/debug-map.md.
 import { readPlacements, readSection } from './datasection.ts'
 import type { PlacedProperty, PlacedRoom } from './datasection.ts'
 import { RAM_REGIONS, readField, readGameState } from './debugmap.ts'
@@ -74,6 +75,8 @@ export interface LiveEntityRow {
   y: number
   vx: number
   vy: number
+  /** Where it was placed, in world pixels: a patrol walks around it. Null for a ROM from before record version 5. */
+  home: { x: number; y: number } | null
   facesLeft: boolean
   hitbox: { x: number; y: number; w: number; h: number }
   /** As placed, from the running ROM: not a behaviour's own copy, which may change as it runs. */
@@ -96,6 +99,11 @@ export type LiveView =
       rows: LiveRow[]
       /** Why no entities are listed, when they cannot be. */
       note: string | null
+      /**
+       * A change to the player is still waiting after the game has run a frame: the game
+       * does not call `debug::apply_player_edit`, so it will never take it.
+       */
+      playerEditWaiting: boolean
     }
 
 const inRam = (address: number, size: number) => Object.values(RAM_REGIONS).some((r) => address >= r.start && address + size <= r.start + r.size)
@@ -131,6 +139,9 @@ export function readLive(emulator: Pick<LiveTarget, 'read_ram'>, map: DebugMap, 
     hitCeiling: body.hitCeiling as boolean,
   }
   const roomIndex = state.room as number
+  // Read after the game's frame: a request still set is one the game skipped.
+  const edit = map.playerEdit
+  const playerEditWaiting = !!edit && new DataView(emulator.read_ram(edit.address, 4).buffer).getUint32(0, true) === 1
   const running = (rows: LiveRow[], note: string | null): LiveView => ({
     state: 'running',
     frame: state.frame as number,
@@ -138,6 +149,7 @@ export function readLive(emulator: Pick<LiveTarget, 'read_ram'>, map: DebugMap, 
     camera: { x: state.cameraX as number, y: state.cameraY as number },
     rows,
     note,
+    playerEditWaiting,
   })
 
   const table = map.entities
@@ -165,6 +177,7 @@ export function readLive(emulator: Pick<LiveTarget, 'read_ram'>, map: DebugMap, 
       y: slot.y as number,
       vx: slot.vx as number,
       vy: slot.vy as number,
+      home: 'homeX' in slot ? { x: slot.homeX as number, y: slot.homeY as number } : null,
       facesLeft: slot.facesLeft as boolean,
       hitbox: { x: slot.hitboxX as number, y: slot.hitboxY as number, w: slot.hitboxW as number, h: slot.hitboxH as number },
       properties: section.entities[index]?.properties ?? [],
@@ -207,3 +220,71 @@ export function pickAt(view: LiveView, screenX: number, screenY: number): LiveRo
   }
   return best
 }
+
+/** What can be changed in a live entity, as the slot names it. */
+export const ENTITY_EDITS = ['x', 'y', 'vx', 'vy', 'homeX', 'homeY', 'facesLeft', 'alive'] as const
+/** What can be changed in the player, as the player edit names it. */
+export const PLAYER_EDITS = ['x', 'y', 'vx', 'vy'] as const
+const FLAGS = new Set(['facesLeft', 'alive'])
+
+function encode(field: DebugField, value: number | boolean): Uint8Array | { problem: string } {
+  const bytes = new Uint8Array(field.type === 'bool' ? 1 : 4)
+  if (field.type === 'bool') {
+    if (typeof value !== 'boolean') return { problem: `${field.name} is on or off, not a number` }
+    bytes[0] = value ? 1 : 0
+    return bytes
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value)) return { problem: `${field.name} must be a whole number` }
+  if (value < -(2 ** 31) || value >= 2 ** 31) return { problem: `${field.name} must be from -2147483648 to 2147483647` }
+  new DataView(bytes.buffer).setInt32(0, value, true)
+  return bytes
+}
+
+/**
+ * Changes one value of the running game, between frames: `field` of the entity
+ * numbered `target`, written into its slot, or of the player, written as a request
+ * the game takes on its next frame (`debug::apply_player_edit`). The game uses it on
+ * the next frame. Null when done, else what stops it, to show the author.
+ */
+export function writeLive(emulator: Pick<LiveTarget, 'read_ram' | 'write_ram'>, map: DebugMap, target: 'player' | number, field: string, value: number | boolean): { problem: string } | null {
+  const rebuild = 'Build again to change it: this ROM was built by an older studio.'
+  if (target === 'player') {
+    if (!(PLAYER_EDITS as readonly string[]).includes(field)) return { problem: `the player's x, y, vx and vy can be changed, not ${field}` }
+    const edit = map.playerEdit
+    if (!edit) return { problem: `${rebuild} Its debug map has no player edit.` }
+    const offset = (name: string) => edit.fields.find((f) => f.name === name)!.offset
+    const encoded = encode(edit.fields.find((f) => f.name === field)!, value)
+    if ('problem' in encoded) return encoded
+    // A request the game has not taken yet is changed, so two changes in a frame both count.
+    const pending = emulator.read_ram(edit.address, edit.size)
+    const view = new DataView(pending.buffer, pending.byteOffset, pending.byteLength)
+    if (view.getUint32(offset('set'), true) !== 1) {
+      const body = readGameState(map, emulator.read_ram(map.state.address, map.state.size)).player as Record<string, number>
+      for (const name of PLAYER_EDITS) view.setInt32(offset(name), body[name]!, true)
+    }
+    pending.set(encoded, offset(field))
+    view.setUint32(offset('set'), 1, true)
+    emulator.write_ram(edit.address, pending)
+    return null
+  }
+
+  if (!(ENTITY_EDITS as readonly string[]).includes(field)) return { problem: `${ENTITY_EDITS.slice(0, -1).join(', ')} and alive can be changed, not ${field}` }
+  const table = map.entities
+  if (!table) return { problem: `${rebuild} Its debug map has no entity table.` }
+  const slotField = table.slot.fields.find((f) => f.name === field)
+  if (!slotField) return { problem: `${rebuild} Its entity table has no ${field}.` }
+  const cell = readRecord(emulator.read_ram(table.address, table.size), 0, table.fields)
+  const [address, slots, slotSize] = [cell.address as number, cell.slots as number, cell.slotSize as number]
+  if (!address) return { problem: 'the game does not use the generated entity table (data::entities())' }
+  if (!Number.isInteger(target) || target < 0 || target >= slots) return { problem: `the game's entity table has ${slots} slots, numbered 0 to ${slots - 1}; there is no #${target}` }
+  const base = address + target * slotSize
+  const slot = readRecord(emulator.read_ram(base, slotSize), 0, table.slot.fields)
+  if (!slot.built || !slot.alive) return { problem: `#${target} is no longer live: it was taken, or its room is no longer active` }
+  const encoded = encode(slotField, value)
+  if ('problem' in encoded) return encoded
+  emulator.write_ram(base + slotField.offset, encoded)
+  return null
+}
+
+/** Whether a field of a row is on or off rather than a number. */
+export const isFlag = (field: string): boolean => FLAGS.has(field)

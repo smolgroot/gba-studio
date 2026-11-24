@@ -14,7 +14,10 @@
 //! [`show_entities`], which the generated `data::entities()` calls; the record points
 //! at that too.
 //!
-//! The block, the inbox, the table's cell and the record are only in builds with debug assertions (dev
+//! The studio changes the player through a request in RAM, which the game takes
+//! once a frame with [`apply_player_edit`], and entities by writing their slots.
+//!
+//! The block, the inbox, the table's cell, the player edit and the record are only in builds with debug assertions (dev
 //! builds), or with the `debug-map` feature. Otherwise [`publish`] does nothing,
 //! [`Live::poll`] never sees a change, and the ROM has none of them.
 
@@ -28,8 +31,9 @@ pub const STAMP: u32 = u32::from_le_bytes(*b"PSGS");
 
 /// The version of the ROM record and of the block and inbox layouts. Raised when any
 /// changes, so a tool never reads one with the wrong layout. Version 2 added the inbox,
-/// version 3 the start override, version 4 the table of live entities.
-pub const VERSION: u32 = 4;
+/// version 3 the start override, version 4 the table of live entities, version 5 the
+/// player edit and the entities' home in the table's layout.
+pub const VERSION: u32 = 5;
 
 /// What a tool can see of the game each frame. Every field is a 32-bit word, so the
 /// layout is the same on the console and on the host.
@@ -127,6 +131,46 @@ pub fn show_entities<const N: usize>(table: &LiveEntities<N>) {
     let _ = table;
 }
 
+/// A change to the player the studio asks for, while the game runs: the player's
+/// position (top-left, world pixels) and speed (1/256 pixel a frame). `set` is 1
+/// while the request waits; [`apply_player_edit`] takes it and sets it back to 0.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PlayerEdit {
+    pub set: u32,
+    pub x: i32,
+    pub y: i32,
+    pub vx: i32,
+    pub vy: i32,
+}
+
+/// Puts a change the studio made to the player into `body`, once: true if there
+/// was one. Call it once a frame, before the player moves. The player is a local of
+/// the game, which the studio cannot safely write, so it asks instead. In a build
+/// without the debug map it does nothing.
+#[inline]
+pub fn apply_player_edit(body: &mut Body) -> bool {
+    #[cfg(any(debug_assertions, feature = "debug-map"))]
+    {
+        let cell = unsafe { core::ptr::read_volatile(&map::RECORD.player) };
+        // SAFETY: the record points at `PLAYER`, which lives for the whole program.
+        // The studio writes it only between frames, never while this runs.
+        let edit = unsafe { (*cell).0.get() };
+        if unsafe { core::ptr::read_volatile(&raw const (*edit).set) } != 1 {
+            return false;
+        }
+        let wanted = unsafe { core::ptr::read_volatile(edit) };
+        unsafe { core::ptr::write_volatile(&raw mut (*edit).set, 0) };
+        (body.x, body.y, body.vx, body.vy) = (wanted.x, wanted.y, wanted.vx, wanted.vy);
+        true
+    }
+    #[cfg(not(any(debug_assertions, feature = "debug-map")))]
+    {
+        let _ = body;
+        false
+    }
+}
+
 /// A place to start the game: a room and a point in it, in room pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StartPoint {
@@ -222,7 +266,7 @@ impl Live {
 
 #[cfg(any(debug_assertions, feature = "debug-map"))]
 mod map {
-    use super::{EntityTable, GameState, Inbox, StartOverride, VERSION};
+    use super::{EntityTable, GameState, Inbox, PlayerEdit, StartOverride, VERSION};
     use core::cell::UnsafeCell;
 
     /// The block a tool reads. Only [`super::publish`] writes it.
@@ -251,9 +295,19 @@ mod map {
 
     pub(super) static ENTITIES: TableCell = TableCell(UnsafeCell::new(EntityTable { address: 0, slots: 0, slot_size: 0 }));
 
+    /// The player edit the studio writes. Only [`super::apply_player_edit`] writes it
+    /// in the game.
+    #[repr(transparent)]
+    pub(super) struct PlayerCell(pub(super) UnsafeCell<PlayerEdit>);
+    // SAFETY: as for `InboxCell`: one core, written by the game only from its main
+    // loop, and by the studio only between frames.
+    unsafe impl Sync for PlayerCell {}
+
+    pub(super) static PLAYER: PlayerCell = PlayerCell(UnsafeCell::new(PlayerEdit { set: 0, x: 0, y: 0, vx: 0, vy: 0 }));
+
     /// The ROM record: magic, version, then the address and size of the block and of
     /// the inbox, then the start override, then the address and size of the entity
-    /// table's cell. 52 bytes on the console.
+    /// table's cell and of the player edit. 60 bytes on the console.
     #[repr(C)]
     pub(super) struct Record {
         pub(super) magic: [u8; 8],
@@ -265,6 +319,8 @@ mod map {
         pub(super) start: StartOverride,
         pub(super) entities: *const TableCell,
         pub(super) entities_size: u32,
+        pub(super) player: *const PlayerCell,
+        pub(super) player_size: u32,
     }
     // SAFETY: the record is never written; the pointer is only read back.
     unsafe impl Sync for Record {}
@@ -280,6 +336,8 @@ mod map {
         start: StartOverride { set: 0, room: 0, x: 0, y: 0 },
         entities: &ENTITIES,
         entities_size: size_of::<EntityTable>() as u32,
+        player: &PLAYER,
+        player_size: size_of::<PlayerEdit>() as u32,
     };
 }
 
@@ -356,6 +414,8 @@ mod tests {
             field("y", actor + offset_of!(Actor, y), "i32"),
             field("vx", actor + offset_of!(Actor, vx), "i32"),
             field("vy", actor + offset_of!(Actor, vy), "i32"),
+            field("homeX", actor + offset_of!(Actor, home.0), "i32"),
+            field("homeY", actor + offset_of!(Actor, home.1), "i32"),
             field("facesLeft", actor + offset_of!(Actor, faces_left), "bool"),
             field("alive", actor + offset_of!(Actor, alive), "bool"),
             field("hitboxX", hitbox + offset_of!(crate::behaviour::Hitbox, x), "i16"),
@@ -367,8 +427,15 @@ mod tests {
             field("index", offset_of!(LiveEntity, index), "u16"),
             field("built", LiveEntity::BUILT_AT, "bool"),
         ];
+        let player = [
+            field("set", offset_of!(PlayerEdit, set), "u32"),
+            field("x", offset_of!(PlayerEdit, x), "i32"),
+            field("y", offset_of!(PlayerEdit, y), "i32"),
+            field("vx", offset_of!(PlayerEdit, vx), "i32"),
+            field("vy", offset_of!(PlayerEdit, vy), "i32"),
+        ];
         format!(
-            "{{\n  \"version\": {VERSION},\n  \"stamp\": \"PSGS\",\n  \"size\": {},\n  \"fields\": [\n{}\n  ],\n  \"bodySize\": {},\n  \"body\": [\n{}\n  ],\n  \"inboxSize\": {},\n  \"inbox\": [\n{}\n  ],\n  \"startSize\": {},\n  \"start\": [\n{}\n  ],\n  \"tableSize\": {},\n  \"table\": [\n{}\n  ],\n  \"slotSize\": {},\n  \"slot\": [\n{}\n  ]\n}}\n",
+            "{{\n  \"version\": {VERSION},\n  \"stamp\": \"PSGS\",\n  \"size\": {},\n  \"fields\": [\n{}\n  ],\n  \"bodySize\": {},\n  \"body\": [\n{}\n  ],\n  \"inboxSize\": {},\n  \"inbox\": [\n{}\n  ],\n  \"startSize\": {},\n  \"start\": [\n{}\n  ],\n  \"tableSize\": {},\n  \"table\": [\n{}\n  ],\n  \"slotSize\": {},\n  \"slot\": [\n{}\n  ],\n  \"playerEditSize\": {},\n  \"playerEdit\": [\n{}\n  ]\n}}\n",
             size_of::<GameState>(),
             state.join(",\n"),
             size_of::<Body>(),
@@ -381,6 +448,8 @@ mod tests {
             table.join(",\n"),
             size_of::<LiveEntity>(),
             slot.join(",\n"),
+            size_of::<PlayerEdit>(),
+            player.join(",\n"),
         )
     }
 
@@ -420,6 +489,29 @@ mod tests {
         // start override, so versions 1 to 3 keep their offsets.
         #[cfg(target_pointer_width = "32")]
         assert_eq!(core::mem::offset_of!(map::Record, entities), 44);
+        assert!(core::ptr::eq(map::RECORD.player, &map::PLAYER));
+        assert_eq!(map::RECORD.player_size, 20);
+        #[cfg(target_pointer_width = "32")]
+        assert_eq!(core::mem::offset_of!(map::Record, player), 52);
+    }
+
+    #[test]
+    fn a_player_edit_is_taken_once() {
+        let mut body = Body::new(10, 20, 8, 14);
+        body.vx = 300;
+        let before = body;
+        assert!(!apply_player_edit(&mut body), "no request yet");
+        assert_eq!(body, before);
+        // The studio, between frames.
+        // SAFETY: only this test touches the player edit.
+        unsafe { map::PLAYER.0.get().write(PlayerEdit { set: 1, x: 500, y: 40, vx: 0, vy: -256 }) };
+        assert!(apply_player_edit(&mut body));
+        assert_eq!((body.x, body.y, body.vx, body.vy), (500, 40, 0, -256));
+        assert_eq!((body.w, body.h), (8, 14), "the size is the game's");
+        assert_eq!(unsafe { map::PLAYER.0.get().read() }.set, 0, "taken");
+        body.x = 501;
+        assert!(!apply_player_edit(&mut body), "taken once");
+        assert_eq!(body.x, 501);
     }
 
     #[test]

@@ -211,6 +211,8 @@ fn main(mut gba: agb::Gba) -> ! {
             entities.clear();
             data::enter_room(entities, &world, room, |index| found.has(index));
         }
+        // A change to the hero made in the Play panel's entity list, before it moves.
+        debug::apply_player_edit(&mut body);
         input.update();
         let direction = input.x_tri() as i32;
         let before = body;

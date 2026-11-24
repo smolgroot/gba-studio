@@ -115,6 +115,20 @@ let mut found = Collected::<ENTITY_WORDS>::new();
 
   `changes.physics()` and `changes.entities()` say whether those changed too; the studio has already respawned changed entities by clearing their collected bits. `poll` costs one read and a compare a frame, and 12 bytes of EWRAM, in dev builds. In a release build it always returns `None`. A game that does not poll is restarted on each change instead. The sample's `src/main.rs` shows it in full, with the player's room found again after the change.
 
+  `debug::apply_player_edit` takes a change to the player made in the Play panel's [Entities list](./build-and-play#changing-numbers). The player's `Body` is a local of your `main`, which the compiler may keep in registers, so the studio cannot safely write it; it leaves a request in RAM instead. Call it once a frame, before the player moves. It copies the new position and speed into the body once, and returns true when it did:
+
+  ```rust
+  use pecten_studio_rt::debug;
+
+  loop {
+      // A change made in the Play panel's Entities list, before the player moves.
+      debug::apply_player_edit(&mut body);
+      // ... read the buttons, move the player ...
+  }
+  ```
+
+  It costs 20 bytes of EWRAM and one read a frame in dev builds, and does nothing in a release build. A game that does not call it shows its player in the list, but a change to it is never taken. Entities need no code: the studio writes their slots in the table of live entities, which the game reads every frame.
+
 ## Behaviours
 
 `behaviour` has what common entities do, so a game only writes what is special about it. Like `data` and `physics`, it has no dependencies, does not allocate, and compiles for the host, so you can test a game's rules without a console.
@@ -245,7 +259,7 @@ The studio checks listed behaviours, and every problem is an error, the same wor
 
 The entities live in one table, `data::Entities`, which has a slot for every entity of the world:
 
-- `data::entities()` gives the table. It is a `static`, so it sits in EWRAM, not on the stack. Call it once and keep the reference: a second call stops the game with a message. In a dev build it also tells the studio where the table is, once, so the Play panel's [Entities list](./build-and-play#entities) can show it; a game that keeps its entities some other way has no list.
+- `data::entities()` gives the table. It is a `static`, so it sits in EWRAM, not on the stack. Call it once and keep the reference: a second call stops the game with a message. In a dev build it also tells the studio where the table is, once, so the Play panel's [Entities list](./build-and-play#entities) can show it and change its entities' numbers; a game that keeps its entities some other way has no list.
 - `data::enter_room(entities, &world, room, skip)` makes `room` and the rooms touching it on the world map the active ones. Call it when the game starts and each time the player enters another room. Each entity is built from the ROM the first time its room is active: its actor at its feet, its type's hitbox and its behaviours with their settings. It is then kept, so a room the player leaves and comes back to is as they left it: a door stays open and a checkpoint stays reached. `skip` takes an entity's number in the world and says to leave it out, such as one already in `Collected`.
 - `data::update_entities(entities, &world, &cx, camera, before, event)` runs one frame of every living entity in the active rooms that the camera shows. `camera` is its top-left corner in world pixels. The other active rooms' entities wait, as they are, until the camera comes to them.
 - `entities.visible(data::view(camera))` gives the same entities, room by room, to draw.
