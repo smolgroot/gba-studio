@@ -85,7 +85,7 @@ Notes / open questions
 | US-011b | Behaviour properties read by position | E2 | P0 | Done | M |
 | US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Done | M |
 | US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Done | M |
-| US-014 | Prefabs with per-instance overrides | E2 | P1 | Proposed | M |
+| US-014 | Prefabs with per-instance overrides | E2 | P1 | Done | M |
 | US-015 | Edit collision classes in the interface | E2 | P1 | Proposed | S |
 | US-016 | Edit entity property definitions in the interface | E2 | P1 | Proposed | S |
 | US-017 | Entity references between entities | E2 | P1 | Proposed | M |
@@ -459,16 +459,32 @@ kept, so a room left is as it was on coming back. A type has at most 4 behaviour
 Design: `design/US-013.md`.
 
 #### US-014 · Prefabs with per-instance overrides
-**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-012
-**Touches** core, app
+**Priority** P1 · **Status** Done · **Size** M · **Depends on** US-012
+**Touches** core, app, server, docs
 
 As an author, I want entity types to act as prefabs whose placed copies only store
 what they change, so that changing the type's default updates every copy that
 kept it.
 
 Acceptance criteria
-- [ ] Room files store only overridden properties.
-- [ ] Properties marks overridden values and has "reset to type default".
+- [x] Room files store only overridden properties. (`core/src/prefab.ts`:
+  `core/test/prefab.test.ts` for the rule on own and behaviour properties;
+  `server/test/behaviours.test.ts`: `entity_add` and `entity_update` leave out a value
+  equal to the type's and say so; the panel writes through the same `entityOverride`.
+  Behaviour properties already did, since US-012.)
+- [x] Properties marks overridden values and has "reset to type default". (Own
+  properties of the type are marked and have a reset button like behaviour properties:
+  `shownEntityValue` and reset in `core/test/prefab.test.ts`; the `entity-overrides-own`
+  screenshot.)
+
+Changing the type's default updates every copy that kept it: shown by
+`core/test/prefab.test.ts`, which writes the data section for two entities of a type,
+one storing a value and one not, raises the default, and reads the values back; and
+which checks that a stored value equal to the type's builds to the same bytes as none.
+
+Decided (the open question, settled when the story was built; see `design/US-014.md`)
+- No Problems line for a stored value equal to the type's. Old rooms are left as they
+  are, and cleaned when an entity's values are next written by the panel or a tool.
 
 #### US-015 · Edit collision classes in the interface
 **Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —

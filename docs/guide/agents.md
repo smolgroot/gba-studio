@@ -87,6 +87,8 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 
 `room_update` darkens layers (see [Darkening layers](./rooms#darkening-layers)) with three parameters: `dimLevel`, from 0 to 16; `dimLayers`, the tile layers to darken, by number (0 is the back layer) or name, which replaces the set, so `[]` turns dimming off for all tile layers; and `dim` on each entry of `backgrounds`. `project_overview` shows which layers are dimmed and the level.
 
+`entity_add` and `entity_update` store only the values that differ from the entity's type: a property's default, or a behaviour's property as the type sets it. A value equal to the type's is left out, so the entity follows the type if it changes, and the answer says so, for example "Left out 2 values that Bot already has (shield, patrol): the entity follows the type." `entity_update` compares with the type the entity has after the call. A name the type does not have is kept, and the answer reports it as a problem. A room written earlier that stores a value equal to the type's builds the same; the value is dropped the next time the entity's values are written. See [Values set on one entity](./rooms#entity-overrides).
+
 When the ROM `run_rom` runs is out of date, its answer ends with a line that says so, for example "This ROM is out of date: Rust source changed: src/main.rs. Run the build tool to see the change.", or, when only level data changed, a note to run `patch_rom`. An agent then knows the pictures do not show its last edit.
 
 Every write is validated and answered with the problems it left in that file. `validate` and `pecten-studio validate` also report rooms and tilesets over the 1024 background tiles or 16 background palettes, and images the build could not convert, so an agent sees them without running a build. Errors inside a tool come back as text the agent can act on ("the tileset has 16 tiles, numbered 0 to 15; there is no tile 99").
@@ -101,7 +103,7 @@ No tool creates, changes or deletes a file under `assets/`: agents can use the a
 
 `entity_type_remove_behaviour` takes a `type` and a `behaviour`. Placed entities keep the values they set for its properties; the answer says how many still do, and `validate` then reports them.
 
-Both answer with the problems left in `project.json`, such as a value out of range. `entity_type_set` keeps the behaviours a type has. A placed entity sets its own value for a behaviour's property through `props` in `entity_add` and `entity_update`, which answer with the problems in its room. `entity_update`'s `props` replace all of the entity's own values, those of its type's properties and of its behaviours, so pass the ones to keep. `pecten-studio schema` gives each behaviour's properties under `behaviours`.
+Both answer with the problems left in `project.json`, such as a value out of range. `entity_type_set` keeps the behaviours a type has. A placed entity sets its own value for a behaviour's property through `props` in `entity_add` and `entity_update`, which answer with the problems in its room. `entity_update`'s `props` replace all of the entity's own values, those of its type's properties and of its behaviours, so pass the ones to keep; any equal to the type's are left out, as above. `pecten-studio schema` gives each behaviour's properties under `behaviours`.
 
 An agent can make a new enemy this way with no Rust: `sprite_create` from a PNG in the folder, `entity_type_set` with the sprite, `entity_type_add_behaviour` with `patrol` and then `hazard`, `entity_add`, `build`, and `run_rom` to see it walk.
 

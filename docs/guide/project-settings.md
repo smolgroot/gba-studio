@@ -35,7 +35,7 @@ An entity is a thing placed in a room: a player start, an enemy, a pickup. Its *
 - its **behaviours**, by name ("Patrol, Hazard"), or "No behaviours": click them to open the type's behaviours below the row;
 - a bin to delete the type.
 
-Use **Add entity type** at the end of the list to add a type. Types can be added, renamed, recoloured, given a sprite and given behaviours here. Their typed properties of their own (integer, boolean, text or one of a list) and the project's collision classes are defined in `studio/project.json`, not yet in the interface; see the [project format](../reference/project-format).
+Use **Add entity type** at the end of the list to add a type. Types can be added, renamed, recoloured, given a sprite and given behaviours here. Their typed properties of their own (integer, boolean, text or one of a list) and the project's collision classes are defined in `studio/project.json`, not yet in the interface; see the [project format](../reference/project-format). The default of such a property is what every entity of the type has until you set its own in the [room panel](./rooms#entity-overrides), so a changed default reaches the entities that kept it on the next patch, live apply or build.
 
 ### Behaviours {#behaviours}
 
@@ -53,7 +53,7 @@ Click a type's behaviours to open them. Each behaviour is a card with its name, 
 
 **Add a behaviour…** below the cards lists the behaviours the type does not have, each with what it does. Pick one to add it at the end. A behaviour that shares a property with one the type has is listed but cannot be picked, with the reason, for example "Projectile (shares shot_speed with Shooter)": a type can have only one of them, so give shots a type of their own. A type has at most 4 behaviours: once it has 4, every behaviour is listed but cannot be picked, with "the type has 4, the most it can have". The game keeps room for 4 behaviours on every entity while it runs, so each one more would cost every entity memory.
 
-Every change is one undo step. A placed entity can set its own value for a behaviour's property; see [Entities](./rooms#entities).
+Every change is one undo step. A placed entity can set its own value for a behaviour's property; see [Values set on one entity](./rooms#entity-overrides). An entity that sets none follows the type, so a changed value here reaches it on the next patch, live apply or build.
 
 ### Making an enemy
 

@@ -1,7 +1,7 @@
 // Changing an entity type's behaviours, as Project settings and the MCP tools do.
 import { describe, expect, it } from 'vitest'
 import {
-  behaviourBlocker, behaviourFields, behaviourLabel, behaviourOverride, moveBehaviour, setBehaviourValue, shownBehaviourValue, withBehaviour, withoutBehaviour,
+  behaviourBlocker, behaviourFields, behaviourLabel, moveBehaviour, setBehaviourValue, withBehaviour, withoutBehaviour,
 } from '../src/index.ts'
 import type { EntityType } from '../src/index.ts'
 
@@ -55,20 +55,5 @@ describe('changing a type\'s behaviours', () => {
     expect(behaviourBlocker(shooter, 'hazard')).toBeUndefined()
     const full = { ...shooter, behaviours: ['patrol', 'hazard', 'door', 'shooter'].map((id) => ({ id, props: {} })) }
     expect(behaviourBlocker(full, 'checkpoint')).toBe('the type has 4, the most it can have')
-  })
-})
-
-describe('a placed entity\'s behaviour values', () => {
-  it('show its own value, else the type\'s, else the default', () => {
-    expect(shownBehaviourValue(bot, {}, 'patrol', 'patrol')).toEqual({ value: 40, inherited: 40, overridden: false })
-    expect(shownBehaviourValue(bot, { patrol: 8 }, 'patrol', 'patrol')).toEqual({ value: 8, inherited: 40, overridden: true })
-    expect(shownBehaviourValue(bot, {}, 'patrol', 'patrol_pace')).toEqual({ value: 2, inherited: 2, overridden: false })
-    const key: EntityType = { ...bot, behaviours: [{ id: 'ability-pickup', props: {} }] }
-    expect(shownBehaviourValue(key, {}, 'ability-pickup', 'grants_ability')).toEqual({ value: undefined, inherited: undefined, overridden: false })
-  })
-
-  it('are overridden by writing the entity\'s props, and reset by removing the key', () => {
-    expect(behaviourOverride({ other: 1 }, 'patrol', 8)).toEqual({ other: 1, patrol: 8 })
-    expect(behaviourOverride({ other: 1, patrol: 8 }, 'patrol', undefined)).toEqual({ other: 1 })
   })
 })

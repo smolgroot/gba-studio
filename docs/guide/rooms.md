@@ -47,22 +47,37 @@ With the Entities tool, pick an **entity type** in the *Entity to place* list of
 
 - **click** to place one;
 - **drag** to move it;
-- edit its position and typed properties in Properties;
+- edit its position and typed properties in Properties (a value you set is kept for this entity only; see [Values set on one entity](#entity-overrides));
 - press `Delete` to remove the selected entity.
 
 Entities are placed by their feet: the middle of the bottom edge. An entity type with a sprite shows that sprite on the map. Add and recolour entity types, and give them behaviours, in [Project settings](./project-settings#behaviours).
 
 ### Values set on one entity {#entity-overrides}
 
-When the selected entity's type has [behaviours](./project-settings#behaviours), **Selected entity** in Properties shows a heading for each one under the type's own properties, with its fields. A field shows the type's value, or the behaviour's default, until you set one for this entity. One sentry bot can walk further or slower than the others this way.
+An entity type works as a prefab: a placed entity follows its type until you change that entity, and the room file keeps only what you changed. **Selected entity** in Properties shows two kinds of property:
+
+- the type's **own properties**, the integer, boolean, text or list ones defined under the type in `studio/project.json` (see [Entity types](./project-settings#entity-types)), after the position;
+- the properties of the type's [behaviours](./project-settings#behaviours), under a heading for each behaviour.
+
+A field shows the type's value until you set one for this entity. For a behaviour's property, that is the value the type gives it, or the behaviour's default if the type gives none. One sentry bot can carry a bigger shield, or walk further or slower, than the others this way.
+
+![The room panel with a sentry bot selected whose type has two properties of its own: mood shows the type's value, and shield is set on this entity, marked, with a reset button](/screenshots/entity-overrides-own.png)
+
+A behaviour's properties are marked the same way:
 
 ![The room panel with a sentry bot selected: patrol shows its type's value, and patrol_pace is set on this entity, marked, with a reset button](/screenshots/entity-overrides.png)
 
-- Type a value to set it on this entity only. Its name then turns blue and has a reset button beside it, and when you hover the name it says what the type has ("Set on this entity; Sentry bot has 2").
+- Type a value to set it on this entity only. Its name then turns blue and has a reset button beside it, and when you hover the name it says what the type has ("Set on this entity; Sentry bot has 3").
 - The reset button removes this entity's value, so it follows the type again. Typing the type's value back does the same.
 - Changing the entity's type clears all its own values.
 
 Every change is one undo step.
+
+### When the type changes
+
+Because an entity keeps only what it changed, a change to the type's value reaches every entity that kept it. Change a property's `default` in `studio/project.json`, or a behaviour's value in [Project settings](./project-settings#behaviours), and the entities that set no value of their own follow, on the next [patch](./build-and-play#patch-on-change), [live apply](./build-and-play#live-apply) or build. An entity that set its own value keeps it, and its name stays blue.
+
+A room saved before the studio left such values out may hold a value equal to the type's. The game gets the same value either way. The panel shows it as set on the entity, blue and with a reset button, and the value is dropped the next time that entity's values are written, by the panel or by an [agent's tool](./agents#the-tools).
 
 ## Room properties
 

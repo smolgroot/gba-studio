@@ -225,21 +225,3 @@ export function behaviourBlocker(type: EntityType, id: string): string | undefin
   }
   return undefined
 }
-
-/**
- * What a placed entity's behaviour field shows: its own value if it overrides it,
- * else the type's, else the default (undefined when it is required and nobody sets it).
- * `inherited` is what it would be without its own.
- */
-export function shownBehaviourValue(type: EntityType, entityProps: Record<string, Value>, id: string, name: string): { value: Value | undefined; inherited: Value | undefined; overridden: boolean } {
-  const use = type.behaviours.find((b) => b.id === id)
-  const inherited = use?.props[name] ?? behaviourFields(id).find((f) => f.name === name)?.default
-  const own = entityProps[name]
-  return { value: own ?? inherited, inherited, overridden: own !== undefined }
-}
-
-/** A placed entity's props with a behaviour property overridden, or with the override removed (undefined). */
-export function behaviourOverride(entityProps: Record<string, Value>, name: string, value: Value | undefined): Record<string, Value> {
-  const { [name]: _, ...rest } = entityProps
-  return value === undefined ? rest : { ...rest, [name]: value }
-}

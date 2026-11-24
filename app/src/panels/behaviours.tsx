@@ -10,7 +10,7 @@ import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import {
-  BEHAVIOURS, behaviourBlocker, behaviourDeclaration, behaviourFields, behaviourLabel, behaviourOverride, moveBehaviour, setBehaviourValue, shownBehaviourValue, withBehaviour, withoutBehaviour,
+  BEHAVIOURS, behaviourBlocker, behaviourDeclaration, behaviourFields, behaviourLabel, entityOverride, moveBehaviour, setBehaviourValue, shownEntityValue, withBehaviour, withoutBehaviour,
 } from '@pecten-studio/core'
 import type { BehaviourField, EntityType } from '@pecten-studio/core'
 import { Checkbox, Field, Fields, NumberInput, OptionalNumberInput, SelectInput } from '../fields.tsx'
@@ -107,8 +107,8 @@ export function BehaviourOverrides({ type, props, onChange }: { type: EntityType
             <Typography variant="overline" color="text.secondary" sx={{ px: 2, display: 'block' }}>{name}</Typography>
             <Fields>
               {behaviourFields(use.id).map((field) => {
-                const shown = shownBehaviourValue(type, props, use.id, field.name)
-                const set = (value: number | boolean | undefined) => onChange(behaviourOverride(props, field.name, value === shown.inherited ? undefined : value))
+                const shown = shownEntityValue(type, props, field.name)
+                const set = (value: number | boolean | undefined) => onChange(entityOverride(type, props, field.name, value))
                 return (
                   <Field key={field.name} label={field.name} marked={shown.overridden} mark={`Set on this entity; ${type.name} has ${shown.inherited ?? 'no value'}`}>
                     <Box title={field.summary} sx={{ flex: 1, minWidth: 0 }}>
@@ -118,7 +118,7 @@ export function BehaviourOverrides({ type, props, onChange }: { type: EntityType
                       <IconButton
                         aria-label={`Reset ${field.name} to the type's value`}
                         title={`Reset to ${type.name}'s value${shown.inherited === undefined ? '' : `, ${shown.inherited}`}`}
-                        onClick={() => onChange(behaviourOverride(props, field.name, undefined))}
+                        onClick={() => onChange(entityOverride(type, props, field.name, undefined))}
                         sx={{ p: 0.5, color: 'text.secondary' }}
                       >
                         <RestartAltIcon />

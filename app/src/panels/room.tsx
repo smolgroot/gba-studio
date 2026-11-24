@@ -14,6 +14,7 @@ import PanToolOutlinedIcon from '@mui/icons-material/PanToolOutlined'
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined'
 import RectangleOutlinedIcon from '@mui/icons-material/RectangleOutlined'
 import RedoIcon from '@mui/icons-material/Redo'
+import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import UndoIcon from '@mui/icons-material/Undo'
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined'
 import SwapVertIcon from '@mui/icons-material/SwapVert'
@@ -24,7 +25,7 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import SvgIcon from '@mui/material/SvgIcon'
 import Typography from '@mui/material/Typography'
-import { MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, resizeRoom, rleDecode, rleEncode, rleLength, roomSize, spotOfTile } from '@pecten-studio/core'
+import { MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, entityOverride, resizeRoom, rleDecode, rleEncode, rleLength, roomSize, shownEntityValue, spotOfTile } from '@pecten-studio/core'
 import type { Background, CollisionClass, EntityType, Room, Sprite, Tileset } from '@pecten-studio/core'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
@@ -880,10 +881,12 @@ export function RoomProperties({ id }: { id: string }) {
               <NumberInput label="Y in pixels" value={entity.y} min={0} max={room.height * SCREEN.height - 1} onCommit={(y) => updateEntity({ y })} />
             </Field>
             {type?.props.map((prop) => {
-              const value = entity.props[prop.name] ?? prop.default
-              const setProp = (next: number | boolean | string) => updateEntity({ props: { ...entity.props, [prop.name]: next } })
+              // The type's value until this entity sets its own: see design/US-014.md.
+              const shown = shownEntityValue(type, entity.props, prop.name)
+              const value = shown.value ?? prop.default
+              const setProp = (next: number | boolean | string) => updateEntity({ props: entityOverride(type, entity.props, prop.name, next) })
               return (
-                <Field key={prop.name} label={prop.name}>
+                <Field key={prop.name} label={prop.name} marked={shown.overridden} mark={`Set on this entity; ${type.name} has ${String(shown.inherited)}`}>
                   {prop.type === 'int' ? (
                     <NumberInput label={prop.name} value={Number(value)} onCommit={setProp} />
                   ) : prop.type === 'bool' ? (
@@ -892,6 +895,16 @@ export function RoomProperties({ id }: { id: string }) {
                     <SelectInput label={prop.name} value={String(value)} onChange={setProp} options={(prop.options ?? []).map((o) => ({ value: o, label: o }))} />
                   ) : (
                     <TextInput label={prop.name} value={String(value)} onCommit={setProp} />
+                  )}
+                  {shown.overridden && (
+                    <IconButton
+                      aria-label={`Reset ${prop.name} to the type's value`}
+                      title={`Reset to ${type.name}'s value, ${String(shown.inherited)}`}
+                      onClick={() => updateEntity({ props: entityOverride(type, entity.props, prop.name, undefined) })}
+                      sx={{ p: 0.5, color: 'text.secondary' }}
+                    >
+                      <RestartAltIcon />
+                    </IconButton>
                   )}
                 </Field>
               )

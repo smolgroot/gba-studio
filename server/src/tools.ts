@@ -3,8 +3,8 @@
 // nothing is read or written outside the game folder.
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
-import { BEHAVIOURS, Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
-import type { Documents, Room } from '@pecten-studio/core'
+import { BEHAVIOURS, Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, overriddenProps, redundantProps, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
+import type { Documents, EntityType, Room } from '@pecten-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
 import { describePatch, patchRom, romStatus, staleNote } from './patch.ts'
@@ -93,6 +93,13 @@ function layerOf(docs: Documents, room: Room, ref: number | string) {
 
 function checkRect(cols: number, rows: number, x: number, y: number, width: number, height: number): void {
   if (x < 0 || y < 0 || x + width > cols || y + height > rows) throw new HttpError(400, `the rectangle is outside the room, which is ${cols}x${rows} tiles`)
+}
+
+/** An entity's props without the values its type already gives, and a line naming the ones left out ("" if none). */
+function overrides(type: EntityType, props: Record<string, number | boolean | string>): { props: Record<string, number | boolean | string>; note: string } {
+  const dropped = redundantProps(type, props)
+  const noun = dropped.length === 1 ? 'value' : 'values'
+  return { props: overriddenProps(type, props), note: dropped.length ? ` Left out ${dropped.length} ${noun} that ${type.name} already has (${dropped.join(', ')}): the entity follows the type.` : '' }
 }
 
 export const TOOLS: Tool[] = [
@@ -282,27 +289,31 @@ export const TOOLS: Tool[] = [
 
   tool(
     'entity_add',
-    'Places an entity in a room. x and y are pixels from the room\'s top-left and mark the entity\'s feet: the middle of its bottom edge. To stand on a floor whose top is tile row r, use y = r * 8.',
+    'Places an entity in a room. x and y are pixels from the room\'s top-left and mark the entity\'s feet: the middle of its bottom edge. To stand on a floor whose top is tile row r, use y = r * 8. props are the values that differ from the entity type\'s (a property\'s default, or a behaviour property as the type sets it); a value equal to the type\'s is left out, so the entity follows the type if it changes.',
     z.object({ room: Id, type: Id, x: z.number().int().min(0), y: z.number().int().min(0), props: z.record(z.string(), z.union([z.number().int(), z.boolean(), z.string()])).default({}) }),
     async ({ room: id, type, x, y, props }, context) => {
       const { docs } = await documents(context)
       const room = roomOf(docs, id)
       if (!docs.project?.entityTypes.some((t) => t.id === type)) throw new HttpError(400, `no entity type "${type}"; types are: ${docs.project?.entityTypes.map((t) => t.id).join(', ') || 'none'}`)
-      return saveAndReport(context, 'room', id, { ...room, entities: [...room.entities, { type, x, y, props }] }, `Added entity ${room.entities.length} (${type}) to ${id}.`)
+      const own = overrides(docs.project?.entityTypes.find((t) => t.id === type)!, props)
+      return saveAndReport(context, 'room', id, { ...room, entities: [...room.entities, { type, x, y, props: own.props }] }, `Added entity ${room.entities.length} (${type}) to ${id}.${own.note}`)
     },
   ),
 
   tool(
     'entity_update',
-    'Moves an entity or changes its type or properties. props replaces all of the entity\'s own values: its type\'s properties, and any of its type\'s behaviour properties it sets differently from the type. Entities are numbered from 0 in the order read_document lists them.',
+    'Moves an entity or changes its type or properties. props replaces all of the entity\'s own values: those of its type\'s properties, and of its type\'s behaviour properties, that differ from the type\'s; a value equal to the type\'s is not stored, so the entity follows the type if it changes. Entities are numbered from 0 in the order read_document lists them.',
     z.object({ room: Id, index: z.number().int().min(0), type: Id.optional(), x: z.number().int().min(0).optional(), y: z.number().int().min(0).optional(), props: z.record(z.string(), z.union([z.number().int(), z.boolean(), z.string()])).optional() }),
     async ({ room: id, index, ...patch }, context) => {
       const { docs } = await documents(context)
       const room = roomOf(docs, id)
       const entity = room.entities[index]
       if (!entity) throw new HttpError(404, `${id} has ${room.entities.length} entities; there is no entity ${index}`)
-      const changed = { ...entity, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
-      return saveAndReport(context, 'room', id, { ...room, entities: room.entities.map((e, i) => (i === index ? changed : e)) }, `Updated entity ${index} of ${id}.`)
+      const merged = { ...entity, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
+      // Against the type the entity has now, so a change of type keeps only what differs from the new one.
+      const type = docs.project?.entityTypes.find((t) => t.id === merged.type)
+      const own = type ? overrides(type, merged.props) : { props: merged.props, note: '' }
+      return saveAndReport(context, 'room', id, { ...room, entities: room.entities.map((e, i) => (i === index ? { ...merged, props: own.props } : e)) }, `Updated entity ${index} of ${id}.${own.note}`)
     },
   ),
 

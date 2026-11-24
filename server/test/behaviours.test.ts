@@ -92,3 +92,57 @@ describe('entity_type_add_behaviour and entity_type_remove_behaviour', () => {
   })
 })
 
+
+describe('entities store only what differs from their type (US-014)', () => {
+  const room = () => JSON.parse(readFileSync(path.join(folder, 'studio/rooms/hall.json'), 'utf8')) as { entities: { type: string; props: Record<string, unknown> }[] }
+  beforeEach(async () => {
+    await call('entity_type_set', {
+      id: 'bot',
+      name: 'Bot',
+      props: [
+        { name: 'mood', type: 'enum', default: 'calm', options: ['calm', 'angry'] },
+        { name: 'shield', type: 'int', default: 3 },
+      ],
+    })
+    await call('entity_type_add_behaviour', { type: 'bot', behaviour: 'patrol', props: { patrol: 40 } })
+    await call('write_document', { kind: 'room', id: 'hall', document: emptyRoom('Hall', 1, 1, 'none') })
+  })
+
+  it('leaves out a value equal to the type\'s when an entity is added, and says which', async () => {
+    const answer = await call('entity_add', { room: 'hall', type: 'bot', x: 10, y: 10, props: { shield: 3, mood: 'angry', patrol: 40, patrol_pace: 3 } })
+    expect(room().entities[0]!.props).toEqual({ mood: 'angry', patrol_pace: 3 })
+    expect(answer.text).toContain('Left out 2 values that Bot already has (shield, patrol): the entity follows the type.')
+  })
+
+  it('says nothing when every value differs, and keeps them', async () => {
+    const answer = await call('entity_add', { room: 'hall', type: 'bot', x: 10, y: 10, props: { shield: 4 } })
+    expect(room().entities[0]!.props).toEqual({ shield: 4 })
+    expect(answer.text).not.toContain('Left out')
+  })
+
+  it('names one value in the singular', async () => {
+    const answer = await call('entity_add', { room: 'hall', type: 'bot', x: 10, y: 10, props: { mood: 'calm' } })
+    expect(answer.text).toContain('Left out 1 value that Bot already has (mood)')
+  })
+
+  it('does the same when an entity is updated, and a patrol at the behaviour\'s default is a value when the type sets another', async () => {
+    await call('entity_add', { room: 'hall', type: 'bot', x: 10, y: 10 })
+    const answer = await call('entity_update', { room: 'hall', index: 0, props: { shield: 3, patrol: 32 } })
+    expect(room().entities[0]!.props).toEqual({ patrol: 32 })
+    expect(answer.text).toContain('Left out 1 value that Bot already has (shield)')
+  })
+
+  it('compares with the type the entity has after a change of type', async () => {
+    await call('entity_type_set', { id: 'crab', name: 'Crab', props: [{ name: 'shield', type: 'int', default: 9 }] })
+    await call('entity_add', { room: 'hall', type: 'bot', x: 10, y: 10, props: { shield: 9 } })
+    expect(room().entities[0]!.props).toEqual({ shield: 9 })
+    await call('entity_update', { room: 'hall', index: 0, type: 'crab' })
+    expect(room().entities[0]).toMatchObject({ type: 'crab', props: {} })
+  })
+
+  it('keeps a name the type does not have, which the answer reports as a problem', async () => {
+    const answer = await call('entity_add', { room: 'hall', type: 'bot', x: 10, y: 10, props: { ghost: 1 } })
+    expect(room().entities[0]!.props).toEqual({ ghost: 1 })
+    expect(answer.text).toContain('has a property "ghost" its type does not define')
+  })
+})
