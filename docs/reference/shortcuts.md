@@ -13,7 +13,8 @@
 | Key | Action |
 | --- | --- |
 | `Ctrl+O` | Open a folder |
-| `Ctrl+W` | Close the current project |
+| `Ctrl+W` | Close the document tab in front |
+| `Ctrl+Shift+W` | Close the current project |
 | `Ctrl+Tab` | Next project |
 | `Ctrl+Shift+Tab` | Previous project |
 

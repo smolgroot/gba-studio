@@ -51,7 +51,10 @@ The AppImage and `.deb` are written to `desktop/release/`.
 | --- | --- |
 | Open a folder | **File > Open Folder** or Ctrl+O, the **+** in the tab bar, or a folder on the command line |
 | Switch project | Click its tab, or Ctrl+Tab and Ctrl+Shift+Tab |
-| Close a project | Its **x**, a middle click on the tab, or Ctrl+W |
+| Close a document | Its **x** in the page, or **File > Close Document** (Ctrl+W) |
+| Close a project | Its **x**, a middle click on the tab, or **File > Close Project** (Ctrl+Shift+W) |
+
+Ctrl+W closes the document tab in front (a room, a sprite, a tileset), as in a code editor; with no document tab open it does nothing. Closing the whole project takes Ctrl+Shift+W.
 
 Opening a folder that is already open shows its tab. Starting the app again with a folder adds it to the window that is already running. The tabs that were open come back the next time the app starts.
 

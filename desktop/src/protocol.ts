@@ -24,10 +24,14 @@ export interface PageStatus {
   /** Whether the built ROM matches the project: up to date, patched or needs build. */
   rom: { text: string; detail: string; tone: 'ok' | 'warning' | 'quiet' } | null
 }
-/** The one desktop ability a project page gets, as `window.pectenPage`. */
+/** What a project page and the desktop app say to each other, as `window.pectenPage`. */
 export interface PageBridge {
   status: (status: PageStatus) => void
+  /** Calls the listener when the menu's Close Document (Ctrl+W) is used; returns a function that stops it. */
+  onCloseDocument: (listener: () => void) => () => void
 }
+/** The message the main process sends a project page for Close Document. */
+export const CLOSE_DOCUMENT = 'close-document'
 export interface ShellState {
   tabs: TabState[]
   active: string | null

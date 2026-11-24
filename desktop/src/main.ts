@@ -5,6 +5,7 @@ import path from 'node:path'
 import { BaseWindow, Menu, WebContentsView, app, ipcMain } from 'electron'
 import type { IpcMainEvent } from 'electron'
 import { buildEnvironment, readLoginPath } from './env.ts'
+import { menuTemplate } from './menu.ts'
 import { Projects } from './projects.ts'
 import type { Paths } from './projects.ts'
 import { loadState } from './state.ts'
@@ -46,35 +47,18 @@ function foldersIn(argv: string[], cwd: string): string[] {
 }
 
 function buildMenu(projects: Projects): void {
-  const template: Electron.MenuItemConstructorOptions[] = [
+  const template = menuTemplate(
     {
-      label: 'File',
-      submenu: [
-        { label: 'Open Folder…', accelerator: 'CmdOrCtrl+O', click: () => void projects.chooseFolder() },
-        { label: 'Close Project', accelerator: 'CmdOrCtrl+W', click: () => projects.closeActive() },
-        { type: 'separator' },
-        { role: 'quit' },
-      ],
+      openFolder: () => void projects.chooseFolder(),
+      closeDocument: () => projects.closeDocument(),
+      closeProject: () => projects.closeActive(),
+      nextProject: () => projects.cycle(1),
+      previousProject: () => projects.cycle(-1),
+      copyEndpoint: () => projects.copyEndpoint(),
+      reloadPages: () => projects.reloadPages(),
     },
-    {
-      label: 'Project',
-      submenu: [
-        { label: 'Next Project', accelerator: 'Ctrl+Tab', click: () => projects.cycle(1) },
-        { label: 'Previous Project', accelerator: 'Ctrl+Shift+Tab', click: () => projects.cycle(-1) },
-        { type: 'separator' },
-        { label: 'Copy MCP Endpoint', click: () => projects.copyEndpoint() },
-      ],
-    },
-    {
-      label: 'View',
-      // No Edit menu: its Undo would take Ctrl+Z away from the editors.
-      submenu: [
-        { label: 'Reload Projects', click: () => projects.reloadPages() },
-        { role: 'togglefullscreen' },
-        ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' } as const]),
-      ],
-    },
-  ]
+    { devTools: !app.isPackaged },
+  )
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 

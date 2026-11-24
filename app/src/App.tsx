@@ -16,6 +16,7 @@ import { PalettePanel } from './panels/room.tsx'
 import { BAR } from './theme.ts'
 import { api } from './api.ts'
 import type { RomStatus } from './api.ts'
+import { DOC_PREFIX, documentToClose } from './doctabs.ts'
 import { useSidebar } from './sidebar.ts'
 import { useEditor } from './editor.ts'
 import { selectionFromHash, selectionKey, selectionTitle, useStudio } from './store.ts'
@@ -105,7 +106,7 @@ function Centre({ children }: { children: React.ReactNode }) {
 }
 
 /** Set when the page runs as a tab of the desktop app (see desktop/src/page-preload.ts). */
-const desktop = (window as unknown as { pectenPage?: { status: (status: unknown) => void } }).pectenPage
+const desktop = (window as unknown as { pectenPage?: { status: (status: unknown) => void; onCloseDocument?: (listener: () => void) => () => void } }).pectenPage
 
 /** The ROM's state in a few words, the reasons in full, and what would bring it up to date. */
 export function romLabel(rom: RomStatus): { text: string; detail: string; tone: 'ok' | 'warning' | 'quiet'; action: 'build' | 'patch' | null } {
@@ -259,7 +260,6 @@ function NewProject() {
   )
 }
 
-const DOC_PREFIX = 'doc:'
 const dockComponents = {
   project: () => <ProjectPanel />,
   properties: () => <PropertiesPanel />,
@@ -321,6 +321,20 @@ function DockLayout() {
       removed.dispose()
       window.removeEventListener('keydown', onKey)
     }
+  }, [api])
+
+  // The desktop app's Close Document (Ctrl+W) closes the document tab in front. Only the desktop app
+  // asks: in a browser, Ctrl+W stays the browser's.
+  useEffect(() => {
+    if (!api || !desktop?.onCloseDocument) return
+    return desktop.onCloseDocument(() => {
+      const id = documentToClose({
+        active: api.activePanel?.id ?? null,
+        selected: DOC_PREFIX + selectionKey(useStudio.getState().selection),
+        open: api.panels.map((panel) => panel.id),
+      })
+      if (id) api.getPanel(id)?.api.close()
+    })
   }, [api])
 
   // Tabs follow renames on disk.

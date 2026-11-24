@@ -3,7 +3,7 @@ import { existsSync, realpathSync, statSync, watch } from 'node:fs'
 import { BaseWindow, WebContentsView, clipboard, dialog, shell, utilityProcess } from 'electron'
 import type { UtilityProcess, WebContents } from 'electron'
 import type { HostMessage, HostRequest, HostStart } from '../../server/src/host.ts'
-import { TAB_BAR_HEIGHT } from './protocol.ts'
+import { CLOSE_DOCUMENT, TAB_BAR_HEIGHT } from './protocol.ts'
 import type { BuildMarker, PageStatus, ShellState, TabState } from './protocol.ts'
 import { portCandidates, saveState, withRecent } from './state.ts'
 import type { DesktopState } from './state.ts'
@@ -127,6 +127,12 @@ export class Projects {
 
   closeActive(): void {
     if (this.active) void this.close(this.active)
+  }
+
+  /** Asks the active project's page to close its document tab in front. A project with no page yet ignores it. */
+  closeDocument(): void {
+    const contents = this.active ? this.tabs.get(this.active)?.view?.webContents : undefined
+    if (contents && !contents.isDestroyed()) contents.send(CLOSE_DOCUMENT)
   }
 
   forget(root: string): void {

@@ -154,6 +154,15 @@ Notes / open questions
 | US-119 | Rule tools for agents | E12 | P2 | Proposed | S |
 | US-120 | Template games built with rules only | E12 | P1 | Proposed | M |
 | US-121 | Generator tools for agents | E10 | P1 | Done | M |
+| US-122 | A visible focus ring on every control | E13 | P1 | Proposed | S |
+| US-123 | Zoom the desktop app's interface | E13 | P1 | Proposed | S |
+| US-124 | Project tabs that do not fit stay reachable | E13 | P1 | Proposed | S |
+| US-125 | Ctrl+W closes the document, not the project | E13 | P1 | Done | S |
+| US-126 | Act on build and save status from the desktop tab bar | E13 | P1 | Proposed | S |
+| US-127 | Project tabs by keyboard, and F6 between tab bar and page | E13 | P2 | Proposed | S |
+| US-128 | Status shown by shape as well as colour, and read aloud | E13 | P2 | Proposed | S |
+| US-129 | A failed agent action stays until it is dismissed | E13 | P2 | Proposed | S |
+| US-130 | Interface colours that pass contrast, from theme tokens | E13 | P2 | Proposed | M |
 
 ---
 
@@ -1445,3 +1454,208 @@ Acceptance criteria
   behaviours.
 - [ ] Its `main.rs` is not edited by the author at any point in the tutorial
   (US-105).
+
+---
+
+## E13 · Studio usability and accessibility
+
+Found in a review of the desktop app and the studio page it shows (2026-11-24),
+checked against common accessibility rules (WCAG 2.2 AA) and desktop editor habits.
+The studio is used for hours at a time, often by keyboard, so a missing focus ring,
+a shortcut that does something unexpected or a message that is cut off costs more
+than it looks. These stories fix what the review found; each is small and stands
+alone.
+
+#### US-122 · A visible focus ring on every control
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** app, desktop, docs
+
+As an author working by keyboard, I want to see which control has focus, so that I
+know what Enter or Space will do.
+
+The theme turns off the ripple on every button (`MuiButtonBase` `disableRipple` in
+`app/src/theme.ts`), and in MUI that also removes the focus indicator. Only a few
+controls draw their own, and the desktop tab strip's is 1 px.
+
+Acceptance criteria
+- [ ] Given any button, icon button, list row, tab or toggle in the studio or the
+  desktop shell, when it gets focus from the keyboard, then a ring at least 2 px
+  wide in the theme's primary colour is drawn around it, with at least 3:1 contrast
+  against what is next to it.
+- [ ] The ring is set once in the theme (`.Mui-focusVisible`), not per panel; the
+  per-panel `:focus-visible` styles that only repeat it are removed.
+- [ ] Clicking with the mouse does not show the ring.
+- [ ] A test renders a themed button, focuses it from the keyboard and finds the
+  focus style.
+
+#### US-123 · Zoom the desktop app's interface
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** desktop, docs
+
+As an author, I want to make the desktop app's text and controls larger or smaller,
+so that I can work comfortably on my screen and at my eyesight.
+
+The desktop app's own menu replaces Electron's default one, which had the zoom
+commands, so Ctrl+= and Ctrl+- do nothing. The tab bar's height is fixed at 38 px
+in the main process.
+
+Acceptance criteria
+- [ ] The View menu has Zoom In (Ctrl+=), Zoom Out (Ctrl+-) and Actual Size
+  (Ctrl+0), from 50 % to 300 %.
+- [ ] Zoom applies to the tab bar and to every open project, including projects
+  opened later, and is remembered for the next start.
+- [ ] Given a zoom of 200 %, when the window is resized, then the tab bar and the
+  project page do not overlap or leave a gap: the bar's height follows the zoom.
+- [ ] `docs/guide/desktop.md` and `docs/reference/shortcuts.md` list the shortcuts.
+
+#### US-124 · Project tabs that do not fit stay reachable
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** desktop, docs
+
+As an author with several games open, I want to see and reach every open project,
+so that none is hidden without my knowing.
+
+Tabs are at least 110 px wide and share their row with the status text, and the
+tab list hides what overflows. At the smallest window width (720 px) about four
+tabs fit; the rest can only be reached with Ctrl+Tab.
+
+Acceptance criteria
+- [ ] Given more tabs than fit, then the strip shows that there are more (a
+  scroll or a "more tabs" button with a count), and every tab can be reached with
+  the mouse.
+- [ ] The active tab is always scrolled into view, including after Ctrl+Tab.
+- [ ] The status text gives up its room before the tabs do: it shrinks to the
+  error and warning counts first.
+- [ ] A test with eight open projects in a 720 px window finds every tab reachable.
+
+#### US-125 · Ctrl+W closes the document, not the project
+**Priority** P1 · **Status** Done · **Size** S · **Depends on** —
+**Touches** desktop, app, docs
+
+As an author, I want Ctrl+W to close the document tab I am looking at, as in a code
+editor, so that I do not close the whole project by habit.
+
+The page has document tabs (rooms, sprites, tilesets) right under the project tabs.
+Ctrl+W today closes the project and stops its server.
+
+Acceptance criteria
+- [x] Given a project with document tabs, when Ctrl+W is pressed, then the active
+  document tab closes and the project stays open.
+- [x] Ctrl+Shift+W closes the project; the File menu shows both commands with their
+  shortcuts.
+- [x] Given a project with no document tab open, Ctrl+W does nothing.
+- [x] The browser studio is unchanged: there, the browser keeps Ctrl+W.
+- [x] `docs/reference/shortcuts.md` and `docs/guide/desktop.md` are updated.
+
+#### US-126 · Act on build and save status from the desktop tab bar
+**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** desktop, app, docs
+
+As an author in the desktop app, I want to build, patch or read a full message from
+the status in the tab bar, so that I can fix what it reports without hunting for the
+right panel.
+
+In the browser the top bar has Build and Patch buttons. In the desktop app, the
+same status is shown as text in the tab bar, with no buttons. The reasons for "Needs
+build" and the full "Not saved" message are only in a hover tooltip, which the
+keyboard cannot reach, and the line is cut to fit a 38 px bar.
+
+Acceptance criteria
+- [ ] Given "Needs build" or "Level data not patched in", then a button next to it
+  starts the build or the patch in that project, as in the browser.
+- [ ] Given any status whose text is cut off or has more detail, when it is clicked
+  or focused and Enter is pressed, then the full text is shown in a panel that stays
+  until closed.
+- [ ] "Not saved" is never cut to less than its first sentence; it takes the room
+  of the other status items first.
+- [ ] The page's bridge to the desktop app gains only the commands it needs (build,
+  patch), checked in the main process like the existing status message.
+
+#### US-127 · Project tabs by keyboard, and F6 between tab bar and page
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-122
+**Touches** desktop, docs
+
+As an author working by keyboard, I want to move through the project tabs with the
+arrow keys and jump between the tab bar and the page, so that I do not need the
+mouse to switch or close projects.
+
+Each project tab is its own Tab stop and holds a focusable close button, which
+screen readers do not expect inside a tab. The tab bar and the page are separate
+views, so Tab never moves focus from one to the other.
+
+Acceptance criteria
+- [ ] The tab strip is one Tab stop; Left, Right, Home and End move between tabs,
+  Enter or Space opens one, and Delete closes it.
+- [ ] The close button is still there for the mouse but is not a Tab stop, and has
+  no role inside the tab.
+- [ ] F6 moves focus from the page to the active tab, and from the tab bar back to
+  the page, keeping where focus was in the page.
+- [ ] `docs/reference/shortcuts.md` lists the keys.
+
+#### US-128 · Status shown by shape as well as colour, and read aloud
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** desktop, app
+
+As an author, I want each project tab's build state and the error and warning counts
+to be clear without relying on colour, so that I can read them if I do not see
+colours well or use a screen reader.
+
+A project tab's build state is a 7 px dot that is only blue, green or red, and a
+starting project shows nothing. The error and warning counts are labelled with an
+`aria-label` on a plain element, which screen readers ignore.
+
+Acceptance criteria
+- [ ] Each state has its own shape: a spinner while starting or building, a tick
+  when the last build passed, a cross when it failed or the server stopped.
+- [ ] The counts in the tab bar and in the browser's top bar are one status message
+  that reads, for example, "3 errors, 1 warning", and a screen reader announces it
+  when it changes, without moving focus.
+- [ ] With motion reduced in the system settings, the spinner does not spin.
+
+#### US-129 · A failed agent action stays until it is dismissed
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** app
+
+As an author working with a coding agent, I want a failed agent action to stay on
+screen until I have read it, so that I do not miss that something went wrong.
+
+Every agent action is shown for 8 seconds and then hidden, failed ones included.
+
+Acceptance criteria
+- [ ] Given an agent action that failed, then its message stays until it is
+  dismissed or the next agent action comes, in the browser and in the desktop tab
+  bar.
+- [ ] Actions that succeed still disappear after a few seconds.
+- [ ] The message can be dismissed with the mouse and the keyboard.
+
+#### US-130 · Interface colours that pass contrast, from theme tokens
+**Priority** P2 · **Status** Proposed · **Size** M · **Depends on** —
+**Touches** app, desktop
+
+As an author, I want text, errors and control edges to stand out from the panels
+behind them, so that I can read them in any light.
+
+Measured on the current theme:
+
+| Colour | On | Ratio | Needed |
+| --- | --- | --- | --- |
+| Error red `#e5484d` | panel `#262626` / page `#1c1c1c` | 3.87 / 4.35 | 4.5 |
+| Outlined button edge `#4a4a4a` | page `#1c1c1c` | 1.92 | 3 |
+| Divider `#111111` | tab bar `#141414` | 1.02 | visible |
+
+`#4c9ffe` and `#141414` are written out in the desktop shell, and about a hundred
+other hex colours in the panels, so a fix in the theme does not reach them.
+
+Acceptance criteria
+- [ ] Text in the error colour is at least 4.5:1 on every background it is shown on
+  (for example `#ff6369`, 5.2:1 on the panel colour).
+- [ ] Edges of buttons and fields are at least 3:1 against what is behind them.
+- [ ] The tab bar colour and the focus colour are theme tokens; the shell and panels
+  use the tokens instead of hex values. Colours that are part of the game's art
+  (palettes, tiles, checkerboard) stay as they are.
+- [ ] A test checks the theme's text and edge colour pairs against these ratios.
+- [ ] Documentation screenshots that change are retaken.
+
+Notes / open questions
+- US-047 fixes secondary text that shows in the wrong colour; doing both together
+  avoids retaking the same screenshots twice.
