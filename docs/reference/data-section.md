@@ -79,7 +79,7 @@ they point into. Every part starts on a 4-byte boundary.
 | 10 | 1 | Slope height at the right edge, 0 to 8 |
 | 11 | 1 | 0 |
 
-A cell's class is its index in this list. There is at least one class and at most 256.
+A cell's class is its index in this list. There is at least one class and at most 255, the most a build accepts.
 
 ### Room
 

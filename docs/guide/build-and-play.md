@@ -110,7 +110,7 @@ Some changes are compiled into the game, so only a build brings them in. The pan
 
 - the game's Rust code, a sprite document, the audio list, or the pixels of any image or sound file the project uses (see [ROM state in the top bar](#rom-state-in-the-top-bar));
 - an entity type added or removed, or an entity type's sprite changed;
-- rooms or collision classes added, removed or put in a different order;
+- rooms or collision classes added, removed or put in a different order, or a collision class's id changed. A change to a class's kind or slope numbers is patched in without a build;
 - tilesets, or the number of tiles in one;
 - background pictures;
 - music tracks;

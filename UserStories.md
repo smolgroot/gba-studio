@@ -86,7 +86,7 @@ Notes / open questions
 | US-012 | Attach behaviours to entity types in the studio | E2 | P0 | Done | M |
 | US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Done | M |
 | US-014 | Prefabs with per-instance overrides | E2 | P1 | Done | M |
-| US-015 | Edit collision classes in the interface | E2 | P1 | Proposed | S |
+| US-015 | Edit collision classes in the interface | E2 | P1 | Done | S |
 | US-016 | Edit entity property definitions in the interface | E2 | P1 | Proposed | S |
 | US-017 | Entity references between entities | E2 | P1 | Proposed | M |
 | US-018 | Custom behaviours written in the game | E2 | P1 | Proposed | M |
@@ -487,15 +487,38 @@ Decided (the open question, settled when the story was built; see `design/US-014
   are, and cleaned when an entity's values are next written by the panel or a tool.
 
 #### US-015 · Edit collision classes in the interface
-**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
-**Touches** app, core
+**Priority** P1 · **Status** Done · **Size** S · **Depends on** —
+**Touches** app, core, docs
 
 As an author, I want to add, rename, recolour and set the kind of collision
 classes in Project settings, so that I do not edit `project.json` by hand.
 
 Acceptance criteria
-- [ ] Every field in the collision class schema can be edited, with undo.
-- [ ] Deleting a class in use asks first and says which tilesets and rooms use it.
+- [x] Every field in the collision class schema can be edited, with undo. (Project
+  settings → Collision classes: colour, name, id, kind and slope heights.
+  `core/test/collision.test.ts`: `classIdProblem`, `withKind` (a slope gets heights, any
+  other kind drops them, and every result parses with `CollisionClass`), `renameClass`
+  (the tilesets that name the id change with it; the data section's cells are the same);
+  `app/test/store-group.test.ts`: a field edit is one project undo step, and an id change
+  is one step with the tilesets, undone and redone together; the `collision-classes`
+  screenshot.)
+- [x] Deleting a class in use asks first and says which tilesets and rooms use it.
+  (`core/test/collision.test.ts`: `classUsage` lists tilesets with their tiles and rooms
+  with their cells, painted or from a tile; `withoutClass` repoints tiles and painted
+  cells, and a data section written before and after gives every other cell the same
+  class; `app/test/store-group.test.ts` and `app/test/groupundo.test.ts`: the deletion is
+  one undo step across the project, tileset and room, refused with its reason if one
+  changed since; the `collision-delete` screenshot shows the question.)
+
+Decided (the open questions, settled when the story was built; see `design/US-015.md`)
+- A used class is deleted after the question: its tiles have the first class, cells
+  painted with it follow their tile, and cells painted with later classes are renumbered.
+  The first class cannot be deleted.
+- The id is editable, and carried to the tilesets that name it, with a warning that game
+  code naming the old constant must change.
+- Undo across documents is grouped under the project, and refused with its reason when a
+  document it changed has been changed since.
+- Classes cannot be moved: a room paints collision by a class's place in the list.
 
 #### US-016 · Edit entity property definitions in the interface
 **Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —

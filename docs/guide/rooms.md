@@ -37,7 +37,7 @@ Click a tile in the tileset palette, or drag across several to paint a block (a 
 
 ## Collision
 
-Tiles carry the collision class given to them in their [tileset](./tilesets). Select **Collision** in the layers list to paint only where a cell should differ from its tile; the eraser gives a cell back to its tile. Use **Show collision** to tint the map with the result. With the Collision layer selected, the *Collision to paint* list in Tiles & Layers shows the available classes and their colours.
+Tiles carry the collision class given to them in their [tileset](./tilesets). Select **Collision** in the layers list to paint only where a cell should differ from its tile; the eraser gives a cell back to its tile. Use **Show collision** to tint the map with the result. With the Collision layer selected, the *Collision to paint* list in Tiles & Layers shows the available classes and their colours. Classes are added, changed and deleted in [Project settings](./project-settings#collision-classes). A cell painted with a class that is then deleted follows its tile again; cells painted with other classes keep theirs.
 
 ![The same room with collision shown](/screenshots/room-collision.png)
 

@@ -42,6 +42,7 @@ import type { SectionTitle } from '../sidebar.ts'
 import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
 import { TypeBehaviours, behaviourNames } from './behaviours.tsx'
+import { CollisionClasses } from './collision.tsx'
 import { MidiView } from './midi.tsx'
 import { PhysicsEditor } from './physics.tsx'
 import { PixelEditor } from './pixel.tsx'
@@ -570,19 +571,7 @@ function ProjectSettings() {
         </Button>
       </Box>
       <Empty>An entity type is a kind of thing placed in rooms: an enemy, a pickup, a door. What it does comes from its behaviours, which the game runs in the order listed, and from the game's own code. A placed entity can set its own values for them in the room's panel. Typed properties of a type's own are edited in studio/project.json for now.</Empty>
-      <Heading>Collision classes</Heading>
-      <Box component="dl" sx={{ m: 0, px: 2, py: 1, display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: 3, rowGap: 0.5 }}>
-        {project.collisionClasses.map((c) => (
-          <Box key={c.id} sx={{ display: 'contents' }}>
-            <Box component="dt" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Box sx={{ width: ui(10), height: ui(10), bgcolor: c.colour, border: '1px solid rgba(255,255,255,0.3)', flexShrink: 0 }} />
-              <Typography>{c.name}</Typography>
-            </Box>
-            <Typography component="dd" color="text.secondary" sx={{ m: 0 }}>{c.slope ? `${c.kind}, floor from ${c.slope.left} to ${c.slope.right} px` : c.kind}</Typography>
-          </Box>
-        ))}
-      </Box>
-      <Empty>Collision classes are edited in studio/project.json for now.</Empty>
+      <CollisionClasses />
     </Box>
   )
 }

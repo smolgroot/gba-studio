@@ -35,7 +35,7 @@ An entity is a thing placed in a room: a player start, an enemy, a pickup. Its *
 - its **behaviours**, by name ("Patrol, Hazard"), or "No behaviours": click them to open the type's behaviours below the row;
 - a bin to delete the type.
 
-Use **Add entity type** at the end of the list to add a type. Types can be added, renamed, recoloured, given a sprite and given behaviours here. Their typed properties of their own (integer, boolean, text or one of a list) and the project's collision classes are defined in `studio/project.json`, not yet in the interface; see the [project format](../reference/project-format). The default of such a property is what every entity of the type has until you set its own in the [room panel](./rooms#entity-overrides), so a changed default reaches the entities that kept it on the next patch, live apply or build.
+Use **Add entity type** at the end of the list to add a type. Types can be added, renamed, recoloured, given a sprite and given behaviours here. Their typed properties of their own (integer, boolean, text or one of a list) are defined in `studio/project.json`, not yet in the interface; see the [project format](../reference/project-format). The default of such a property is what every entity of the type has until you set its own in the [room panel](./rooms#entity-overrides), so a changed default reaches the entities that kept it on the next patch, live apply or build.
 
 ### Behaviours {#behaviours}
 
@@ -69,3 +69,62 @@ It walks back and forth where it was placed, and sends the hero back when they t
 ### Adding a collectible
 
 A collectible is an entity type with a sprite and the **Collectible** behaviour, with its `value`. To add another kind (a ruby, a key): import its PNG as a [sprite](./sprites), add the entity type here, add **Collectible** to its behaviours and set its `value`. Then place it in rooms with the entities tool. The sample game takes any entity whose type has **Collectible** when the hero touches it. A property of the type's own named `value` does not make it a collectible.
+
+## Collision classes {#collision-classes}
+
+A collision class says how a tile, or a cell of a room, acts: solid, a one-way platform, a slope, a hazard. Tiles get a class in their [tileset](./tilesets#paint-collision), and a room can [paint over them](./rooms#collision). The classes themselves are listed here, one row each.
+
+![Project settings with the collision classes as a table: colour, name, id, kind and, for slopes, the floor height at each edge](/screenshots/collision-classes.png)
+
+Each row has:
+
+- a **colour**: click the swatch to change it. The tileset editor outlines tiles of the class in it, and the room editor tints cells of the class in it;
+- a **name**;
+- an **Id**, which is how tilesets name the class; see [The id](#class-id);
+- a **Kind**: Empty, Solid, One-way, Slope, Hazard or Custom. What Hazard and Custom do is up to the game's code;
+- for a slope, two numbers: how high the floor is, in pixels, at the tile's left edge and at its right edge. A tile is 8 pixels high, so the numbers go from 0 (the bottom of the tile) to 8 (the top). A new slope starts at 0 and 8, a 45 degree rise. A number outside 0 to 8 is brought to the nearest end. Changing the kind away from Slope drops the numbers;
+- a bin to delete the class.
+
+**Add collision class** below the table adds a class at the end. It has the id `class` (or `class-2`, `class-3` and so on if that is taken), the name "New class" and the kind Solid; change them in its row. A game can have at most 255 collision classes, so the button is disabled when there are 255.
+
+Each edit of a name, colour, kind or number, each added class and each class deleted that nothing uses is one undo step on the project. Use the undo buttons at the top of the page. Deleting a class that is used, and changing an id, reach other documents; see [Undo across documents](#class-undo).
+
+### The order of the classes {#class-order}
+
+Classes cannot be moved. The first class is the one a tile with no class of its own has, and a room paints collision with a class by its place in the list, so moving a class would change what rooms already painted. New classes go at the end.
+
+The first class cannot be deleted: its bin is disabled, and hovering over it says to change its kind or colour instead.
+
+### The id {#class-id}
+
+The id is how a tileset names the class, and it becomes a constant in the game's code: `data::class::SOLID` for `solid`. Editing it changes the tilesets that name the class, in the same undo step. The studio refuses an id, and says why under the row, when it:
+
+- is not valid: lowercase letters, digits, `-` and `_`, up to 48;
+- is already another class's;
+- would be the same name in code as another class's. `wall-top` and `wall_top` are both `WALL_TOP`.
+
+Rust code in your game that names the old constant must be changed to the new one.
+
+### Deleting a class {#deleting-a-class}
+
+The bin on a row deletes the class. A class that nothing uses is deleted at once. If tilesets or rooms use it, the studio asks first and lists them: for each tileset, how many tiles have the class, and for each room, how many cells have it, and how many of those were painted over their tile in the room's Collision layer ("Room Entry: 4 cells, 1 painted").
+
+![The question asked before deleting a collision class that tilesets and rooms use, listing them](/screenshots/collision-delete.png)
+
+The question says what happens to what uses the class:
+
+- its tiles have the first class instead;
+- cells painted with it follow their tile again;
+- cells painted with a class later in the list are renumbered and stay as they are.
+
+**Delete class** confirms it. **Cancel** keeps the class.
+
+### Undo across documents {#class-undo}
+
+Deleting a class that is used, and changing an id, change tilesets and rooms along with the project. They are one undo step for the project: the undo buttons at the top of Project settings put the project, the tilesets and the rooms all back, and redo does it all again.
+
+If one of those tilesets or rooms was changed after, the undo does nothing, and Project settings says why, for example: "Not undone: Entry was changed after the class “Hazard” was deleted. Undo that change first." Undo the change in that document, then undo here. Redo says "Not redone" in the same way.
+
+### Builds {#class-builds}
+
+The class list is compiled into the game, so adding a class, deleting one or changing an id needs a build: the Play panel says "Needs a build" (see [Patch on change](./build-and-play#patch-on-change)). A change to a class's kind or slope numbers is level data and is patched in without one. A class's name and colour are only for the studio.

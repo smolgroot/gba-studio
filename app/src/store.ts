@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { Audio, MultiKind, Project, Room, Sprite, StartSpot, Tileset, World } from '@pecten-studio/core'
 import { api, watchFiles } from './api.ts'
+import { GroupLinks } from './groupundo.ts'
+import type { Companion } from './groupundo.ts'
 import { toolName } from './tools.ts'
 import type { AgentMessage, BuildMessage, BuildStatus, Bundle, RomStatus } from './api.ts'
 
@@ -77,6 +79,8 @@ interface History {
   future: unknown[]
 }
 const HISTORY_LIMIT = 200
+/** Changes that went to several documents at once, so undo can take them back together. */
+const groups = new GroupLinks()
 
 // Saving runs outside React state. An edit marks its document unsaved until the write
 // that carried it has finished; what the disk says about an unsaved document is ignored.
@@ -120,6 +124,8 @@ interface StudioState {
   runBuild: (mode: 'dev' | 'release') => Promise<void>
   stopBuild: () => Promise<void>
   history: Record<string, History>
+  /** Why the last undo or redo did nothing, if it did not: shown where the author made the change. */
+  notice: string | null
   load: () => Promise<void>
   init: (name: string) => Promise<void>
   select: (selection: Selection) => void
@@ -136,6 +142,12 @@ interface StudioState {
   watch: () => () => void
   /** Replaces a document, remembers the old one for undo, and saves. Also creates new documents. */
   commit: <K extends EditKind>(kind: K, id: string | undefined, doc: DocTypes[K]) => void
+  /**
+   * Changes a document and others with it as one step of the owner's history: undoing the
+   * owner puts the others back, if they are as this left them. Used where one change reaches
+   * several documents, such as deleting a collision class that tilesets and rooms use.
+   */
+  commitGroup: <K extends EditKind>(what: string, owner: { kind: K; id?: string }, doc: DocTypes[K], others: { kind: EditKind; id?: string; label: string; doc: unknown }[]) => void
   /** Undo and redo act on the open document. */
   undo: () => void
   redo: () => void
@@ -184,11 +196,21 @@ export const useStudio = create<StudioState>((set, get) => {
     if (!entry || entry[from].length === 0 || current === undefined) return
     const to = from === 'past' ? 'future' : 'past'
     const target = entry[from][entry[from].length - 1] as DocTypes[EditKind]
+    // A step that was a group moves the other documents too, if they are as it left them.
+    const outcome = groups.step(current, target, (kind, id) => getDoc(bundle.docs, kind as EditKind, id))
+    if (!outcome.ok) {
+      set({ notice: `Not ${from === 'past' ? 'undone' : 'redone'}: ${outcome.reason}` })
+      return
+    }
+    let docs = withDoc(bundle.docs, edited.kind, edited.id, target)
+    for (const write of outcome.writes) docs = withDoc(docs, write.kind as EditKind, write.id, write.doc as never)
     set({
-      bundle: { ...bundle, docs: withDoc(bundle.docs, edited.kind, edited.id, target) },
+      bundle: { ...bundle, docs },
       history: { ...history, [key]: { ...entry, [from]: entry[from].slice(0, -1), [to]: [...entry[to], current] } as History },
+      notice: null,
     })
     scheduleSave(edited.kind, edited.id)
+    for (const write of outcome.writes) scheduleSave(write.kind as EditKind, write.id)
   }
 
   return {
@@ -199,6 +221,7 @@ export const useStudio = create<StudioState>((set, get) => {
     revision: 0,
     selection: selectionFromHash(),
     history: {},
+    notice: null,
     build: null,
     rom: null,
     refreshRom: () => {
@@ -271,7 +294,7 @@ export const useStudio = create<StudioState>((set, get) => {
     },
     select: (selection) => {
       if (selectionKey(selection) === selectionKey(get().selection)) return
-      set({ selection })
+      set({ selection, notice: null })
       history.replaceState(null, '', `#${selection.kind}${selection.id ? `:${encodeURIComponent(selection.id)}` : ''}`)
     },
     watch: () =>
@@ -315,6 +338,25 @@ export const useStudio = create<StudioState>((set, get) => {
         history: previous === undefined ? history : { ...history, [key]: { past: [...entry.past, previous].slice(-HISTORY_LIMIT), future: [] } },
       })
       scheduleSave(kind, id)
+    },
+    commitGroup: (what, owner, doc, others) => {
+      const { bundle, history } = get()
+      if (!bundle) return
+      const previous = getDoc(bundle.docs, owner.kind, owner.id)
+      if (previous === undefined || previous === doc) return
+      // Only what the group really changes is kept with it.
+      const changed = others.flatMap((o): Companion[] => {
+        const before = getDoc(bundle.docs, o.kind, o.id)
+        return before === undefined || before === o.doc ? [] : [{ kind: o.kind, id: o.id, label: o.label, before, after: o.doc }]
+      })
+      let docs = withDoc(bundle.docs, owner.kind, owner.id, doc)
+      for (const c of changed) docs = withDoc(docs, c.kind as EditKind, c.id, c.after as never)
+      groups.record(previous as object, doc as object, what, changed)
+      const key = docKey(owner.kind, owner.id)
+      const entry = history[key] ?? { past: [], future: [] }
+      set({ bundle: { ...bundle, docs }, history: { ...history, [key]: { past: [...entry.past, previous].slice(-HISTORY_LIMIT), future: [] } }, notice: null })
+      scheduleSave(owner.kind, owner.id)
+      for (const c of changed) scheduleSave(c.kind as EditKind, c.id)
     },
     undo: () => step('past'),
     redo: () => step('future'),
