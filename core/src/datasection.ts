@@ -20,6 +20,10 @@ const MIN_SECTIONS = 8
 const [S_STRINGS, S_CLASSES, S_ROOMS, S_ENTITIES, S_PROPS, S_CELLS, S_GLOBALS, S_MANIFEST, S_BEHAVIOURS] = [0, 1, 2, 3, 4, 5, 6, 7, 8] as const
 const CLASS = 12
 const ROOM = 64
+const ENTITY = 12
+const PROP = 20
+/** A screen in pixels: rooms are placed on the world map by screens. */
+const [SCREEN_W, SCREEN_H] = [240, 160]
 const NO_ROOM = 0xffff
 const KINDS: Record<string, number> = { empty: 0, solid: 1, oneway: 2, slope: 3, hazard: 4, custom: 5 }
 
@@ -124,6 +128,63 @@ export function readSection(rom: Uint8Array): Section | null {
     liveEntities: at + 4 <= part(S_MANIFEST) + u32(HEADER + S_MANIFEST * 8 + 4) ? u32(at) : null,
   }
   return { start, version, used, capacity, manifest, classes: records(S_CLASSES, CLASS).map(str), rooms: records(S_ROOMS, ROOM).map(str) }
+}
+
+/** A room of a section: where it is on the world map, in world pixels. */
+export interface PlacedRoom {
+  id: string
+  /** Rooms not on the map have no place; `left` and `top` are then 0. */
+  onMap: boolean
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/** A placed entity's property, as the game was given it. */
+export interface PlacedProperty {
+  name: string
+  value: number | boolean | string
+}
+
+/**
+ * The rooms of a section with their places on the world map, and each entity's
+ * properties, numbered as the game numbers them: what a tool reading a running game
+ * needs to name what it finds. Empty for a section this studio cannot read.
+ */
+export function readPlacements(rom: Uint8Array, section: Section): { rooms: PlacedRoom[]; entities: { properties: PlacedProperty[] }[] } {
+  if (section.version !== SECTION_VERSION) return { rooms: [], entities: [] }
+  const view = new DataView(rom.buffer, rom.byteOffset + section.start, section.capacity)
+  const u32 = (at: number) => view.getUint32(at, true)
+  const part = (n: number) => ({ at: u32(HEADER + n * 8), length: u32(HEADER + n * 8 + 4) })
+  const strings = part(S_STRINGS).at
+  const bytesOf = (at: number) => rom.subarray(section.start + strings + u32(at), section.start + strings + u32(at) + u32(at + 4))
+  const rooms: PlacedRoom[] = []
+  const roomPart = part(S_ROOMS)
+  for (let at = roomPart.at; at < roomPart.at + roomPart.length; at += ROOM) {
+    const onMap = (view.getUint16(at + 24, true) & 1) !== 0
+    rooms.push({
+      id: fromUtf8(bytesOf(at)),
+      onMap,
+      left: onMap ? view.getInt16(at + 20, true) * SCREEN_W : 0,
+      top: onMap ? view.getInt16(at + 22, true) * SCREEN_H : 0,
+      width: view.getUint16(at + 16, true) * 8,
+      height: view.getUint16(at + 18, true) * 8,
+    })
+  }
+  const props = part(S_PROPS).at
+  const entityPart = part(S_ENTITIES)
+  const entities = Array.from({ length: entityPart.length / ENTITY }, (_, n) => {
+    const at = entityPart.at + n * ENTITY
+    const properties = Array.from({ length: view.getUint16(at + 6, true) }, (_, p): PlacedProperty => {
+      const prop = props + (u32(at + 8) + p) * PROP
+      const type = view.getUint8(prop + 8)
+      const value = type === 2 ? fromUtf8(bytesOf(prop + 12)) : type === 1 ? view.getInt32(prop + 12, true) !== 0 : view.getInt32(prop + 12, true)
+      return { name: fromUtf8(bytesOf(prop)), value }
+    })
+    return { properties }
+  })
+  return { rooms, entities }
 }
 
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i])

@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { RAM_REGIONS, readDebugMap, readGameState } from '@pecten-studio/core'
-import type { DebugMap } from '@pecten-studio/core'
+import { RAM_REGIONS, indexSection, readDebugMap, readGameState, readLive } from '@pecten-studio/core'
+import type { DebugMap, LiveEntityRow } from '@pecten-studio/core'
 import { Builder } from '../src/build.ts'
 import { ProjectFolder } from '../src/project.ts'
 
@@ -44,9 +44,10 @@ describe.skipIf(!ready)('the debug map a build writes', () => {
     expect(lines).toContain(`debug map: ${ROM}.debug.json`)
     const written = map(ROM)
     expect(written.rom).toBe(ROM)
-    expect(written.version).toBe(3)
+    expect(written.version).toBe(4)
     expect(written.startOverride?.size).toBe(16)
     expect(written.inbox?.size).toBe(12)
+    expect(written.entities?.slot.size).toBe(108)
     const ewram = RAM_REGIONS.ewram
     expect(written.state.address).toBeGreaterThanOrEqual(ewram.start)
     expect(written.state.address + written.state.size).toBeLessThanOrEqual(ewram.start + ewram.size)
@@ -118,6 +119,53 @@ describe.skipIf(!ready)('the debug map a build writes', () => {
         const after = state()
         expect(after.frame - start.frame).toBe(60)
         expect(after.player.x).toBeGreaterThan(start.player.x)
+      } finally {
+        emulator.free()
+      }
+    })
+
+    it('lists the player first, then the start room\'s entities where they were placed, and follows them', async () => {
+      await builder.run('dev')
+      const debug = map(ROM)
+      const bytes = new Uint8Array(readFileSync(file(ROM)))
+      const section = indexSection(bytes)
+      const mod = await import(pathToFileURL(CORE).href)
+      await mod.default({ module_or_path: await readFile(CORE.replace(/\.js$/, '_bg.wasm')) })
+      const emulator = new mod.WasmEmulator(bytes, false)
+      try {
+        for (let i = 0; i < 120; i++) emulator.step_frame()
+        const start = readLive(emulator, debug, section)
+        if (start.state !== 'running') throw new Error(`expected a running game, got ${JSON.stringify(start)}`)
+        expect(start.note).toBeNull()
+        expect(start.room).toBe('entry')
+        expect(start.rows[0]!.kind).toBe('player')
+        // The start room and the room touching it, shaft, are active. Entities are
+        // numbered room after room, by room id. The player start leaves the table on the
+        // first frame; everything else is listed where it was placed (coins and diamonds
+        // do not move).
+        const world = JSON.parse(readFileSync(file('studio/world.json'), 'utf8'))
+        const placed = ['entry', 'shaft'].flatMap((id) => {
+          const room = JSON.parse(readFileSync(file(`studio/rooms/${id}.json`), 'utf8'))
+          const place = world.rooms.find((r: { room: string }) => r.room === id)
+          return (room.entities as { type: string; x: number; y: number }[]).map((e) => ({ ...e, room: id, x: place.x * 240 + e.x, y: place.y * 160 + e.y }))
+        }).map((e, index) => ({ ...e, index })).filter((e) => e.type !== 'player-start')
+        const entities = start.rows.slice(1) as LiveEntityRow[]
+        expect(entities.map((e) => [e.index, e.type, e.room])).toEqual(placed.map((e) => [e.index, e.type, e.room]))
+        for (const e of placed.filter((e) => e.type === 'coin' || e.type === 'diamond')) {
+          expect(entities.find((row) => row.index === e.index)).toMatchObject({ x: e.x, y: e.y })
+        }
+        const sentry = (rows: typeof start.rows) => rows.find((r) => r.kind === 'entity' && r.type === 'sentry-bot') as LiveEntityRow
+        expect(sentry(start.rows).properties.map((p) => p.name)).toContain('patrol')
+
+        for (let i = 0; i < 60; i++) {
+          emulator.set_pressed_keys(16) // Right
+          emulator.step_frame()
+        }
+        const after = readLive(emulator, debug, section)
+        if (after.state !== 'running') throw new Error('expected a running game')
+        expect(after.frame - start.frame).toBe(60)
+        expect(after.rows[0]!.x).toBeGreaterThan(start.rows[0]!.x)
+        expect(sentry(after.rows).x).not.toBe(sentry(start.rows).x)
       } finally {
         emulator.free()
       }

@@ -1,0 +1,14 @@
+# Which rooms are active with the player's room, as LiveEntities::enter makes them
+# and core/src/inspect.ts works them out. Read by runtime/src/behaviour/live_tests.rs
+# and core/test/inspect.test.ts, so the two cannot drift apart.
+#
+# Rooms of one screen, by their top-left screen on the world map; "-" is off the map.
+rooms: 0,0 1,0 3,0 1,1 2,2 -
+# For each room the player is in: the active rooms, in the order they are made active
+# (the player's room first, then those touching it, by number). Corners count.
+0: 0 1 3
+1: 1 0 3
+2: 2
+3: 3 0 1 4
+4: 4 3
+5: 5

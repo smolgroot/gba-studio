@@ -6,8 +6,9 @@ frame the game copies the state that matters to a tool (the frame count, the roo
 the camera, the player) into one block of RAM. A record in the ROM holds that
 block's address, and after each build the studio writes a map file beside the ROM
 that gives the address and the layout. The record also points at a small inbox,
-where a tool tells the game that its level data changed, and a start override, where a
-tool asks the game to begin in a given room at a given spot.
+where a tool tells the game that its level data changed, a start override, where a
+tool asks the game to begin in a given room at a given spot, and a cell that says
+where the game's table of live entities is.
 
 This page is for tools that read a running game's memory, such as an emulator
 script or an agent checking where the player is. A game does not need it: it calls
@@ -42,6 +43,11 @@ stay where they are while the game runs, as locals of `main` do. A new game made
 **Set up game crate** already does this for the room, the camera and the frame
 count.
 
+The game does nothing for its entities. The generated `data::entities()` (see
+[In the frame loop](../guide/making-a-game#in-the-frame-loop)) calls
+`debug::show_entities` once, as it hands the table out, and that fills the cell. A
+game that keeps its entities some other way has no table to show.
+
 ## The record in the ROM
 
 The record starts with the 8 bytes `PECTDBUG`, on a 4-byte boundary, once in the
@@ -50,24 +56,27 @@ ROM. Search the file for them. All numbers are little-endian.
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | 8 | `PECTDBUG` |
-| 8 | 4 | Version: 3 |
+| 8 | 4 | Version: 4 |
 | 12 | 4 | Address of the state block in RAM |
 | 16 | 4 | Size of the block in bytes: 64 |
 | 20 | 4 | Address of the inbox in RAM |
 | 24 | 4 | Size of the inbox in bytes: 12 |
 | 28 | 16 | The start override (below) |
+| 44 | 4 | Address of the entity table's cell in RAM |
+| 48 | 4 | Size of the cell in bytes: 12 |
 
-Version 3 records are 44 bytes. Version 2 records stop after the inbox's size, at 28
+Version 4 records are 52 bytes. Version 3 records stop after the start override, at
+44 bytes, and have no entity table. Version 2 records stop after the inbox's size, at 28
 bytes, and have no start override. Version 1 records stop after the block's size, at 20
 bytes, and have no inbox.
 
-The linker fills in the addresses, so they change from build to build. The block and
-the inbox are in EWRAM (`0x02000000` to `0x0203FFFF`); the studio refuses a record
+The linker fills in the addresses, so they change from build to build. The block,
+the inbox and the cell are in EWRAM (`0x02000000` to `0x0203FFFF`); the studio refuses a record
 that points anywhere other than EWRAM or IWRAM.
 
 ## The state block
 
-Versions 1 to 3. 64 bytes, all 32-bit words except the flags inside the player's body.
+Versions 1 to 4. 64 bytes, all 32-bit words except the flags inside the player's body.
 
 | Offset | Size | Field | Type |
 | --- | --- | --- | --- |
@@ -108,9 +117,8 @@ count from the block while the game runs.
 
 ### Entities
 
-The block has no table of live entities yet. Where entities are placed, and their
-properties, is in the [data section](./data-section). Entities that move by the
-clock, such as patrols, follow the frame count in the block.
+The block holds no entities. Where the game keeps them is in the
+[entity table](#the-entity-table), from version 4.
 
 ## The inbox
 
@@ -171,6 +179,72 @@ room with the player at the spot, as it does for a `player-start` entity. If `se
 not 1, or the room does not exist, it starts as usual. A release build has no record, so
 nothing can set it.
 
+## The entity table
+
+Version 4. The game keeps its placed entities in one table, `data::Entities`, with a
+slot for every entity of the world. The table is a `static` in EWRAM, so it does not
+move while the game runs. The Play panel's
+[Entities list](../guide/build-and-play#entities) reads it.
+
+### The cell
+
+12 bytes, three 32-bit words, at the address in the record. They are all zero until
+the game takes its table from `data::entities()`, which writes them once. If they are
+still zero after the first frame, the game does not use the generated table.
+
+| Offset | Size | Field | Type |
+| --- | --- | --- | --- |
+| 0 | 4 | Address of the first slot | `address` |
+| 4 | 4 | Number of slots | `u32` |
+| 8 | 4 | Size of a slot in bytes: 108 | `u32` |
+
+The slots follow one another, built or not: slot n starts at the first slot's address
+plus n times the slot size. Read them all in one go, `slots × slotSize` bytes (about
+7 KB for 64 slots). Check the slot size against the map's before reading: a game built
+with another runtime may lay its slots out differently.
+
+### Slot
+
+108 bytes. Offsets count from the start of the slot.
+
+| Offset | Size | Field | Type |
+| --- | --- | --- | --- |
+| 0 | 4 | x: the entity's feet, in world pixels | `i32` |
+| 4 | 4 | y: the entity's feet, in world pixels | `i32` |
+| 8 | 8 | Where it was placed, for the runtime's own use | |
+| 16 | 4 | Speed across, in whole pixels a frame | `i32` |
+| 20 | 4 | Speed down, in whole pixels a frame | `i32` |
+| 24 | 1 | Faces left: 0 or 1 | `bool` |
+| 25 | 1 | Alive: 0 or 1 | `bool` |
+| 26 | 2 | Hitbox left, from the feet | `i16` |
+| 28 | 2 | Hitbox top, from the feet | `i16` |
+| 30 | 2 | Hitbox width; 0 for a type with no sprite | `u16` |
+| 32 | 2 | Hitbox height; 0 for a type with no sprite | `u16` |
+| 36 | 2 | Entity type number, in the order of the [data section](./data-section#manifest)'s manifest | `u16` |
+| 38 | 2 | Room index, in the data section's room table | `u16` |
+| 40 | 2 | The entity's number in the world, as the [data section](./data-section) numbers entities | `u16` |
+| 42 | 1 | Built: 1 when the slot holds an entity | `bool` |
+| 44 | 64 | The entity's behaviours and their state, for the runtime's own use | |
+
+An entity's speeds are whole pixels, not the 1/256 pixel of the player's body. Its
+properties are not in the slot: read them from the data section by its number. The
+behaviours keep their own copies, which some change as they run; those are not laid
+out for tools.
+
+### Which entities are live
+
+A slot is in use when `built` and `alive` are both 1. A room's entities are built the
+first time it becomes active, and kept after that, so the table also holds rooms the
+player has left. The game runs only the entities of the active rooms:
+
+1. the player's room, the block's `room`;
+2. then each room touching it on the [world map](../guide/world-map), sharing an edge
+   or a corner, by room number, up to 16 rooms in all.
+
+A room that is not on the world map is active alone. Work out the touching rooms from
+the rooms' places in the data section, and keep the slots whose `room` is one of
+them. An entity that has been taken or destroyed has `alive` at 0, or is never built.
+
 ## The map file
 
 After a build succeeds, from the **Build** panel, `pecten-studio build` or the MCP
@@ -182,9 +256,9 @@ part of the project; leave it in the ignored `dist/` folder.
 ```json
 {
   "rom": "dist/sample-dev.gba",
-  "version": 3,
+  "version": 4,
   "state": {
-    "address": 33554432,
+    "address": 33558220,
     "size": 64,
     "stamp": "PSGS",
     "fields": [
@@ -213,9 +287,9 @@ part of the project; leave it in the ignored `dist/` folder.
     ]
   },
   "collected": { "bitsPerWord": 32 },
-  "dataSection": { "address": 134351424 },
+  "dataSection": { "address": 134361344 },
   "inbox": {
-    "address": 33554960,
+    "address": 33558752,
     "size": 12,
     "fields": [
       { "name": "generation", "offset": 0, "type": "u32" },
@@ -224,7 +298,7 @@ part of the project; leave it in the ignored `dist/` folder.
     ]
   },
   "startOverride": {
-    "address": 134351392,
+    "address": 134380244,
     "size": 16,
     "fields": [
       { "name": "set", "offset": 0, "type": "u32" },
@@ -232,6 +306,34 @@ part of the project; leave it in the ignored `dist/` folder.
       { "name": "x", "offset": 8, "type": "i32" },
       { "name": "y", "offset": 12, "type": "i32" }
     ]
+  },
+  "entities": {
+    "address": 33558764,
+    "size": 12,
+    "fields": [
+      { "name": "address", "offset": 0, "type": "address" },
+      { "name": "slots", "offset": 4, "type": "u32" },
+      { "name": "slotSize", "offset": 8, "type": "u32" }
+    ],
+    "slot": {
+      "size": 108,
+      "fields": [
+        { "name": "x", "offset": 0, "type": "i32" },
+        { "name": "y", "offset": 4, "type": "i32" },
+        { "name": "vx", "offset": 16, "type": "i32" },
+        { "name": "vy", "offset": 20, "type": "i32" },
+        { "name": "facesLeft", "offset": 24, "type": "bool" },
+        { "name": "alive", "offset": 25, "type": "bool" },
+        { "name": "hitboxX", "offset": 26, "type": "i16" },
+        { "name": "hitboxY", "offset": 28, "type": "i16" },
+        { "name": "hitboxW", "offset": 30, "type": "u16" },
+        { "name": "hitboxH", "offset": 32, "type": "u16" },
+        { "name": "kind", "offset": 36, "type": "u16" },
+        { "name": "room", "offset": 38, "type": "u16" },
+        { "name": "index", "offset": 40, "type": "u16" },
+        { "name": "built", "offset": 42, "type": "bool" }
+      ]
+    }
   }
 }
 ```
@@ -248,12 +350,15 @@ This is the sample's map; the addresses in yours will differ.
 | `dataSection` | Where the [data section](./data-section) starts in the GBA's memory map (the ROM is at `0x08000000`), or `null` if the game has none. |
 | `inbox` | The inbox's address and size in RAM, and its fields, or `null` for a version 1 record. |
 | `startOverride` | The start override's address in the GBA's memory map (in the ROM, so from `0x08000000`), its size and its fields, or `null` for a version 1 or 2 record. Offsets count from the start of the override. |
+| `entities` | The [entity table](#the-entity-table)'s cell: its address and size in RAM and its fields, and `slot`, the size and fields of a slot. `null` for a record before version 4. |
 
-Field types: `u32` and `i32` are 32-bit numbers, unsigned and signed; `bool` is one
-byte, 0 or 1; `address` is a 32-bit address in the GBA's memory map; `body` is a
-body, laid out as `body` says. Offsets count from the start of the block, of the
-body for a body's fields, or of the inbox for its fields. Positions are in world pixels, speeds in 1/256 pixel per
-frame, as on the [Physics](../guide/physics) tab.
+Field types: `u32` and `i32` are 32-bit numbers, unsigned and signed; `u16` and
+`i16` are 16-bit numbers, unsigned and signed; `bool` is one byte, 0 or 1; `address`
+is a 32-bit address in the GBA's memory map; `body` is a body, laid out as `body`
+says. Offsets count from the start of the part the fields belong to: the block, a
+body, the inbox, the start override, the cell or a slot. Positions are in world
+pixels. The player's speeds are in 1/256 pixel per frame, as on the
+[Physics](../guide/physics) tab; an entity's are in whole pixels per frame.
 
 A build that fails or is stopped leaves the map as it was.
 
@@ -270,14 +375,17 @@ A build that fails or is stopped leaves the map as it was.
 Read between frames: the game writes the whole block once a frame, after it has
 moved everything, so a block read in the middle of that copy can mix two frames.
 
+For the entities, read the cell at `entities.address` once the block carries its
+stamp, then the slots it points at, each frame, as [above](#the-entity-table).
+
 The map and the ROM go together. After every build, read the map again: the
-address can move.
+addresses can move.
 
 ## Release builds
 
-The block, the inbox, the record and the copy are only in builds with debug assertions, which
+The block, the inbox, the entity table's cell, the record and the copy are only in builds with debug assertions, which
 Cargo's dev profile has and its release profile does not. In a release build
-`debug::publish` does nothing, `Live::poll` always returns `None`, and the ROM has
+`debug::publish` and `debug::show_entities` do nothing, `Live::poll` always returns `None`, and the ROM has
 no record, so the Play panel restarts the game on every change. The build then writes no
 map, removes an old one, and logs
 `no debug map: dist/sample.gba has no debug record (release builds leave it out)`.
@@ -292,9 +400,12 @@ pecten_studio_rt = { path = "../runtime", features = ["agb", "debug-map"] }
 
 ## What it costs
 
-In a build with the map: 64 bytes of EWRAM (of 256 KB) for the block and 12 for the
-inbox, 44 bytes of ROM for the record and a few dozen for the copy and the poll, and
-16 word writes and one read a frame, under 100 of the frame's 280,896 cycles. A
+In a build with the map: 64 bytes of EWRAM (of 256 KB) for the block, 12 for the
+inbox and 12 for the entity table's cell; 52 bytes of ROM for the record and a few
+dozen for the copy, the poll and filling the cell; and 16 word writes and one read a
+frame, under 100 of the frame's 280,896 cycles. The cell is written once, when the
+game takes its table, so it costs no time a frame. The table itself is the game's
+own, with or without the map: a slot is 108 bytes either way. A
 change taken live costs more on the frame it arrives: the game makes its `World`
 again, and for tiles draws every tile in view, which on the sample skips about two
 frames. IWRAM and video memory are not used. In a release
@@ -303,10 +414,15 @@ build it costs nothing.
 ## Versions
 
 The version in the record says which layout the block has. It goes up when the
-block or the body changes, for example when a live entity table is added, and the
-map file's `version` with it. Version 2 added the inbox, and version 3 the start override, which costs 16 bytes of ROM; the block did not change.
-The studio still reads version 1 records, with no inbox, so a game built before
-version 2 restarts on each change instead of taking it live. A version 2 game has no start override, so **Play from here** asks for a new build. A studio refuses a record with a version it does not
+block, the body or a part the record points at changes, and the map file's
+`version` with it. Version 2 added the inbox, version 3 the start override, which
+costs 16 bytes of ROM, and version 4 the entity table, which costs 8 more bytes of
+ROM and 12 of EWRAM; the block did not change. Each new part comes after the last,
+so the offsets of older records stay where they were.
+The studio still reads versions 1 to 3. They have no entity table, so the Play
+panel's Entities list shows only the player and asks for a new build. A game built
+before version 2 restarts on each change instead of taking it live. A version 2 game
+has no start override, so **Play from here** asks for a new build. A studio refuses a record with a version it does not
 read, or a size that does not match its version, and the build log says to bring
 the studio and the game's runtime to the same version. A tool should check the
 version before it reads the block.

@@ -245,7 +245,7 @@ The studio checks listed behaviours, and every problem is an error, the same wor
 
 The entities live in one table, `data::Entities`, which has a slot for every entity of the world:
 
-- `data::entities()` gives the table. It is a `static`, so it sits in EWRAM, not on the stack. Call it once and keep the reference: a second call stops the game with a message.
+- `data::entities()` gives the table. It is a `static`, so it sits in EWRAM, not on the stack. Call it once and keep the reference: a second call stops the game with a message. In a dev build it also tells the studio where the table is, once, so the Play panel's [Entities list](./build-and-play#entities) can show it; a game that keeps its entities some other way has no list.
 - `data::enter_room(entities, &world, room, skip)` makes `room` and the rooms touching it on the world map the active ones. Call it when the game starts and each time the player enters another room. Each entity is built from the ROM the first time its room is active: its actor at its feet, its type's hitbox and its behaviours with their settings. It is then kept, so a room the player leaves and comes back to is as they left it: a door stays open and a checkpoint stays reached. `skip` takes an entity's number in the world and says to leave it out, such as one already in `Collected`.
 - `data::update_entities(entities, &world, &cx, camera, before, event)` runs one frame of every living entity in the active rooms that the camera shows. `camera` is its top-left corner in world pixels. The other active rooms' entities wait, as they are, until the camera comes to them.
 - `entities.visible(data::view(camera))` gives the same entities, room by room, to draw.

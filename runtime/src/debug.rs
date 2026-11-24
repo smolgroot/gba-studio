@@ -10,10 +10,15 @@
 //! level data (live apply): it writes to an inbox, also found through the record,
 //! and the game asks [`Live::poll`] once a frame.
 //!
-//! The block, the inbox and the record are only in builds with debug assertions (dev
+//! The game's table of live entities says where it is once, through
+//! [`show_entities`], which the generated `data::entities()` calls; the record points
+//! at that too.
+//!
+//! The block, the inbox, the table's cell and the record are only in builds with debug assertions (dev
 //! builds), or with the `debug-map` feature. Otherwise [`publish`] does nothing,
 //! [`Live::poll`] never sees a change, and the ROM has none of them.
 
+use crate::behaviour::live::{LiveEntities, LiveEntity};
 use crate::data::Collected;
 use crate::physics::Body;
 
@@ -23,8 +28,8 @@ pub const STAMP: u32 = u32::from_le_bytes(*b"PSGS");
 
 /// The version of the ROM record and of the block and inbox layouts. Raised when any
 /// changes, so a tool never reads one with the wrong layout. Version 2 added the inbox,
-/// version 3 the start override.
-pub const VERSION: u32 = 3;
+/// version 3 the start override, version 4 the table of live entities.
+pub const VERSION: u32 = 4;
 
 /// What a tool can see of the game each frame. Every field is a 32-bit word, so the
 /// layout is the same on the console and on the host.
@@ -86,6 +91,40 @@ pub struct StartOverride {
     pub room: u32,
     pub x: i32,
     pub y: i32,
+}
+
+/// Where the game's table of live entities is: the address of its first slot, how
+/// many slots it has, and the size of each, all words. Slots that are not built are
+/// there too, with `built` 0. See [`LiveEntity`] for what a slot holds.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EntityTable {
+    pub address: u32,
+    pub slots: u32,
+    pub slot_size: u32,
+}
+
+impl EntityTable {
+    /// Where `table` is. On the host the address is only a number.
+    pub fn of<const N: usize>(table: &LiveEntities<N>) -> Self {
+        Self { address: table.slots_address() as usize as u32, slots: N as u32, slot_size: size_of::<LiveEntity>() as u32 }
+    }
+}
+
+/// Tells a tool where the game's table of live entities is. The generated
+/// `data::entities()` calls it once, as it hands the table out; the table is a
+/// `static`, so it never moves. In a build without the debug map it does nothing.
+#[inline]
+pub fn show_entities<const N: usize>(table: &LiveEntities<N>) {
+    #[cfg(any(debug_assertions, feature = "debug-map"))]
+    {
+        let cell = unsafe { core::ptr::read_volatile(&map::RECORD.entities) };
+        // SAFETY: the record points at `ENTITIES`, which lives for the whole program
+        // and is only written here.
+        unsafe { core::ptr::write_volatile((*cell).0.get(), EntityTable::of(table)) };
+    }
+    #[cfg(not(any(debug_assertions, feature = "debug-map")))]
+    let _ = table;
 }
 
 /// A place to start the game: a room and a point in it, in room pixels.
@@ -183,7 +222,7 @@ impl Live {
 
 #[cfg(any(debug_assertions, feature = "debug-map"))]
 mod map {
-    use super::{GameState, Inbox, StartOverride, VERSION};
+    use super::{EntityTable, GameState, Inbox, StartOverride, VERSION};
     use core::cell::UnsafeCell;
 
     /// The block a tool reads. Only [`super::publish`] writes it.
@@ -204,8 +243,17 @@ mod map {
 
     pub(super) static INBOX: InboxCell = InboxCell(UnsafeCell::new(Inbox { generation: 0, changed: 0, seen: 0 }));
 
+    /// Where the table of live entities is. Only [`super::show_entities`] writes it.
+    #[repr(transparent)]
+    pub(super) struct TableCell(pub(super) UnsafeCell<EntityTable>);
+    // SAFETY: as for `Block`: one core, written once from the main loop.
+    unsafe impl Sync for TableCell {}
+
+    pub(super) static ENTITIES: TableCell = TableCell(UnsafeCell::new(EntityTable { address: 0, slots: 0, slot_size: 0 }));
+
     /// The ROM record: magic, version, then the address and size of the block and of
-    /// the inbox, then the start override. 44 bytes on the console.
+    /// the inbox, then the start override, then the address and size of the entity
+    /// table's cell. 52 bytes on the console.
     #[repr(C)]
     pub(super) struct Record {
         pub(super) magic: [u8; 8],
@@ -215,6 +263,8 @@ mod map {
         pub(super) inbox: *const InboxCell,
         pub(super) inbox_size: u32,
         pub(super) start: StartOverride,
+        pub(super) entities: *const TableCell,
+        pub(super) entities_size: u32,
     }
     // SAFETY: the record is never written; the pointer is only read back.
     unsafe impl Sync for Record {}
@@ -228,6 +278,8 @@ mod map {
         inbox: &INBOX,
         inbox_size: size_of::<Inbox>() as u32,
         start: StartOverride { set: 0, room: 0, x: 0, y: 0 },
+        entities: &ENTITIES,
+        entities_size: size_of::<EntityTable>() as u32,
     };
 }
 
@@ -252,6 +304,7 @@ pub fn publish(state: &GameState) {
 mod tests {
     extern crate std;
     use super::*;
+    use crate::behaviour::Actor;
     use core::mem::offset_of;
     use std::format;
     use std::string::String;
@@ -291,8 +344,31 @@ mod tests {
             field("x", offset_of!(StartOverride, x), "i32"),
             field("y", offset_of!(StartOverride, y), "i32"),
         ];
+        let table = [
+            field("address", offset_of!(EntityTable, address), "address"),
+            field("slots", offset_of!(EntityTable, slots), "u32"),
+            field("slotSize", offset_of!(EntityTable, slot_size), "u32"),
+        ];
+        let actor = offset_of!(LiveEntity, actor);
+        let hitbox = actor + offset_of!(Actor, hitbox);
+        let slot = [
+            field("x", actor + offset_of!(Actor, x), "i32"),
+            field("y", actor + offset_of!(Actor, y), "i32"),
+            field("vx", actor + offset_of!(Actor, vx), "i32"),
+            field("vy", actor + offset_of!(Actor, vy), "i32"),
+            field("facesLeft", actor + offset_of!(Actor, faces_left), "bool"),
+            field("alive", actor + offset_of!(Actor, alive), "bool"),
+            field("hitboxX", hitbox + offset_of!(crate::behaviour::Hitbox, x), "i16"),
+            field("hitboxY", hitbox + offset_of!(crate::behaviour::Hitbox, y), "i16"),
+            field("hitboxW", hitbox + offset_of!(crate::behaviour::Hitbox, w), "u16"),
+            field("hitboxH", hitbox + offset_of!(crate::behaviour::Hitbox, h), "u16"),
+            field("kind", offset_of!(LiveEntity, kind), "u16"),
+            field("room", offset_of!(LiveEntity, room), "u16"),
+            field("index", offset_of!(LiveEntity, index), "u16"),
+            field("built", LiveEntity::BUILT_AT, "bool"),
+        ];
         format!(
-            "{{\n  \"version\": {VERSION},\n  \"stamp\": \"PSGS\",\n  \"size\": {},\n  \"fields\": [\n{}\n  ],\n  \"bodySize\": {},\n  \"body\": [\n{}\n  ],\n  \"inboxSize\": {},\n  \"inbox\": [\n{}\n  ],\n  \"startSize\": {},\n  \"start\": [\n{}\n  ]\n}}\n",
+            "{{\n  \"version\": {VERSION},\n  \"stamp\": \"PSGS\",\n  \"size\": {},\n  \"fields\": [\n{}\n  ],\n  \"bodySize\": {},\n  \"body\": [\n{}\n  ],\n  \"inboxSize\": {},\n  \"inbox\": [\n{}\n  ],\n  \"startSize\": {},\n  \"start\": [\n{}\n  ],\n  \"tableSize\": {},\n  \"table\": [\n{}\n  ],\n  \"slotSize\": {},\n  \"slot\": [\n{}\n  ]\n}}\n",
             size_of::<GameState>(),
             state.join(",\n"),
             size_of::<Body>(),
@@ -301,6 +377,10 @@ mod tests {
             inbox.join(",\n"),
             size_of::<StartOverride>(),
             start.join(",\n"),
+            size_of::<EntityTable>(),
+            table.join(",\n"),
+            size_of::<LiveEntity>(),
+            slot.join(",\n"),
         )
     }
 
@@ -334,6 +414,23 @@ mod tests {
         assert!(core::ptr::eq(map::RECORD.block, &map::BLOCK));
         assert!(core::ptr::eq(map::RECORD.inbox, &map::INBOX));
         assert_eq!(map::RECORD.inbox_size as usize, size_of::<Inbox>());
+        assert!(core::ptr::eq(map::RECORD.entities, &map::ENTITIES));
+        assert_eq!(map::RECORD.entities_size, 12);
+        // The studio reads the cell's address at byte 44 of the record, after the
+        // start override, so versions 1 to 3 keep their offsets.
+        #[cfg(target_pointer_width = "32")]
+        assert_eq!(core::mem::offset_of!(map::Record, entities), 44);
+    }
+
+    #[test]
+    fn show_entities_says_where_the_table_is() {
+        let table = crate::behaviour::live::LiveEntities::<32>::new();
+        show_entities(&table);
+        // SAFETY: only this test writes the cell, and reads it after the write.
+        let cell = unsafe { core::ptr::read_volatile(map::ENTITIES.0.get()) };
+        assert_eq!(cell, EntityTable::of(&table));
+        assert_eq!(cell.address, table.slots_address() as usize as u32);
+        assert_eq!((cell.slots, cell.slot_size as usize), (32, size_of::<LiveEntity>()));
     }
 
     #[test]

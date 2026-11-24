@@ -96,6 +96,11 @@ impl Attached {
 
 /// A placed entity while the game runs: where it is, and its behaviours with their
 /// settings and state. It holds nothing from the data section, so it never reads ROM.
+///
+/// Laid out as C does, with what a tool reads first, so the studio can find each
+/// field in a running game's memory (`docs/reference/debug-map.md`). The behaviours
+/// come last and are not described to tools: their layout is Rust's.
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LiveEntity {
     pub actor: Actor,
@@ -106,11 +111,29 @@ pub struct LiveEntity {
     /// Its number in the world, as [`World::entity_index`] gives it and
     /// [`crate::data::Collected`] takes it.
     pub index: u16,
+    /// Whether this slot of the table holds an entity. Kept here, in what would be
+    /// padding, rather than as an `Option` around the entity, whose layout Rust does
+    /// not fix: a tool reads it to tell a built slot from an empty one.
+    built: bool,
     /// Its type's behaviours, in the type's order.
     pub behaviours: [Option<Attached>; MAX_BEHAVIOURS],
 }
 
 impl LiveEntity {
+    /// Where the `built` flag is in a slot, in bytes: for tools that read the table
+    /// (1 once the slot holds an entity, 0 while it is empty).
+    pub const BUILT_AT: usize = core::mem::offset_of!(Self, built);
+
+    /// An empty slot of the table.
+    const EMPTY: Self = Self {
+        actor: Actor { x: 0, y: 0, home: (0, 0), vx: 0, vy: 0, faces_left: false, alive: false, hitbox: Hitbox { x: 0, y: 0, w: 0, h: 0 } },
+        kind: 0,
+        room: 0,
+        index: 0,
+        built: false,
+        behaviours: [None; MAX_BEHAVIOURS],
+    };
+
     /// Its behaviours, in the order they run.
     pub fn behaviours(&self) -> impl Iterator<Item = &Attached> {
         self.behaviours.iter().flatten()
@@ -137,7 +160,7 @@ pub enum Dispatch {
 /// array: nothing is allocated.
 #[derive(Clone, Debug)]
 pub struct LiveEntities<const N: usize> {
-    slots: [Option<LiveEntity>; N],
+    slots: [LiveEntity; N],
     /// The active rooms' slots, as ranges `first..end`.
     active: [(u16, u16); MAX_ACTIVE_ROOMS],
     /// Each active room's left, top, width and height in world pixels.
@@ -169,7 +192,7 @@ impl<const N: usize> LiveEntities<N> {
     pub const fn new() -> Self {
         let () = Self::FITS;
         Self {
-            slots: [const { None }; N],
+            slots: [LiveEntity::EMPTY; N],
             active: [(0, 0); MAX_ACTIVE_ROOMS],
             bounds: [(0, 0, 0, 0); MAX_ACTIVE_ROOMS],
             active_count: 0,
@@ -181,7 +204,7 @@ impl<const N: usize> LiveEntities<N> {
     /// Forgets every entity, as after a live apply that may have moved them: each is
     /// built again from the ROM when its room is next entered.
     pub fn clear(&mut self) {
-        self.slots = [const { None }; N];
+        self.slots = [LiveEntity::EMPTY; N];
         self.active_count = 0;
     }
 
@@ -221,7 +244,7 @@ impl<const N: usize> LiveEntities<N> {
         self.bounds[self.active_count] = (left, top, entities.width(), entities.height());
         self.active_count += 1;
         for index in first..end.min(N) {
-            if self.slots[index].is_some() || skip(index) {
+            if self.slots[index].built || skip(index) {
                 continue;
             }
             let entity = entities.entity(index - first);
@@ -237,7 +260,7 @@ impl<const N: usize> LiveEntities<N> {
                 count += 1;
             }
             let actor = Actor::at(left + entity.x as i32, top + entity.y as i32, hitbox_of(entity.kind));
-            self.slots[index] = Some(LiveEntity { actor, kind: entity.kind, room: room as u16, index: index as u16, behaviours });
+            self.slots[index] = LiveEntity { actor, kind: entity.kind, room: room as u16, index: index as u16, built: true, behaviours };
         }
     }
 
@@ -259,9 +282,8 @@ impl<const N: usize> LiveEntities<N> {
             if !overlaps(bounds, area) {
                 continue;
             }
-            for slot in &mut self.slots[first as usize..end as usize] {
-                let Some(entity) = slot else { continue };
-                if !entity.actor.alive || before(entity) == Dispatch::Handled {
+            for entity in &mut self.slots[first as usize..end as usize] {
+                if !entity.built || !entity.actor.alive || before(entity) == Dispatch::Handled {
                     continue;
                 }
                 for at in 0..MAX_BEHAVIOURS {
@@ -279,7 +301,7 @@ impl<const N: usize> LiveEntities<N> {
     pub fn active(&self) -> impl Iterator<Item = &LiveEntity> {
         self.active[..self.active_count]
             .iter()
-            .flat_map(|&(first, end)| self.slots[first as usize..end as usize].iter().flatten())
+            .flat_map(|&(first, end)| self.slots[first as usize..end as usize].iter().filter(|entity| entity.built))
             .filter(|entity| entity.actor.alive)
     }
 
@@ -290,7 +312,7 @@ impl<const N: usize> LiveEntities<N> {
             .iter()
             .zip(&self.bounds)
             .filter(move |&(_, &bounds)| overlaps(bounds, area))
-            .flat_map(|(&(first, end), _)| self.slots[first as usize..end as usize].iter().flatten())
+            .flat_map(|(&(first, end), _)| self.slots[first as usize..end as usize].iter().filter(|entity| entity.built))
             .filter(|entity| entity.actor.alive)
     }
 
@@ -301,17 +323,23 @@ impl<const N: usize> LiveEntities<N> {
             .iter_mut()
             .enumerate()
             .filter(move |(index, _)| active.iter().any(|&(first, end)| (first as usize..end as usize).contains(index)))
-            .filter_map(|(_, slot)| slot.as_mut())
-            .filter(|entity| entity.actor.alive)
+            .map(|(_, entity)| entity)
+            .filter(|entity| entity.built && entity.actor.alive)
     }
 
     /// The entity numbered `index` in the world, if it has been built.
     pub fn get(&self, index: usize) -> Option<&LiveEntity> {
-        self.slots.get(index)?.as_ref()
+        self.slots.get(index).filter(|entity| entity.built)
     }
 
     pub fn get_mut(&mut self, index: usize) -> Option<&mut LiveEntity> {
-        self.slots.get_mut(index)?.as_mut()
+        self.slots.get_mut(index).filter(|entity| entity.built)
+    }
+
+    /// Where the slots start in memory: what [`crate::debug::show_entities`] tells a
+    /// tool. Slot `i` is `i * size_of::<LiveEntity>()` bytes on, built or not.
+    pub fn slots_address(&self) -> *const LiveEntity {
+        self.slots.as_ptr()
     }
 
     /// The active rooms, as ranges of entity numbers.

@@ -187,7 +187,10 @@ any size in `assets/sprites/`, `assets/tilesets/` or `assets/backgrounds/`.
   collision, entities, world placement and physics are patched into the ROM in a
   fraction of a second, without a build (**Patch on change**), and go into the
   running game with the player where they are (**Live apply**, for games that poll
-  for it); changes that need a build say why and offer one. The map editor's
+  for it); changes that need a build say why and offer one. Beside the game, the
+  **Entities** list shows the player and the live entities of a dev build, with
+  their positions and speeds, updated every frame; click one in the list or on the
+  game screen to see its hitbox and properties. The map editor's
   **Play from here** tool (`P`) starts a dev game in the clicked room, on the clicked tile. Keyboard: arrows, `X` is A, `Z` is B, `Enter` is
   Start, `Shift` is Select, `A` and `S` are L and R.
 - **ROM state in the top bar:** up to date, patched, or needs build with the

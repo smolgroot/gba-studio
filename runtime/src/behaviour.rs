@@ -133,7 +133,9 @@ fn ability_number(value: i32) -> Option<u8> {
 }
 
 /// An entity's box for touching, as an offset from its feet and a size: a sprite
-/// sheet's hitbox, from `gfx::SpriteSheet::hitbox`.
+/// sheet's hitbox, from `gfx::SpriteSheet::hitbox`. Laid out as C does, so the
+/// studio can read it in a running game (`docs/reference/debug-map.md`).
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Hitbox {
     pub x: i16,
@@ -143,7 +145,9 @@ pub struct Hitbox {
 }
 
 /// A placed entity while the game runs: where it is now, which the data section,
-/// being in ROM, cannot hold.
+/// being in ROM, cannot hold. Laid out as C does, so the studio can read it in a
+/// running game; `home` is a tuple, whose inside is not fixed, so tools skip it.
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Actor {
     /// Its feet (the middle of its bottom edge) in world pixels.

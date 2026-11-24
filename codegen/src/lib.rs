@@ -745,7 +745,8 @@ pub mod data {{
     /// Every entity of the world while the game runs, with its behaviours.
     pub type Entities = LiveEntities<LIVE_ENTITIES>;
 
-    /// The game's table of live entities. It is a static, which agb puts in EWRAM.
+    /// The game's table of live entities. It is a static, which agb puts in EWRAM. In
+    /// a dev build it tells the studio where it is, for the Play panel's entity list.
     ///
     /// # Panics
     /// If called a second time: keep the reference it gave.
@@ -754,10 +755,11 @@ pub mod data {{
         static mut TAKEN: bool = false;
         // SAFETY: the GBA has one core and no interrupt handler calls this. The flag is
         // set before the reference is made, so a second call panics instead of
-        // making another.
+        // making another. The shared reference to the table ends before the mutable one.
         unsafe {{
             assert!(!TAKEN, "data::entities() gives the table once; keep the reference it gave");
             TAKEN = true;
+            pecten_studio_rt::debug::show_entities(&*(&raw const TABLE));
             &mut *(&raw mut TABLE)
         }}
     }}
@@ -965,6 +967,8 @@ mod tests {
         for item in ["pub type Entities = LiveEntities<LIVE_ENTITIES>;", "pub fn entities()", "pub fn enter_room(", "pub fn update_entities("] {
             assert!(data.contains(item), "{item} in {data}");
         }
+        // The table says where it is, once, so the studio's inspector can read it.
+        assert!(data.contains("pecten_studio_rt::debug::show_entities(&*(&raw const TABLE));"), "{data}");
         assert!(data.contains("Limits { entity_kinds: "), "{data}");
         assert!(!data.contains("pub static ROOMS"), "rooms are in the section, not in code: {data}");
 

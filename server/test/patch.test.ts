@@ -113,11 +113,21 @@ describe.skipIf(!ready)('patching the sample ROM', () => {
   }
 
   it('says when the data no longer fits, and that a build makes room', async () => {
+    // A long room name grows the data past the section's spare room (a few KB in the
+    // sample) without adding entities, whose table has a size of its own (below).
+    const room = doc('rooms/entry.json')
+    room.name = 'x'.repeat(8000)
+    save('rooms/entry.json', room)
+    const result = await patchRom(project, builder)
+    expect(result).toMatchObject({ status: 'needs-build', reasons: [expect.stringMatching(/level data is now \d+ bytes and this build of the game has room for \d+; build the game/)] })
+  })
+
+  it('says when there are more entities than the game\'s table holds', async () => {
     const room = doc('rooms/entry.json')
     for (let i = 0; i < 400; i++) room.entities.push({ type: 'coin', x: 8 + (i % 400), y: 40, props: {} })
     save('rooms/entry.json', room)
     const result = await patchRom(project, builder)
-    expect(result).toMatchObject({ status: 'needs-build', reasons: [expect.stringMatching(/level data is now \d+ bytes and this build of the game has room for \d+; build the game/)] })
+    expect(result).toMatchObject({ status: 'needs-build', reasons: expect.arrayContaining([expect.stringMatching(/^the game has room for 32 entities; the project now has 41\d$/)]) })
   })
 
   it('says when something the game compiled has changed', async () => {

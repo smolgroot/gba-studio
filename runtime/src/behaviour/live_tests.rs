@@ -262,9 +262,61 @@ const _: () = assert!(MAX_ACTIVE_ROOMS >= 9);
 
 #[test]
 fn a_live_entity_is_small() {
-    // What a slot of the table costs in EWRAM: docs/reference/limits.md says so.
-    std::println!("a slot is {} bytes", size_of::<Option<LiveEntity>>());
-    assert!(size_of::<Option<LiveEntity>>() <= 112, "{}", size_of::<Option<LiveEntity>>());
+    // What a slot of the table costs in EWRAM: docs/reference/limits.md says so. The
+    // `built` flag sits in what was padding, so a slot costs what `Option` did.
+    std::println!("a slot is {} bytes", size_of::<LiveEntity>());
+    assert!(size_of::<LiveEntity>() <= 108, "{}", size_of::<LiveEntity>());
+}
+
+/// The table's bytes, as a tool reading the game's memory sees them.
+fn bytes_of<const N: usize>(table: &LiveEntities<N>) -> &[u8] {
+    // SAFETY: the slots are N plain values in a row, alive as long as `table`.
+    unsafe { core::slice::from_raw_parts(table.slots_address().cast::<u8>(), N * size_of::<LiveEntity>()) }
+}
+
+/// A field of slot `slot`, read at an offset as the studio does: little-endian.
+fn read(bytes: &[u8], slot: usize, at: usize, size: usize) -> i64 {
+    let at = slot * size_of::<LiveEntity>() + at;
+    let mut word = [0u8; 8];
+    word[..size].copy_from_slice(&bytes[at..at + size]);
+    let unsigned = u64::from_le_bytes(word) as i64;
+    // Sign-extend the signed fields the studio reads (positions, speeds, hitbox offsets).
+    if size < 8 && unsigned & (1 << (size * 8 - 1)) != 0 { unsigned - (1 << (size * 8)) } else { unsigned }
+}
+
+#[test]
+fn a_tool_reads_the_table_at_the_published_offsets() {
+    use core::mem::offset_of;
+    let world = three_rooms(vec![sentry(40, 16), coin(80)], vec![coin(20)], vec![coin(30)]);
+    let mut table = LiveEntities::<32>::new();
+    table.enter(&world, 0, hitbox, keep);
+    let player = away();
+    for clock in 0..10 {
+        frame(&mut table, &world, &player, clock);
+    }
+    let bytes = bytes_of(&table);
+    let actor = offset_of!(LiveEntity, actor);
+    for slot in 0..32 {
+        let built = read(bytes, slot, LiveEntity::BUILT_AT, 1) == 1;
+        assert_eq!(built, table.get(slot).is_some(), "slot {slot}");
+        let Some(entity) = table.get(slot) else { continue };
+        assert_eq!(read(bytes, slot, actor + offset_of!(Actor, x), 4), entity.actor.x as i64);
+        assert_eq!(read(bytes, slot, actor + offset_of!(Actor, y), 4), entity.actor.y as i64);
+        assert_eq!(read(bytes, slot, actor + offset_of!(Actor, vx), 4), entity.actor.vx as i64);
+        assert_eq!(read(bytes, slot, actor + offset_of!(Actor, alive), 1), entity.actor.alive as i64);
+        assert_eq!(read(bytes, slot, actor + offset_of!(Actor, hitbox) + offset_of!(Hitbox, y), 2), entity.actor.hitbox.y as i64);
+        assert_eq!(read(bytes, slot, offset_of!(LiveEntity, kind), 2), entity.kind as i64);
+        assert_eq!(read(bytes, slot, offset_of!(LiveEntity, room), 2), entity.room as i64);
+        assert_eq!(read(bytes, slot, offset_of!(LiveEntity, index), 2), slot as i64);
+    }
+    // Rooms A and B are active (they touch), C is not: three of the 32 slots are built.
+    assert_eq!((0..32).filter(|&slot| read(bytes, slot, LiveEntity::BUILT_AT, 1) == 1).count(), 3);
+    // The sentry patrols, so after ten frames it is not where it was placed.
+    assert_ne!(table.get(0).unwrap().actor.x, table.get(0).unwrap().actor.home.0);
+
+    table.clear();
+    let bytes = bytes_of(&table);
+    assert!((0..32).all(|slot| read(bytes, slot, LiveEntity::BUILT_AT, 1) == 0), "a cleared table has no built slot");
 }
 
 #[test]
@@ -282,4 +334,39 @@ fn hazard_alone_is_listed_in_order() {
     let mut table = LiveEntities::<16>::new();
     table.enter(&world, 0, hitbox, keep);
     assert_eq!(table.get(0).unwrap().behaviours().copied().collect::<Vec<_>>(), [Attached::Hazard(Hazard)]);
+}
+
+/// The rooms made active with each room, as `codegen/fixture/active-rooms.txt` says.
+/// The studio's entity list works out the same rooms from the data section, and
+/// `core/test/inspect.test.ts` checks it against the same file.
+#[test]
+fn active_rooms_match_the_shared_fixture() {
+    let fixture = include_str!("../../../codegen/fixture/active-rooms.txt");
+    let lines: Vec<&str> = fixture.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with('#')).collect();
+    let places: Vec<Option<(i16, i16)>> = lines[0]
+        .strip_prefix("rooms:")
+        .expect("the first line lists the rooms")
+        .split_whitespace()
+        .map(|place| place.split_once(',').map(|(x, y)| (x.parse().unwrap(), y.parse().unwrap())))
+        .collect();
+    // One coin per room, so a room's number is the number of its first entity.
+    let rooms = places
+        .iter()
+        .map(|&place| {
+            let mut rows: Vec<String> = (0..19).map(|_| ".".repeat(30)).collect();
+            rows.push("#".repeat(30));
+            let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
+            (room(&rows, place), vec![coin(20)])
+        })
+        .collect();
+    let world = world_of_rooms(TYPES, rooms);
+    for line in &lines[1..] {
+        let (here, expected) = line.split_once(':').unwrap();
+        let here: usize = here.parse().unwrap();
+        let expected: Vec<usize> = expected.split_whitespace().map(|n| n.parse().unwrap()).collect();
+        let mut table = LiveEntities::<32>::new();
+        table.enter(&world, here, hitbox, keep);
+        let active: Vec<usize> = table.active_rooms().map(|range| range.start).collect();
+        assert_eq!(active, expected, "the rooms active with room {here}");
+    }
 }

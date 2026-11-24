@@ -7,15 +7,31 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { applyLive, liveTaken, planLiveApply, readDebugMap, startAt } from '@pecten-studio/core'
-import type { DebugMap, StartSpot } from '@pecten-studio/core'
+import { applyLive, indexSection, liveTaken, pickAt, planLiveApply, readDebugMap, readLive, rowBox, rowKey, startAt } from '@pecten-studio/core'
+import type { DebugMap, LiveView, SectionIndex, StartSpot } from '@pecten-studio/core'
 import { api, fileUrl } from '../api.ts'
 import type { PatchResult, RomInfo, ToolchainReport } from '../api.ts'
 import { dataUseLine } from '../datause.ts'
 import { Checkbox } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 import { ui } from '../theme.ts'
+import { EntityList } from './inspector.tsx'
+import type { RowKey } from './inspector.tsx'
 import { Message } from './views.tsx'
+
+/** What the entity list reads a ROM with: its debug map and level data, or why it cannot. */
+interface Inspectable {
+  map: DebugMap | null
+  section: SectionIndex | null
+  message: string | null
+}
+
+function inspectable(bytes: Uint8Array): Inspectable {
+  const found = readDebugMap(bytes)
+  if (!found) return { map: null, section: null, message: 'This ROM has no debug map, as release builds do not: play the dev ROM to see its entities.' }
+  if ('problem' in found) return { map: null, section: null, message: `The entity list cannot read this ROM: ${found.problem}.` }
+  return { map: found.map, section: indexSection(bytes), message: null }
+}
 
 /** Says what this folder still needs before it can build, and offers to set up its crate. */
 function BuildSetup() {
@@ -233,6 +249,21 @@ export function PlayView() {
   const [sound, setSound] = useState(false)
   const loadedModified = useRef(0)
   const touch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+  // The entity list: what the running ROM can be read with, and the last frame read.
+  const inspecting = useRef<Inspectable>({ map: null, section: null, message: null })
+  const [inspectMessage, setInspectMessage] = useState<string | null>(null)
+  const [live, setLive] = useState<LiveView | null>(null)
+  const liveRef = useRef<LiveView | null>(null)
+  const [selected, setSelected] = useState<RowKey | null>(null)
+  const selectedRef = useRef<RowKey | null>(null)
+  selectedRef.current = selected
+  const [showEntities, setShowEntities] = useState(true)
+  const showEntitiesRef = useRef(showEntities)
+  showEntitiesRef.current = showEntities
+  const readWith = (bytes: Uint8Array) => {
+    inspecting.current = inspectable(bytes)
+    setInspectMessage(inspecting.current.message)
+  }
 
   // Start on request, and again when the ROM file changes while following builds.
   const start = useCallback(async (info: RomInfo) => {
@@ -244,6 +275,9 @@ export function PlayView() {
       emulator.current?.free()
       emulator.current = new mod.WasmEmulator(bytes, false)
       loadedBytes.current = bytes
+      readWith(bytes)
+      liveRef.current = null
+      setLive(null)
       pendingLive.current = null
       loadedModified.current = info.modified
       // Before the first frame, so the game reads the spot as it begins.
@@ -284,6 +318,8 @@ export function PlayView() {
       }
       const generation = applyLive(core, plan)
       loadedBytes.current = bytes
+      // Entities may have new numbers, types or properties: name them from the new data.
+      readWith(bytes)
       pendingLive.current = { map: plan.map, generation, frames: LIVE_PATIENCE, rom: info }
       setApplied(null)
     } catch (e) {
@@ -330,7 +366,9 @@ export function PlayView() {
       const core = emulator.current
       if (core) {
         try {
+          let stepped = 0
           for (let n = 0; n < 4 && now >= next - 2; n++) {
+            stepped++
             core.set_pressed_keys(keys.current)
             const pixels = core.step_frame()
             const pending = pendingLive.current
@@ -357,6 +395,21 @@ export function PlayView() {
             next += GBA_FRAME_MS
           }
           if (now - next > 250) next = now
+          // The list, read once the frames due are done: one read a frame at the
+          // console's pace, and React sees only the last of a catch-up.
+          const { map, section } = inspecting.current
+          if (stepped && map && showEntitiesRef.current && emulator.current === core) {
+            const view = readLive(core, map, section)
+            liveRef.current = view
+            setLive(view)
+            const row = view.state === 'running' ? view.rows.find((r) => rowKey(r) === selectedRef.current) : undefined
+            if (row && view.state === 'running') {
+              // The selected one's box, outlined on the screen so a pick can be seen.
+              const [x, y, w, h] = rowBox(row)
+              context2d.strokeStyle = '#4c9ffe'
+              context2d.strokeRect(x - view.camera.x + 0.5, y - view.camera.y + 0.5, Math.max(w - 1, 1), Math.max(h - 1, 1))
+            }
+          }
         } catch (e) {
           setError(`The emulator stopped: ${(e as Error).message}`)
           setRunning(false)
@@ -427,6 +480,7 @@ export function PlayView() {
         <Checkbox checked={autoRestart} onChange={setAutoRestart}>Restart on rebuild</Checkbox>
         <Checkbox checked={patchOnChange} onChange={setPatchOnChange}>Patch on change</Checkbox>
         <Checkbox checked={liveApply} onChange={setLiveApply}>Live apply</Checkbox>
+        <Checkbox checked={showEntities} onChange={setShowEntities}>Entities</Checkbox>
       </Box>
       <Typography variant="body2" color="text.secondary">{romPath} · {(rom.size / 1024).toFixed(0)} KB · built {new Date(romModified ?? 0).toLocaleTimeString()}</Typography>
       {startNote && <Typography variant="body2" color="text.secondary">{startNote} Play or Reset starts from the start room.</Typography>}
@@ -441,8 +495,25 @@ export function PlayView() {
         </Box>
       )}
       {patch?.status === 'invalid' && <Typography variant="body2" color="error" role="alert">Not patched: {patch.problems.join('; ')}</Typography>}
-      <Box sx={{ width: 'min(100%, 720px)', aspectRatio: '3 / 2', bgcolor: '#000', border: '1px solid #333' }}>
-        <canvas ref={canvas} width={240} height={160} className="pixelated" style={{ width: '100%', height: '100%', display: 'block' }} />
+      {/* The list sits beside the screen when the panel is wide enough, else under it. */}
+      <Box sx={{ width: '100%', display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start' }}>
+        <Box sx={{ flex: '1 1 360px', maxWidth: 720, aspectRatio: '3 / 2', bgcolor: '#000', border: '1px solid #333' }}>
+          <canvas
+            ref={canvas}
+            width={240}
+            height={160}
+            className="pixelated"
+            aria-label="Game screen: click a thing to select it in the entity list"
+            onClick={(event) => {
+              if (!showEntitiesRef.current || !liveRef.current) return
+              const box = event.currentTarget.getBoundingClientRect()
+              const row = pickAt(liveRef.current, Math.floor(((event.clientX - box.left) / box.width) * 240), Math.floor(((event.clientY - box.top) / box.height) * 160))
+              setSelected(row ? rowKey(row) : null)
+            }}
+            style={{ width: '100%', height: '100%', display: 'block', cursor: showEntities ? 'crosshair' : undefined }}
+          />
+        </Box>
+        {showEntities && <EntityList view={live} selected={selected} onSelect={setSelected} message={inspectMessage} />}
       </Box>
       <Typography variant="body2" color="text.secondary">Arrows move · X is A · Z is B · Enter is Start · Shift is Select · A and S are L and R</Typography>
       {touch && (

@@ -89,6 +89,7 @@ Open **Play** in the Project panel. It runs the built ROM on the [Pecten](https:
 | **Restart on rebuild** | Restart by itself when the ROM is rebuilt. |
 | **Patch on change** | While the game runs, put each saved change to the level data into the ROM without a build. On by default. |
 | **Live apply** | Put a patched change into the game that is running, instead of restarting it. On by default. See [Live apply](#live-apply). |
+| **Entities** | Show the list of the player and the live entities beside the game, and let you pick one on the game screen. On by default. See [Entities](#entities). |
 
 The panel names the ROM, its size and when it was built. On touch devices, on-screen buttons appear.
 
@@ -142,6 +143,44 @@ When the change can't go in live, the game restarts with the new ROM, as it does
 - the game did not take the change within 30 frames (half a second), because it does not look for changes. The game has to call `debug::Live::poll` once a frame and read its level data again when it reports a change; see [Making a game with it](./making-a-game#the-runtime). The sample does. A game made by **Set up game crate** does not, so it restarts.
 
 Both ways need **Restart on rebuild** on. With it off, the running game is left as it is until you press **Restart**.
+
+### Entities
+
+While a dev ROM runs, the **Entities** list beside the game screen shows the player and every live entity, updated every frame. When the panel is narrow, the list sits under the screen. Untick **Entities** to hide it.
+
+![The Play panel with the entity list beside the game, a coin picked on the screen and its row open](/screenshots/play-entities.png)
+
+The first line says the frame, the room the player is in and the camera's top-left corner, as "Frame 133 · room entry · camera 720, 160". Then come:
+
+- **Player**, always first: the top-left corner of its body, in world pixels, and its speed in pixels a frame, to 1/256 of a pixel (as on the [Physics](./physics) tab).
+- Each live entity, as its type and its number in the world ("coin #1"): its feet, in world pixels, and its speed in whole pixels a frame.
+
+The list holds the entities of the player's room and of each room touching it on the [world map](./world-map), sharing an edge or a corner: the rooms the game is running. Entities that were taken or destroyed are not listed. Nor is the player start, which the sample takes off the table on the first frame. Shots and other things the game makes while it runs are not in the table, so they are not listed either.
+
+Click a row to select it and open it. An entity shows:
+
+| Line | What it is |
+| --- | --- |
+| room | The room it was placed in. |
+| hitbox | Its size and where it sits from the feet, or "none (no sprite)" for a type with no sprite. |
+| facing | Left or right. |
+| Properties as placed | Its properties and those of its type's behaviours, as the running ROM gives them to the game. A behaviour that changes its settings as it runs keeps its own copy, which is not shown. |
+
+The player shows its size and whether it is on the ground or has hit a wall or a ceiling.
+
+You can also click a thing on the game screen. It is selected in the list, its row opens, and its box is outlined in blue on the screen. Where several boxes overlap, the smallest is picked, so a coin in front of a door can still be chosen. An entity with no sprite has no box, so it is picked by a small square standing on its feet. Clicking an empty spot clears the selection.
+
+If the selected entity stops being live, the list says "#1 is no longer live: it was taken, or its room is no longer active." until you pick another.
+
+The list reads the game's memory through the [debug map](../reference/debug-map), which release builds leave out. When it can't show the entities, it says why:
+
+| The list says | Why |
+| --- | --- |
+| This ROM has no debug map, as release builds do not: play the dev ROM to see its entities. | The release ROM is running. |
+| Build again to see entities: this ROM was built by an older studio, whose debug map has no entity table. | The dev ROM was built before the list existed. Only the player is listed. |
+| The game does not use the generated entity table (data::entities()), so there are no entities to list. | The game keeps its entities in its own way. Only the player is listed. |
+
+A game needs no code for the list: the generated `data::entities()` tells the studio where the table is (see [In the frame loop](./making-a-game#in-the-frame-loop)). It costs the game nothing a frame and nothing in a release build.
 
 ### Keyboard
 

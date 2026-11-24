@@ -76,6 +76,7 @@ Notes / open questions
 | US-005 | Play from the room and spot under the cursor | E1 | P1 | Done | M |
 | US-006 | Data reserve and section use in Project settings | E1 | P2 | Done | S |
 | US-007 | Redraw only the changed tiles on live apply | E1 | P2 | Proposed | S |
+| US-008 | Patch test for data that no longer fits trips the entity limit first | E1 | P1 | Done | S |
 | US-010 | Behaviour library in the runtime | E2 | P0 | Done | L |
 | US-010a | Behaviour shape, patrol, collectible and hazard, used by the sample | E2 | P0 | Done | M |
 | US-010b | Projectile, shooter, platform, door, checkpoint, ability pickup, spawner | E2 | P0 | Done | M |
@@ -90,7 +91,9 @@ Notes / open questions
 | US-017 | Entity references between entities | E2 | P1 | Proposed | M |
 | US-018 | Custom behaviours written in the game | E2 | P1 | Proposed | M |
 | US-020 | Symbol map of game state | E3 | P0 | Done | M |
-| US-021 | Live entity inspector in the Play panel | E3 | P0 | Proposed | L |
+| US-021 | Live entity inspector in the Play panel | E3 | P0 | In progress | L |
+| US-021a | Live entity list and selecting on the game screen | E3 | P0 | Done | M |
+| US-021b | Edit a live entity's numbers while the game runs | E3 | P0 | Proposed | M |
 | US-022 | Debug overlays on the game screen | E3 | P0 | Proposed | M |
 | US-023 | Pause, step a frame, rewind | E3 | P1 | Proposed | M |
 | US-024 | VRAM, palette and OAM viewers | E3 | P1 | Proposed | M |
@@ -138,6 +141,7 @@ Notes / open questions
 | US-106 | Test on more browsers, touch and large projects | E11 | P2 | Proposed | M |
 | US-107 | Fix the README's "left out on purpose" list | E11 | P0 | Done | S |
 | US-108 | Scripted documentation screenshots | E11 | P1 | Done | S |
+| US-109 | The sample's world map names a room it does not have | E11 | P2 | Proposed | S |
 | US-110 | Game flags and variables | E12 | P1 | Proposed | M |
 | US-111 | Trigger zones | E12 | P1 | Proposed | S |
 | US-112 | Rule format: event, conditions, actions | E12 | P1 | Proposed | M |
@@ -273,6 +277,28 @@ Acceptance criteria
 - [ ] The studio passes the changed cells (room and rectangle) through the inbox,
   and the game redraws only those.
 - [ ] A one-tile change costs the sample no dropped frame.
+
+#### US-008 · Patch test for data that no longer fits trips the entity limit first
+**Priority** P1 · **Status** Done · **Size** S · **Depends on** —
+**Touches** server
+
+As a contributor, I want `pnpm test` to pass on a freshly built sample, so that a
+failure means something.
+
+`server/test/patch.test.ts` ("says when the data no longer fits") adds 400 coins
+to make the level data too big. Since US-013 a dev ROM records its entity table's
+size (32 slots for the sample), so the patch now stops at "the game has room for 32
+entities" before it reaches the data size. The test passed only while
+`sample/dist/` held a ROM built before US-013. Found in US-021a: it fails the same
+way on a ROM built from the commit before it.
+
+Acceptance criteria
+- [x] The test makes the data too big without passing the entity table's size (a
+  long text property or room name, say), and checks the "level data is now ...
+  bytes" reason. (An 8,000-character room name; the sample's section has about 4 KB
+  spare.)
+- [x] A separate case checks the entity-table reason for too many entities. ("says
+  when there are more entities than the game's table holds", with 400 coins.)
 
 ---
 
@@ -507,7 +533,7 @@ Acceptance criteria
 - [x] Release builds can leave it out.
 
 #### US-021 · Live entity inspector in the Play panel
-**Priority** P0 · **Status** Proposed · **Size** L · **Depends on** US-020
+**Priority** P0 · **Status** In progress · **Size** L · **Depends on** US-020
 **Touches** app, Pecten core
 
 As an author, I want to see the live entities, their positions, velocities and
@@ -515,9 +541,48 @@ properties while the game runs, and change a value, so that I can find out why
 something behaves wrongly.
 
 Acceptance criteria
-- [ ] A panel lists live entities, updated every frame, with the player first.
-- [ ] Clicking one on the game screen selects it in the list.
+- [x] A panel lists live entities, updated every frame, with the player first. (US-021a)
+- [x] Clicking one on the game screen selects it in the list. (US-021a)
 - [ ] Editing a number writes it to memory and the game uses it on the next frame.
+
+Split into US-021a and US-021b, one branch each; this story is `Done` when both are.
+The criteria above are shared out between them unchanged. Design:
+`design/US-021.md`.
+
+#### US-021a · Live entity list and selecting on the game screen
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-020
+**Touches** runtime, codegen, core, server, app
+
+As an author, I want to see the player and the live entities, with their positions,
+speeds and properties, while the game runs, and pick one by clicking it on the game
+screen, so that I can find out why something behaves wrongly.
+
+Acceptance criteria
+- [x] A panel lists live entities, updated every frame, with the player first.
+  (The Entities list beside the Play screen; the sample's dev ROM run headless in
+  `server/test/debugmap.test.ts`, and `server/test/inspect.test.ts`.)
+- [x] Clicking one on the game screen selects it in the list. (`pickAt` in
+  `core/test/inspect.test.ts`; the `play-entities` screenshot clicks a coin.)
+
+Design: `design/US-021.md`.
+
+#### US-021b · Edit a live entity's numbers while the game runs
+**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-021a
+**Touches** runtime, core, app
+
+As an author, I want to change a live entity's or the player's numbers while the
+game runs, so that I can try a fix without rebuilding.
+
+Acceptance criteria
+- [ ] Editing a number writes it to memory and the game uses it on the next frame.
+
+Open questions
+- The player's body is a local of the game's `main`; the block holds a copy, so a
+  write to the block does not reach the game. The player needs a way back in (an
+  address in the block, or a request through the inbox).
+- Properties as placed are in the ROM's data section and the behaviours' copies of
+  them are not laid out for tools. Is editing them live apply's job (US-003), leaving
+  this story to the entity's position, speed, facing and whether it is alive?
 
 #### US-022 · Debug overlays on the game screen
 **Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-020
@@ -1170,6 +1235,22 @@ Notes / open questions
   (`../diamond-hands/project`). The three about patching come from `sample/`,
   because Diamond Hands does not read its level data from the ROM; the footer says
   so.
+
+#### US-109 · The sample's world map names a room it does not have
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** sample
+
+As an author opening the sample, I want it to have no problems, so that the first
+problem I see is one I made.
+
+`sample/studio/world.json` places a room `kitchen` at (3, 0), but there is no
+`studio/rooms/kitchen.json`, so the Problems panel shows `unknown room "kitchen"`
+(seen in the Play panel screenshots taken for US-021a).
+
+Acceptance criteria
+- [ ] The sample opens with no problems: the room is added or its place removed,
+  whichever the sample's tour needs.
+- [ ] The screenshots taken from `sample/` no longer show the problem.
 
 ---
 
