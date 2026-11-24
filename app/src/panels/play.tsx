@@ -7,8 +7,8 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { applyLive, indexSection, liveTaken, pickAt, planLiveApply, readDebugMap, readLive, rowBox, rowKey, startAt, writeLive } from '@pecten-studio/core'
-import type { DebugMap, LiveView, SectionIndex, StartSpot } from '@pecten-studio/core'
+import { OVERLAYS, applyLive, drawShapes, indexSection, liveTaken, overlayShapes, pickAt, planLiveApply, readDebugMap, readLive, rowBox, rowKey, startAt, writeLive } from '@pecten-studio/core'
+import type { DebugMap, LiveView, Overlay, SectionIndex, StartSpot } from '@pecten-studio/core'
 import { api, fileUrl } from '../api.ts'
 import type { PatchResult, RomInfo, ToolchainReport } from '../api.ts'
 import { dataUseLine } from '../datause.ts'
@@ -178,6 +178,9 @@ interface Emulator {
   free: () => void
 }
 
+/** What each overlay is called on its switch. */
+const OVERLAY_NAMES: Record<Overlay, string> = { hitboxes: 'Hitboxes', collision: 'Collision', camera: 'Camera', rooms: 'Rooms' }
+
 /** Frames a game has to take a live change before it is restarted with the new ROM instead. */
 const LIVE_PATIENCE = 30
 type PectenModule = { default: () => Promise<unknown>; WasmEmulator: new (rom: Uint8Array, bootIntro: boolean) => Emulator }
@@ -260,6 +263,18 @@ export function PlayView() {
   const [showEntities, setShowEntities] = useState(true)
   const showEntitiesRef = useRef(showEntities)
   showEntitiesRef.current = showEntities
+  // The overlays drawn over the game screen: each its own switch, drawn by the studio
+  // into the picture, so the game does not know. See design/US-022.md.
+  const [overlays, setOverlays] = useState<ReadonlySet<Overlay>>(new Set())
+  const overlaysRef = useRef(overlays)
+  overlaysRef.current = overlays
+  const [camera, setCamera] = useState<{ x: number; y: number } | null>(null)
+  const toggleOverlay = (overlay: Overlay, on: boolean) => {
+    const next = new Set(overlays)
+    if (on) next.add(overlay)
+    else next.delete(overlay)
+    setOverlays(next)
+  }
   const readWith = (bytes: Uint8Array) => {
     inspecting.current = inspectable(bytes)
     setInspectMessage(inspecting.current.message)
@@ -367,6 +382,7 @@ export function PlayView() {
       if (core) {
         try {
           let stepped = 0
+          let frame: Uint8ClampedArray<ArrayBuffer> | null = null
           for (let n = 0; n < 4 && now >= next - 2; n++) {
             stepped++
             core.set_pressed_keys(keys.current)
@@ -385,7 +401,8 @@ export function PlayView() {
                 break
               }
             }
-            context2d.putImageData(new ImageData(new Uint8ClampedArray(pixels), 240, 160), 0, 0)
+            frame = new Uint8ClampedArray(pixels)
+            context2d.putImageData(new ImageData(frame, 240, 160), 0, 0)
             const samples = core.take_audio_samples()
             if (audio.current && samples.length) {
               const floats = new Float32Array(samples.length)
@@ -395,14 +412,22 @@ export function PlayView() {
             next += GBA_FRAME_MS
           }
           if (now - next > 250) next = now
-          // The list, read once the frames due are done: one read a frame at the
-          // console's pace, and React sees only the last of a catch-up.
+          // The list and the overlays, read once the frames due are done: one read a
+          // frame at the console's pace, and React sees only the last of a catch-up.
           const { map, section } = inspecting.current
-          if (stepped && map && showEntitiesRef.current && emulator.current === core) {
+          const listed = showEntitiesRef.current
+          const drawn = overlaysRef.current
+          if (stepped && map && (listed || drawn.size > 0) && emulator.current === core) {
             const view = readLive(core, map, section)
             liveRef.current = view
-            setLive(view)
-            const row = view.state === 'running' ? view.rows.find((r) => rowKey(r) === selectedRef.current) : undefined
+            if (listed) setLive(view)
+            if (frame && drawn.size > 0) {
+              // Painted into the picture of this frame, which the next one replaces whole.
+              drawShapes(frame, overlayShapes(view, section, drawn))
+              context2d.putImageData(new ImageData(frame, 240, 160), 0, 0)
+            }
+            setCamera(drawn.has('camera') && view.state === 'running' ? (last) => (last && last.x === view.camera.x && last.y === view.camera.y ? last : { ...view.camera }) : null)
+            const row = listed && view.state === 'running' ? view.rows.find((r) => rowKey(r) === selectedRef.current) : undefined
             if (row && view.state === 'running') {
               // The selected one's box, outlined on the screen so a pick can be seen.
               const [x, y, w, h] = rowBox(row)
@@ -482,6 +507,13 @@ export function PlayView() {
         <Checkbox checked={liveApply} onChange={setLiveApply}>Live apply</Checkbox>
         <Checkbox checked={showEntities} onChange={setShowEntities}>Entities</Checkbox>
       </Box>
+      <Box role="group" aria-label="Overlays on the game screen" sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Typography variant="body2" color="text.secondary">Overlays</Typography>
+        {OVERLAYS.map((overlay) => (
+          <Checkbox key={overlay} checked={overlays.has(overlay)} onChange={(on) => toggleOverlay(overlay, on)}>{OVERLAY_NAMES[overlay]}</Checkbox>
+        ))}
+      </Box>
+      {overlays.size > 0 && !showEntities && inspectMessage && <Typography variant="body2" color="text.secondary">{inspectMessage}</Typography>}
       <Typography variant="body2" color="text.secondary">{romPath} · {(rom.size / 1024).toFixed(0)} KB · built {new Date(romModified ?? 0).toLocaleTimeString()}</Typography>
       {startNote && <Typography variant="body2" color="text.secondary">{startNote} Play or Reset starts from the start room.</Typography>}
       {error && <Typography color="error" role="alert">{error}</Typography>}
@@ -497,21 +529,24 @@ export function PlayView() {
       {patch?.status === 'invalid' && <Typography variant="body2" color="error" role="alert">Not patched: {patch.problems.join('; ')}</Typography>}
       {/* The list sits beside the screen when the panel is wide enough, else under it. */}
       <Box sx={{ width: '100%', display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'flex-start' }}>
-        <Box sx={{ flex: '1 1 360px', maxWidth: 720, aspectRatio: '3 / 2', bgcolor: '#000', border: '1px solid #333' }}>
-          <canvas
-            ref={canvas}
-            width={240}
-            height={160}
-            className="pixelated"
-            aria-label="Game screen: click a thing to select it in the entity list"
-            onClick={(event) => {
-              if (!showEntitiesRef.current || !liveRef.current) return
-              const box = event.currentTarget.getBoundingClientRect()
-              const row = pickAt(liveRef.current, Math.floor(((event.clientX - box.left) / box.width) * 240), Math.floor(((event.clientY - box.top) / box.height) * 160))
-              setSelected(row ? rowKey(row) : null)
-            }}
-            style={{ width: '100%', height: '100%', display: 'block', cursor: showEntities ? 'crosshair' : undefined }}
-          />
+        <Box sx={{ flex: '1 1 360px', maxWidth: 720 }}>
+          <Box sx={{ aspectRatio: '3 / 2', bgcolor: '#000', border: '1px solid #333' }}>
+            <canvas
+              ref={canvas}
+              width={240}
+              height={160}
+              className="pixelated"
+              aria-label="Game screen: click a thing to select it in the entity list"
+              onClick={(event) => {
+                if (!showEntitiesRef.current || !liveRef.current) return
+                const box = event.currentTarget.getBoundingClientRect()
+                const row = pickAt(liveRef.current, Math.floor(((event.clientX - box.left) / box.width) * 240), Math.floor(((event.clientY - box.top) / box.height) * 160))
+                setSelected(row ? rowKey(row) : null)
+              }}
+              style={{ width: '100%', height: '100%', display: 'block', cursor: showEntities ? 'crosshair' : undefined }}
+            />
+          </Box>
+          {overlays.has('camera') && camera && <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontVariantNumeric: 'tabular-nums' }}>Camera {camera.x}, {camera.y}: the cross is the middle of the view.</Typography>}
         </Box>
         {showEntities && (
           <EntityList

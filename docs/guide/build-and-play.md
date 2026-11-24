@@ -90,6 +90,7 @@ Open **Play** in the Project panel. It runs the built ROM on the [Pecten](https:
 | **Patch on change** | While the game runs, put each saved change to the level data into the ROM without a build. On by default. |
 | **Live apply** | Put a patched change into the game that is running, instead of restarting it. On by default. See [Live apply](#live-apply). |
 | **Entities** | Show the list of the player and the live entities beside the game, let you pick one on the game screen, and change its numbers while the game runs. On by default. See [Entities](#entities). |
+| **Overlays** | Four check boxes, **Hitboxes**, **Collision**, **Camera** and **Rooms**, that draw over the game screen what the physics sees. Off by default. See [Overlays](#overlays). |
 
 The panel names the ROM, its size and when it was built. On touch devices, on-screen buttons appear.
 
@@ -226,6 +227,27 @@ When a change can't be made, the row says "Not changed:" and why:
 | Not changed: Build again to change it: this ROM was built by an older studio. Its debug map has no player edit. | The dev ROM was built before the player could be changed. Its entities' x, y, vx, vy, faces left and alive can still be changed; their home is not shown. |
 
 Changing numbers works on dev ROMs only, as the list does. It costs the game 20 bytes of EWRAM and one read a frame for the player, and nothing in a release build.
+
+### Overlays
+
+Under the buttons, the **Overlays** row has four check boxes that draw what the physics sees over the game screen. Each is its own switch, and all are off by default. They do not need the **Entities** list to be open.
+
+![The Play panel with the four overlays on: hitboxes, collision cells, the camera's cross and room borders drawn over the game screen](/screenshots/play-overlays.png)
+
+| Overlay | What it draws |
+| --- | --- |
+| **Hitboxes** | A green box round the player and an amber box round each live entity. An entity whose type has no hitbox gets a small cross where its feet are. |
+| **Collision** | The cells that stop or hurt the player, by their class: solid cells filled in red, a one-way cell with a thin cyan line along its top, a slope filled up to its floor in violet, a hazard filled and outlined in amber, and a custom class outlined in grey. Empty cells are not drawn. |
+| **Camera** | A pink cross at the middle of the view. Under the screen the panel writes where the camera is: "Camera 720, 160: the cross is the middle of the view." |
+| **Rooms** | The border of each room of the [world map](./world-map) that is in view, brighter for the player's room. A faint line marks each 240x160 screen inside a room that is bigger than one screen. |
+
+The camera's position is the world pixel at the top-left of the screen. The cross has no target on purpose: how a game aims its camera is its own code, so the overlay shows only where the view is. To see how far the player is from the middle of the view, turn on **Hitboxes** as well.
+
+The studio draws the overlays into each picture the emulator makes. The GBA screen is 240 by 160 pixels, and the studio scales that picture up, so a line is one game pixel wide at any zoom. The game and the ROM are not touched: an overlay adds nothing to the ROM, to the game's memory or to the console's time, and a release build holds nothing for it.
+
+**Collision** shows the cells in the running ROM's level data, which are the ones the physics reads. A change you made shows once it is in the game, by a [patch](#patch-on-change) or a build. The [map editor's](./rooms) own collision overlay shows the project as it is now. **Collision** and **Rooms** need the ROM's level data section; a ROM whose game never reads its level data (see [How the studio knows](#how-the-studio-knows)) has none, so it shows only the player's box and the camera.
+
+Overlays work on dev ROMs only, as the [Entities](#entities) list does, because they read the game's memory through the [debug map](../reference/debug-map). On a release ROM the panel says "This ROM has no debug map, as release builds do not: play the dev ROM to see its entities." under the check boxes when the **Entities** list is hidden; with the list shown, the list says it.
 
 ### Keyboard
 

@@ -187,6 +187,52 @@ export function readPlacements(rom: Uint8Array, section: Section): { rooms: Plac
   return { rooms, entities }
 }
 
+/** What a collision class does, as the section records it: see `CollisionKind` in the schema. */
+export interface CellClass {
+  id: string
+  kind: 'empty' | 'solid' | 'oneway' | 'slope' | 'hazard' | 'custom'
+  /** For a slope: the floor's height over the tile's bottom edge at its left and right side, in pixels. */
+  slope: { left: number; right: number } | null
+}
+
+/** A room's collision, one class number a cell, left to right then top to bottom. */
+export interface RoomCells {
+  cols: number
+  rows: number
+  cells: Uint8Array
+}
+
+const KIND_NAMES = ['empty', 'solid', 'oneway', 'slope', 'hazard', 'custom'] as const
+
+/**
+ * The collision classes of a section and each room's cells, as the game's physics reads
+ * them (the rooms in the section's order). Empty for a section this studio cannot read.
+ */
+export function readCollision(rom: Uint8Array, section: Section): { classes: CellClass[]; rooms: RoomCells[] } {
+  if (section.version !== SECTION_VERSION || (section.classes.length === 0 && section.rooms.length === 0)) return { classes: [], rooms: [] }
+  const view = new DataView(rom.buffer, rom.byteOffset + section.start, section.capacity)
+  const u32 = (at: number) => view.getUint32(at, true)
+  const part = (n: number) => ({ at: u32(HEADER + n * 8), length: u32(HEADER + n * 8 + 4) })
+  const classPart = part(S_CLASSES)
+  const classes = section.classes.map((id, n): CellClass => {
+    const at = classPart.at + n * CLASS
+    const kind = KIND_NAMES[view.getUint8(at + 8)] ?? 'empty'
+    return { id, kind, slope: kind === 'slope' ? { left: view.getUint8(at + 9), right: view.getUint8(at + 10) } : null }
+  })
+  const roomPart = part(S_ROOMS)
+  const cellsAt = part(S_CELLS).at
+  const rooms: RoomCells[] = []
+  for (let at = roomPart.at; at < roomPart.at + roomPart.length; at += ROOM) {
+    const cols = view.getUint16(at + 16, true)
+    const rows = view.getUint16(at + 18, true)
+    const from = cellsAt + u32(at + 32)
+    // A record that points outside the section is not one this studio wrote: draw nothing for it.
+    const cells = from + cols * rows <= section.capacity ? new Uint8Array(rom.subarray(section.start + from, section.start + from + cols * rows)) : new Uint8Array(0)
+    rooms.push({ cols, rows, cells })
+  }
+  return { classes, rooms }
+}
+
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i])
 
 /** Room ids in the order the game numbers them: by id, as codegen sorts them. */

@@ -94,7 +94,7 @@ Notes / open questions
 | US-021 | Live entity inspector in the Play panel | E3 | P0 | Done | L |
 | US-021a | Live entity list and selecting on the game screen | E3 | P0 | Done | M |
 | US-021b | Edit a live entity's numbers while the game runs | E3 | P0 | Done | M |
-| US-022 | Debug overlays on the game screen | E3 | P0 | Proposed | M |
+| US-022 | Debug overlays on the game screen | E3 | P0 | Done | M |
 | US-023 | Pause, step a frame, rewind | E3 | P1 | Proposed | M |
 | US-024 | VRAM, palette and OAM viewers | E3 | P1 | Proposed | M |
 | US-025 | Game log in the studio | E3 | P1 | Proposed | S |
@@ -601,15 +601,32 @@ Decided (the open questions, settled when the story was built; see
   facing and whether it is alive, and the player's position and speed.
 
 #### US-022 · Debug overlays on the game screen
-**Priority** P0 · **Status** Proposed · **Size** M · **Depends on** US-020
-**Touches** app
+**Priority** P0 · **Status** Done · **Size** M · **Depends on** US-020
+**Touches** core, app, docs
 
 As an author, I want hitboxes, collision cells, the camera target and room borders
 drawn over the game screen, so that I can see what the physics sees.
 
 Acceptance criteria
-- [ ] Each overlay has its own toggle and draws at the game's scale.
-- [ ] Overlays are drawn by the studio, not the ROM, so they cost the game nothing.
+- [x] Each overlay has its own toggle and draws at the game's scale. (Four check boxes
+  in the Play panel. `core/test/overlays.test.ts`: each overlay alone gives only its
+  shapes, and every shape lands at its world pixel minus the camera, at whole screens
+  and between them, clipped and not wrapped; `server/test/overlays.test.ts`: on the
+  sample's dev ROM the box's corner pixels are the overlay's and the pixel inside is
+  the game's; the `play-overlays` screenshot.)
+- [x] Overlays are drawn by the studio, not the ROM, so they cost the game nothing.
+  (`server/test/overlays.test.ts`: two emulators run the dev ROM for 200 frames on the
+  same buttons, one read and painted with all four overlays every frame through a
+  reader that fails on any write; the pictures match frame by frame and the whole
+  machine state is equal at the end. Nothing under `runtime/`, `codegen/` or
+  `sample/` changed.)
+
+Decided (the open questions, settled when the story was built; see `design/US-022.md`)
+- The camera has no target. The console has scroll registers and no camera, and how a
+  game aims its camera is its own code, so the Camera overlay shows only the middle of
+  the view and the camera's position. A target can be its own story if projects get a
+  camera setting.
+- The overlays read the live view themselves: they do not need the Entities list open.
 
 #### US-023 · Pause, step a frame, rewind
 **Priority** P1 · **Status** Proposed · **Size** M · **Depends on** —

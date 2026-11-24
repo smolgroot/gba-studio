@@ -2,8 +2,8 @@
 // emulator's memory through the debug map and named from the running ROM's data
 // section, and changes to it written back. See design/US-021.md and
 // docs/reference/debug-map.md.
-import { readPlacements, readSection } from './datasection.ts'
-import type { PlacedProperty, PlacedRoom } from './datasection.ts'
+import { readCollision, readPlacements, readSection } from './datasection.ts'
+import type { CellClass, PlacedProperty, PlacedRoom, RoomCells } from './datasection.ts'
 import { RAM_REGIONS, readField, readGameState } from './debugmap.ts'
 import type { DebugField, DebugMap } from './debugmap.ts'
 import type { LiveTarget } from './liveapply.ts'
@@ -18,6 +18,10 @@ export interface SectionIndex {
   types: string[]
   /** Each entity's properties as placed, by its number in the world. */
   entities: { properties: PlacedProperty[] }[]
+  /** What each collision class does, by the number a cell holds (US-022). */
+  classes: CellClass[]
+  /** Each room's collision cells, in the order of `rooms` (US-022). */
+  cells: RoomCells[]
 }
 
 /** Reads what the list needs from a ROM's data section; null when it has none. Call it again after a live apply. */
@@ -25,7 +29,8 @@ export function indexSection(rom: Uint8Array): SectionIndex | null {
   const section = readSection(rom)
   if (!section) return null
   const { rooms, entities } = readPlacements(rom, section)
-  return { rooms, types: section.manifest.entityTypes.map((t) => t.id), entities }
+  const collision = readCollision(rom, section)
+  return { rooms, types: section.manifest.entityTypes.map((t) => t.id), entities, classes: collision.classes, cells: collision.rooms }
 }
 
 /** The most rooms active at once, as `pecten_studio_rt::behaviour::live::MAX_ACTIVE_ROOMS`. */
