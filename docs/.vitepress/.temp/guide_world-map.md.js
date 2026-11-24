@@ -1,0 +1,20 @@
+import { ssrRenderAttrs, ssrRenderAttr } from "vue/server-renderer";
+import { useSSRContext } from "vue";
+import { _ as _export_sfc } from "./plugin-vue_export-helper.1tPrXgE0.js";
+const _imports_0 = "/screenshots/world-map.png";
+const __pageData = JSON.parse('{"title":"World map","description":"","frontmatter":{},"headers":[],"relativePath":"guide/world-map.md","filePath":"guide/world-map.md","lastUpdated":1795039123000}');
+const _sfc_main = { name: "guide/world-map.md" };
+function _sfc_ssrRender(_ctx, _push, _parent, _attrs, $props, $setup, $data, $options) {
+  _push(`<div${ssrRenderAttrs(_attrs)}><h1 id="world-map" tabindex="-1">World map <a class="header-anchor" href="#world-map" aria-label="Permalink to &quot;World map&quot;">​</a></h1><p>Rooms are whole numbers of screens placed on a grid. Open <strong>World</strong> in the Project panel.</p><p><img${ssrRenderAttr("src", _imports_0)} alt="The world map with the Badlands room selected"></p><p>One screen is 240x160 pixels, or 30x20 tiles. The map shows the grid in screens.</p><h2 id="toolbar" tabindex="-1">Toolbar <a class="header-anchor" href="#toolbar" aria-label="Permalink to &quot;Toolbar&quot;">​</a></h2><table tabindex="0"><thead><tr><th>Button</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Undo / Redo</strong></td><td>Step back and forward through map changes.</td></tr><tr><td><strong>New room</strong></td><td>Make a room beside the others.</td></tr><tr><td><strong>Show room previews</strong></td><td>Draw each room&#39;s tiles and backgrounds on the map, or turn them off to see plain blocks. The choice is remembered.</td></tr><tr><td><strong>Start here</strong></td><td>Make the selected room the one the game starts in.</td></tr><tr><td><strong>Open room</strong></td><td>Open the selected room in the map editor.</td></tr><tr><td><strong>Take off the map</strong></td><td>Remove the selected room from the map without deleting it. An unplaced room can be put back.</td></tr><tr><td><strong>− / +</strong></td><td>Zoom.</td></tr></tbody></table><h2 id="arranging-rooms" tabindex="-1">Arranging rooms <a class="header-anchor" href="#arranging-rooms" aria-label="Permalink to &quot;Arranging rooms&quot;">​</a></h2><ul><li><strong>Drag</strong> rooms to arrange them.</li><li><strong>Double-click an empty screen</strong> to make a room right there.</li><li><strong>Select</strong> a room to change its size in screens in the toolbar.</li><li>The start room is labelled <em>start</em>.</li></ul><p>A project with no tileset yet can import one from a PNG in the new-room dialog.</p><h2 id="map-size" tabindex="-1">Map size <a class="header-anchor" href="#map-size" aria-label="Permalink to &quot;Map size&quot;">​</a></h2><p>In Properties, with nothing selected, you can give the map a size in screens (and so in tiles). Rooms are then kept inside it, and a room outside is reported as a problem. Without a size the map grows with its rooms.</p><h2 id="connected-rooms" tabindex="-1">Connected rooms <a class="header-anchor" href="#connected-rooms" aria-label="Permalink to &quot;Connected rooms&quot;">​</a></h2><p>Rooms that touch on this grid are connected in the game: the player walks from one into the other and the camera scrolls across with no cut or loading, the next room&#39;s tiles being written to video memory just ahead of it.</p><div class="info custom-block"><p class="custom-block-title">Same tileset to scroll</p><p>Rooms drawn with different tilesets cannot share the screen (the GBA shows one set of 16 background palettes), so the game cuts between them instead of scrolling.</p></div><p>Overlapping rooms are reported as a problem.</p></div>`);
+}
+const _sfc_setup = _sfc_main.setup;
+_sfc_main.setup = (props, ctx) => {
+  const ssrContext = useSSRContext();
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("guide/world-map.md");
+  return _sfc_setup ? _sfc_setup(props, ctx) : void 0;
+};
+const worldMap = /* @__PURE__ */ _export_sfc(_sfc_main, [["ssrRender", _sfc_ssrRender]]);
+export {
+  __pageData,
+  worldMap as default
+};

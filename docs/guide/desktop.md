@@ -4,7 +4,7 @@ The desktop app is the same studio in its own window. It opens any folder as a p
 
 ## Install it
 
-The desktop app is available for Linux on x64. Download it from the [latest release](https://github.com/smolgroot/gba-studio/releases/latest).
+The desktop app is available for Linux on x64. Download it from the [latest release](https://github.com/smolgroot/pecten-studio/releases/latest).
 
 **AppImage**, which needs no installation:
 

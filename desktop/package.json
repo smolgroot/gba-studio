@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Pecten Studio, the Game Boy Advance game editor, as a desktop app",
   "author": "Pecten Studio",
-  "homepage": "https://github.com/smolgroot/gba-studio",
+  "homepage": "https://github.com/smolgroot/pecten-studio",
   "main": "dist/main.cjs",
   "type": "module",
   "scripts": {

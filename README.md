@@ -9,7 +9,7 @@
   </p>
 
   <p>
-    <a href="https://smolgroot.github.io/gba-studio/"><img alt="Read the documentation" src="https://img.shields.io/badge/Documentation-read%20the%20docs-4e6a5c?style=for-the-badge&labelColor=4e6a5c" /></a>
+    <a href="https://studio.pecten.app"><img alt="Read the documentation" src="https://img.shields.io/badge/Documentation-read%20the%20docs-4e6a5c?style=for-the-badge&labelColor=4e6a5c" /></a>
   </p>
 </div>
 

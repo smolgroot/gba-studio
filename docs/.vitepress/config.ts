@@ -1,11 +1,10 @@
 import { defineConfig } from 'vitepress'
 
-// Served from https://<owner>.github.io/<repository>/: the docs workflow sets DOCS_BASE
-// from the repository's name. Use DOCS_BASE=/ for a custom domain or a preview at the root.
+// The custom domain serves the site from its root.
 export default defineConfig({
   title: 'Pecten-Studio',
   description: 'A desktop and browser studio for making Game Boy Advance Metroidvanias from assets you create yourself.',
-  base: process.env.DOCS_BASE ?? '/gba-studio/',
+  base: process.env.DOCS_BASE ?? '/',
   cleanUrls: true,
   lastUpdated: true,
   head: [['link', { rel: 'icon', href: 'data:,' }]],
@@ -13,8 +12,8 @@ export default defineConfig({
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Reference', link: '/reference/project-format' },
-      { text: 'Download', link: 'https://github.com/smolgroot/gba-studio/releases/latest' },
-      { text: 'GitHub', link: 'https://github.com/smolgroot/gba-studio' },
+      { text: 'Download', link: 'https://github.com/smolgroot/pecten-studio/releases/latest' },
+      { text: 'GitHub', link: 'https://github.com/smolgroot/pecten-studio' },
     ],
     sidebar: [
       {
@@ -61,7 +60,7 @@ export default defineConfig({
         ],
       },
     ],
-    socialLinks: [{ icon: 'github', link: 'https://github.com/smolgroot/gba-studio' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/smolgroot/pecten-studio' }],
     search: { provider: 'local' },
     outline: [2, 3],
     footer: { message: 'Screenshots show the Diamond Hands project open in the studio; the ones about patching show the sample game, as Diamond Hands does not read its level data from the ROM.' },

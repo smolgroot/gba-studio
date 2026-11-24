@@ -8,7 +8,7 @@ It knows nothing about any particular game. It knows tiles, collision classes, e
 
 ## Desktop app
 
-On Linux, [download the latest release](https://github.com/smolgroot/gba-studio/releases/latest) and see [Desktop app](./desktop) for how to install it. It needs neither Node nor a browser, opens any folder, and keeps several projects open in tabs.
+On Linux, [download the latest release](https://github.com/smolgroot/pecten-studio/releases/latest) and see [Desktop app](./desktop) for how to install it. It needs neither Node nor a browser, opens any folder, and keeps several projects open in tabs.
 
 The rest of this section runs the studio from a checkout, in your browser.
 
