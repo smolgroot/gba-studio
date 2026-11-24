@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { runRom, type Step } from '../src/emulator.ts'
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url))
@@ -26,7 +26,11 @@ function find(rom: Buffer): number[] {
 }
 
 describe.skipIf(!existsSync(ROM))('the data section of the sample ROM', () => {
-  const rom = readFileSync(ROM)
+  // Read in a hook: vitest runs this callback even when the suite is skipped.
+  let rom: Buffer
+  beforeAll(() => {
+    rom = readFileSync(ROM)
+  })
 
   it('is there once, 4-aligned, with a header and a table that fit it', () => {
     const found = find(rom)
