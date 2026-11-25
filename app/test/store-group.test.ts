@@ -196,3 +196,32 @@ describe('changing a property of an entity type in the store (US-016)', () => {
     expect(useStudio.getState().notice).toBe('Not undone: Entry was changed after the property was changed. Undo that change first.')
   })
 })
+
+describe('the Entities page in the store (US-019)', () => {
+  const sentry = { id: 'sentry', name: 'Sentry', colour: '#e5484d', props: [{ name: 'shield', type: 'int' as const, default: 3 }], behaviours: [] }
+  const coin = { id: 'coin', name: 'Coin', colour: '#f5a524', props: [], behaviours: [] }
+  beforeEach(() => {
+    const b = bundle()
+    const room = { ...docs().rooms.entry!, entities: [{ type: 'sentry', x: 4, y: 4, props: { shield: 7 } }] }
+    useStudio.setState({ bundle: { ...b, docs: { ...b.docs, project: { ...b.docs.project!, entityTypes: [sentry, coin] }, rooms: { entry: room } } }, history: {}, notice: null, selection: { kind: 'entities', id: 'sentry' } })
+  })
+
+  it('undoes and redoes a change to a type made on the page, as one step on the project', () => {
+    const first = docs().project
+    useStudio.getState().commit('project', undefined, { ...first!, entityTypes: [{ ...sentry, name: 'Sentry bot' }, coin] })
+    useStudio.getState().select({ kind: 'entities', id: 'coin' })
+    useStudio.getState().undo()
+    expect(docs().project).toBe(first)
+    useStudio.getState().redo()
+    expect(docs().project!.entityTypes[0]!.name).toBe('Sentry bot')
+  })
+
+  it('says why a grouped property change was not undone', () => {
+    const change = renameProperty(docs().project!, docs().rooms, 'sentry', 'shield', 'armour')
+    useStudio.getState().commitGroup('the property was renamed', { kind: 'project' }, change.project, Object.entries(change.rooms).map(([id, doc]) => ({ kind: 'room' as const, id, label: doc.name, doc })))
+    useStudio.getState().commit('room', 'entry', { ...docs().rooms.entry!, name: 'Entry hall' })
+    useStudio.getState().undo()
+    expect(docs().project!.entityTypes[0]!.props[0]!.name).toBe('armour')
+    expect(useStudio.getState().notice).toBe('Not undone: Entry was changed after the property was renamed. Undo that change first.')
+  })
+})

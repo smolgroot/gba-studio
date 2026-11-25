@@ -2,6 +2,7 @@
 import AddIcon from '@mui/icons-material/Add'
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
 import AudiotrackIcon from '@mui/icons-material/Audiotrack'
+import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
@@ -28,7 +29,7 @@ import List from '@mui/material/List'
 import ListItemButton from '@mui/material/ListItemButton'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { SCREEN, uniqueId } from '@pecten-studio/core'
+import { SCREEN, placedCounts, withNewType } from '@pecten-studio/core'
 import type { MultiKind, Project } from '@pecten-studio/core'
 import { useEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -41,9 +42,9 @@ import { useSidebar } from '../sidebar.ts'
 import type { SectionTitle } from '../sidebar.ts'
 import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
-import { TypeBehaviours, behaviourNames } from './behaviours.tsx'
 import { CollisionClasses } from './collision.tsx'
-import { TypeProperties } from './properties.tsx'
+import { EntitiesPage, TypePicture, typeSummary } from './entities.tsx'
+import { selectionForProblem } from '../problemlink.ts'
 import { MidiView } from './midi.tsx'
 import { PhysicsEditor } from './physics.tsx'
 import { PixelEditor } from './pixel.tsx'
@@ -206,8 +207,9 @@ function Row({ selection, icon, label, detail, indent = 0 }: { selection: Select
   return (
     <ListItemButton selected={selected} onClick={() => select(selection)} sx={{ px: 2, pl: 2 + indent * 1.5, minHeight: { xs: BAR.touchRow, md: BAR.row } }}>
       {icon}
-      <Typography noWrap sx={{ flex: 1 }}>{label}</Typography>
-      {detail && <Typography variant="body2" color="text.secondary" noWrap sx={{ ml: 2 }}>{detail}</Typography>}
+      {/* A long detail gives way before the name does. */}
+      <Typography noWrap sx={{ flex: '1 1 auto', minWidth: detail ? '45%' : 0 }}>{label}</Typography>
+      {detail && <Typography variant="body2" color="text.secondary" noWrap title={detail} sx={{ ml: 2, minWidth: 0 }}>{detail}</Typography>}
     </ListItemButton>
   )
 }
@@ -295,6 +297,14 @@ export function ProjectPanel() {
   const rooms = Object.entries(docs.rooms)
   const tilesets = Object.entries(docs.tilesets)
   const sprites = Object.entries(docs.sprites)
+  const types = docs.project?.entityTypes ?? []
+  const addType = () => {
+    const project = docs.project
+    if (!project) return
+    const { project: next, type } = withNewType(project)
+    useStudio.getState().commit('project', undefined, next)
+    useStudio.getState().select({ kind: 'entities', id: type.id })
+  }
   const sections: SectionDef[] = [
     {
       title: 'Rooms',
@@ -335,6 +345,20 @@ export function ProjectPanel() {
             ))}
           </List>
           {sprites.length === 0 && <Empty>No sprites yet.</Empty>}
+        </>
+      ),
+    },
+    {
+      title: 'Entity types',
+      action: <AddButton title={docs.project ? 'New entity type' : 'The project file has errors: see Problems'} disabled={!docs.project} onClick={addType} />,
+      children: (
+        <>
+          <List>
+            {types.map((type) => (
+              <Row key={type.id} selection={{ kind: 'entities', id: type.id }} icon={<Box sx={{ mr: 1.5, flexShrink: 0, display: 'flex' }}><TypePicture type={type} sprite={type.sprite ? docs.sprites[type.sprite] : undefined} size={18} /></Box>} label={type.name} detail={typeSummary(type)} />
+            ))}
+          </List>
+          {types.length === 0 && <Empty>No entity types yet.</Empty>}
         </>
       ),
     },
@@ -399,6 +423,7 @@ const SECTION_ICONS: { title: SectionTitle; Icon: typeof PublicIcon; kinds: Sele
   { title: 'Rooms', Icon: MapOutlinedIcon, kinds: ['room'] },
   { title: 'Tilesets', Icon: GridOnIcon, kinds: ['tileset'] },
   { title: 'Sprites', Icon: DirectionsRunIcon, kinds: ['sprite'] },
+  { title: 'Entity types', Icon: CategoryOutlinedIcon, kinds: ['entities'] },
   { title: 'Asset files', Icon: FolderOutlinedIcon, kinds: ['asset'] },
 ]
 
@@ -414,7 +439,7 @@ export function ActivityBar() {
   const select = useStudio((s) => s.select)
   const counts = useStudio(useShallow((s): Record<SectionTitle, number> => {
     const b = s.bundle
-    return { Rooms: Object.keys(b?.docs.rooms ?? {}).length, Tilesets: Object.keys(b?.docs.tilesets ?? {}).length, Sprites: Object.keys(b?.docs.sprites ?? {}).length, 'Asset files': b?.assets.length ?? 0 }
+    return { Rooms: Object.keys(b?.docs.rooms ?? {}).length, Tilesets: Object.keys(b?.docs.tilesets ?? {}).length, Sprites: Object.keys(b?.docs.sprites ?? {}).length, 'Entity types': b?.docs.project?.entityTypes.length ?? 0, 'Asset files': b?.assets.length ?? 0 }
   }))
   const { toggleHidden, open, setCollapsed } = useSidebar.getState()
   const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘B' : 'Ctrl+B'
@@ -480,33 +505,23 @@ export function DocumentPanel({ selection }: { selection: Selection }) {
     case 'asset': return /\.png$/i.test(id!) ? <PixelEditor path={id!} /> : /\.midi?$/i.test(id!) ? <MidiView path={id!} /> : <AssetView path={id!} />
     case 'project': return <ProjectSettings />
     case 'physics': return <PhysicsEditor />
+    case 'entities': return <EntitiesPage selection={selection} />
     case 'audio': return <AudioEditor />
     case 'play': return <PlayView />
     case 'tools': return <ToolView id={id} />
   }
 }
 
-/** A type's row when closed: its behaviours, and how many properties of its own it has. */
-function typeSummary(type: Project['entityTypes'][number]): string {
-  const n = type.props.length
-  return `${behaviourNames(type)}${n ? ` · ${n} ${n === 1 ? 'property' : 'properties'}` : ''}`
-}
-
 function ProjectSettings() {
-  // Entity types that are open, showing their properties and behaviours.
-  const [open, setOpen] = useState<string[]>([])
   const project = useStudio((s) => s.bundle?.docs.project)
-  const sprites = useStudio((s) => s.bundle?.docs.sprites)
   const commit = useStudio((s) => s.commit)
   const notice = useStudio((s) => s.notice)
+  const select = useStudio((s) => s.select)
   if (!project) return <Message>The project file is missing or has errors. See Problems.</Message>
   const update = (patch: Partial<Project>) => commit('project', undefined, { ...project, ...patch })
   const build = (key: Exclude<keyof Project['build'], 'dataReserve'>, label: string) => (
     <Field label={label}><TextInput label={label} value={project.build[key]} onCommit={(value) => update({ build: { ...project.build, [key]: value } })} /></Field>
   )
-  const setType = (index: number, patch: Partial<Project['entityTypes'][number]>) => update({ entityTypes: project.entityTypes.map((t, i) => (i === index ? { ...t, ...patch } : t)) })
-  const cell = { px: 2, py: 0.75, minWidth: 0 } as const
-  const toggle = (id: string) => setOpen((ids) => (ids.includes(id) ? ids.filter((o) => o !== id) : [...ids, id]))
   return (
     <Box sx={{ height: '100%', overflow: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, minHeight: BAR.tool, borderBottom: '1px solid #111', bgcolor: 'background.default' }}><UndoButtons /></Box>
@@ -538,51 +553,10 @@ function ProjectSettings() {
       </Fields>
       <Empty>The reserve is room kept free after the level data in a built ROM, so a project that grows a little can still be patched in without a build. It takes effect at the next build; the Build panel shows how much is used.</Empty>
       <Heading>Entity types</Heading>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'max-content minmax(100px, 1.5fr) minmax(100px, 1fr) minmax(100px, 1fr) max-content', alignItems: 'center' }}>
-        {project.entityTypes.map((type, index) => (
-          <Box key={type.id} sx={{ display: 'contents' }}>
-            <Box sx={cell}>
-              <input type="color" aria-label={`Colour of ${type.name}`} value={type.colour} onChange={(event) => setType(index, { colour: event.target.value })} style={{ width: ui(22), height: ui(22), padding: 0, border: '1px solid #3a3a3a', background: 'none' }} />
-            </Box>
-            <Box sx={cell}><TextInput label="Entity type name" value={type.name} onCommit={(name) => setType(index, { name })} /></Box>
-            <Box sx={cell}>
-              <SelectInput label={`Sprite of ${type.name}`} value={type.sprite ?? ''} onChange={(sprite) => setType(index, { sprite: sprite || undefined })} options={[{ value: '', label: 'No sprite' }, ...Object.entries(sprites ?? {}).map(([value, s]) => ({ value, label: s.name }))]} />
-            </Box>
-            <Box sx={cell}>
-              <Button
-                size="small"
-                aria-expanded={open.includes(type.id)}
-                aria-label={`Properties and behaviours of ${type.name}: ${typeSummary(type)}`}
-                title={typeSummary(type)}
-                startIcon={open.includes(type.id) ? <ExpandMoreIcon /> : <ChevronRightIcon />}
-                onClick={() => toggle(type.id)}
-                sx={{ justifyContent: 'flex-start', maxWidth: '100%', color: type.behaviours.length || type.props.length ? 'text.primary' : 'text.secondary', textTransform: 'none' }}
-              >
-                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{typeSummary(type)}</Box>
-              </Button>
-            </Box>
-            <Box sx={cell}>
-              <IconButton aria-label={`Delete entity type ${type.name}`} onClick={() => update({ entityTypes: project.entityTypes.filter((_, i) => i !== index) })}><DeleteOutlinedIcon /></IconButton>
-            </Box>
-            {open.includes(type.id) && (
-              <Box sx={{ gridColumn: '1 / -1' }}>
-                <TypeProperties type={type} />
-                <TypeBehaviours type={type} onChange={(next) => setType(index, next)} />
-              </Box>
-            )}
-          </Box>
-        ))}
-      </Box>
-      <Box sx={{ px: 2, py: 1 }}>
-        <Button
-          variant="outlined"
-          startIcon={<AddIcon />}
-          onClick={() => update({ entityTypes: [...project.entityTypes, { id: uniqueId('entity', project.entityTypes.map((t) => t.id)), name: 'New entity', colour: '#f5a524', props: [], behaviours: [] }] })}
-        >
-          Add entity type
-        </Button>
-      </Box>
-      <Empty>An entity type is a kind of thing placed in rooms: an enemy, a pickup, a door. Open a type to give it properties of its own, which the game's code reads by name, and behaviours, which the game runs in the order listed. A placed entity can set its own values for them in the room's panel.</Empty>
+      <Empty>
+        Entity types, their properties and behaviours have their own page.{' '}
+        <Button size="small" startIcon={<CategoryOutlinedIcon />} onClick={() => select({ kind: 'entities' })} sx={{ textTransform: 'none', verticalAlign: 'baseline' }}>Open Entities</Button>
+      </Empty>
       <CollisionClasses />
     </Box>
   )
@@ -680,6 +654,15 @@ export function PropertiesPanel() {
         <Field label="Frame rate"><Typography>60 per second</Typography></Field>
       </Fields>
     )
+  } else if (kind === 'entities' && docs.project) {
+    const placed = Object.values(placedCounts(docs.rooms)).reduce((sum, n) => sum + n, 0)
+    body = (
+      <Fields>
+        <Field label="Entity types"><Typography>{docs.project.entityTypes.length}</Typography></Field>
+        <Field label="Placed"><Typography>{placed} in {Object.keys(docs.rooms).length} rooms</Typography></Field>
+        <Field label="Saved in"><Typography>studio/project.json</Typography></Field>
+      </Fields>
+    )
   } else if (kind === 'tools') {
     const tool = TOOLS.find((t) => t.id === id)
     body = tool ? <Empty>{tool.description}</Empty> : <Empty>{TOOLS.length} {TOOLS.length === 1 ? 'tool' : 'tools'}. Click a card to open one in the main area.</Empty>
@@ -728,13 +711,6 @@ function AssetProperties({ path }: { path: string }) {
   )
 }
 
-/** The item a problem's file belongs to, if it is one that opens. */
-function selectionForFile(file: string): Selection | null {
-  const match = /^studio\/(?:(room|tileset|sprite)s\/([^/]+)|(world|project|audio))\.json$/.exec(file)
-  if (!match) return null
-  return match[1] ? { kind: match[1] as 'room' | 'tileset' | 'sprite', id: match[2]! } : { kind: match[3] as 'world' | 'project' | 'audio' }
-}
-
 export function ProblemsPanel() {
   const problems = useStudio((s) => s.bundle?.problems)
   const select = useStudio((s) => s.select)
@@ -744,7 +720,7 @@ export function ProblemsPanel() {
     <Box sx={{ height: '100%', overflow: 'auto' }}>
       <List>
         {problems.map((problem, i) => {
-          const target = selectionForFile(problem.file)
+          const target = selectionForProblem(problem)
           return (
             <ListItemButton key={i} disabled={!target} onClick={() => target && select(target)} sx={{ px: 2, alignItems: 'flex-start', '&.Mui-disabled': { opacity: 1 } }}>
               {problem.severity === 'error' ? <ErrorOutlineIcon sx={{ ...iconSx, color: 'error.main', mt: 0.25 }} /> : <WarningAmberIcon sx={{ ...iconSx, color: 'warning.main', mt: 0.25 }} />}

@@ -19,7 +19,7 @@ import type { RomStatus } from './api.ts'
 import { DOC_PREFIX, documentToClose } from './doctabs.ts'
 import { useSidebar } from './sidebar.ts'
 import { useEditor } from './editor.ts'
-import { selectionFromHash, selectionKey, selectionTitle, useStudio } from './store.ts'
+import { selectionFromHash, selectionKey, selectionTitle, tabKey, useStudio } from './store.ts'
 import type { Selection } from './store.ts'
 
 export function App() {
@@ -279,9 +279,11 @@ function DockLayout() {
   // Open the selected item's tab, or bring it forward.
   useEffect(() => {
     if (!api) return
-    const id = DOC_PREFIX + selectionKey(selection)
+    const id = DOC_PREFIX + tabKey(selection)
     const existing = api.getPanel(id)
     if (existing) {
+      // The Entities tab stays one tab and follows the type selected.
+      if (selectionKey(existing.params as Selection) !== selectionKey(selection)) existing.api.updateParameters(selection)
       if (!existing.api.isActive) existing.api.setActive()
       return
     }
@@ -330,7 +332,7 @@ function DockLayout() {
     return desktop.onCloseDocument(() => {
       const id = documentToClose({
         active: api.activePanel?.id ?? null,
-        selected: DOC_PREFIX + selectionKey(useStudio.getState().selection),
+        selected: DOC_PREFIX + tabKey(useStudio.getState().selection),
         open: api.panels.map((panel) => panel.id),
       })
       if (id) api.getPanel(id)?.api.close()
@@ -355,7 +357,7 @@ function DockLayout() {
           onReady={(event) => {
             const dock = event.api
             const first = firstDoc.current
-            const docId = DOC_PREFIX + selectionKey(first)
+            const docId = DOC_PREFIX + tabKey(first)
             dock.addPanel({ id: docId, component: 'document', title: selectionTitle(first, useStudio.getState().bundle), params: first })
             dock.addPanel({ id: 'project', component: 'project', title: 'Project', position: { referencePanel: docId, direction: 'left' }, initialWidth: 290 })
             dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: docId, direction: 'right' }, initialWidth: 330 })
@@ -395,7 +397,7 @@ function StackLayout() {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ flex: 1, minHeight: 0, bgcolor: 'background.paper' }}>
         {tab === 'project' && <ProjectPanel />}
-        {tab === 'document' && <DocumentPanel key={selectionKey(selection)} selection={selection} />}
+        {tab === 'document' && <DocumentPanel key={tabKey(selection)} selection={selection} />}
         {tab === 'palette' && <PalettePanel />}
         {tab === 'properties' && <PropertiesPanel />}
         {tab === 'problems' && <ProblemsPanel />}

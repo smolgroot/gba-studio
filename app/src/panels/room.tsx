@@ -8,6 +8,7 @@ import ColorizeIcon from '@mui/icons-material/Colorize'
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined'
 import FormatColorFillIcon from '@mui/icons-material/FormatColorFill'
 import Grid4x4Icon from '@mui/icons-material/Grid4x4'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined'
 import PanToolOutlinedIcon from '@mui/icons-material/PanToolOutlined'
@@ -690,7 +691,7 @@ export function PalettePanel() {
                 })}
               </Box>
             ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>No entity types yet. Add some in Project settings.</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>No entity types yet. Add some on the <Box component="button" type="button" onClick={() => useStudio.getState().select({ kind: 'entities' })} sx={{ p: 0, border: 0, background: 'none', color: 'primary.main', font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}>Entities page</Box>.</Typography>
             )}
           </Box>
         </>
@@ -875,6 +876,11 @@ export function RoomProperties({ id }: { id: string }) {
           <Fields>
             <Field label="Type">
               <SelectInput label="Entity type" value={entity.type} onChange={(next) => updateEntity({ type: next, props: {} })} options={(docs.project?.entityTypes ?? []).map((t) => ({ value: t.id, label: t.name }))} />
+              {type && (
+                <IconButton aria-label={`Open ${type.name} on the Entities page`} title={`Open ${type.name} on the Entities page`} onClick={() => useStudio.getState().select({ kind: 'entities', id: type.id })} sx={{ p: 0.5, color: 'text.secondary' }}>
+                  <OpenInNewIcon />
+                </IconButton>
+              )}
             </Field>
             <Field label="Position">
               <NumberInput label="X in pixels" value={entity.x} min={0} max={room.width * SCREEN.width - 1} onCommit={(x) => updateEntity({ x })} />

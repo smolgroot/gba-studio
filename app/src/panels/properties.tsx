@@ -1,4 +1,4 @@
-// An entity type's own properties in Project settings (US-016): add, rename, retype and
+// An entity type's own properties on the Entities page (US-016, US-019): add, rename, retype and
 // delete them, with a default and the limits that go with the type. A field edit is one
 // undo step on the project. A change that reaches placed entities (a rename, a delete,
 // a value that no longer fits) goes in one grouped step with the rooms, after asking
@@ -133,7 +133,6 @@ export function TypeProperties({ type }: { type: EntityType }) {
   const cell = { px: 1, py: 0.75, minWidth: 0 } as const
   return (
     <Box sx={{ px: 1, pt: 1 }}>
-      <Typography variant="overline" color="text.secondary" sx={{ px: 1, display: 'block' }}>Properties of {type.name}</Typography>
       {type.props.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 1, pb: 1 }}>No properties. Placed {type.name} entities have only their behaviours&rsquo; values.</Typography>
       ) : (

@@ -66,3 +66,12 @@ In a field of an open row of the Play panel's [Entities list](../guide/build-and
 | `Escape` | Leave the field without writing |
 
 While a field has the focus, keys go to it, not to the game.
+
+## Entities page
+
+In the list of types on the [Entities page](../guide/entities#the-list):
+
+| Key | Action |
+| --- | --- |
+| `Up` / `Down` | Select the type above / below |
+| `Home` / `End` | Select the first / last type |

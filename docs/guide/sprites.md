@@ -37,4 +37,4 @@ The preview plays the selected animation at the console's real speed, with the a
 
 ## Using a sprite
 
-Give an [entity type](./project-settings#entity-types) a sprite and entities of that type show it on the map, and the build produces a `SPRITE_<NAME>` for the game.
+Give an [entity type](./entities) a sprite and entities of that type show it on the map, and the build produces a `SPRITE_<NAME>` for the game.

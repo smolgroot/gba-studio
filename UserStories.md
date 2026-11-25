@@ -91,7 +91,7 @@ Notes / open questions
 | US-017 | Entity references between entities | E2 | P1 | Proposed | M |
 | US-018 | Custom behaviours written in the game | E2 | P1 | Proposed | M |
 | US-131 | Codegen checks the values of an entity type's own properties | E2 | P2 | Proposed | S |
-| US-019 | An Entities page for entity types, their properties and behaviours | E2 | P1 | Proposed | M |
+| US-019 | An Entities page for entity types, their properties and behaviours | E2 | P1 | Done | M |
 | US-020 | Symbol map of game state | E3 | P0 | Done | M |
 | US-021 | Live entity inspector in the Play panel | E3 | P0 | Done | L |
 | US-021a | Live entity list and selecting on the game screen | E3 | P0 | Done | M |
@@ -165,6 +165,7 @@ Notes / open questions
 | US-128 | Status shown by shape as well as colour, and read aloud | E13 | P2 | Proposed | S |
 | US-129 | A failed agent action stays until it is dismissed | E13 | P2 | Proposed | S |
 | US-130 | Interface colours that pass contrast, from theme tokens | E13 | P2 | Proposed | M |
+| US-132 | Back and forward move between opened items | E13 | P2 | Proposed | S |
 
 ---
 
@@ -575,12 +576,12 @@ studio like the built-in ones, so that my game's own objects are edited the same
 way.
 
 Acceptance criteria
-- [ ] A behaviour declared in the game crate is listed in Project settings after a
+- [ ] A behaviour declared in the game crate is listed on the Entities page after a
   build.
 - [ ] Documented with an example in `sample/`.
 
 #### US-019 · An Entities page for entity types, their properties and behaviours
-**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-016
+**Priority** P1 · **Status** Done · **Size** M · **Depends on** US-016
 **Touches** app, docs
 
 As an author, I want entity types on a page of their own, with one type shown at a
@@ -595,47 +596,49 @@ the list. Physics already has its own page that edits `studio/project.json`; thi
 does the same for `entityTypes`. The project format does not change.
 
 Acceptance criteria
-- [ ] Given a project, the sidebar's top items and the activity bar have
-  **Entities**, after World, with the number of entity types as its detail. It opens
-  a page with the list of types on the left and the selected type on the right.
-- [ ] Each row in the list shows the type's colour, the first frame of its sprite
+- [x] Given a project, the sidebar has an **Entity types** section after Sprites,
+  one row per type (colour, name, summary) and an add button, and the activity bar
+  has its icon with the number of types. Selecting a row opens the Entities page on
+  that type: the list of types on the left and the selected type on the right.
+- [x] Each row in the list shows the type's colour, the first frame of its sprite
   (or the colour as a square when it has none), its name, its behaviours and number
   of properties, and how many entities of that type are placed in rooms. **Add
   entity type** is at the top of the list and selects the new type.
-- [ ] The selected type shows, at the top, a large preview of its sprite at whole
+- [x] The selected type shows, at the top, a large preview of its sprite at whole
   pixel scales, then its name, colour and sprite. Under them are its Properties and
   Behaviours, using the existing editors. They sit side by side when the page is
   wide enough and stack when it is not.
-- [ ] The selected type lists the rooms that place it, with a count for each, and
+- [x] The selected type lists the rooms that place it, with a count for each, and
   selecting one opens that room.
-- [ ] Deleting a type that is placed in rooms asks first and names how many entities
+- [x] Deleting a type that is placed in rooms asks first and names how many entities
   in how many rooms it would leave without a type; deleting an unplaced type does
   not ask.
-- [ ] The selected type is part of the address (`entities/<type id>`), so reload,
-  back and a link from elsewhere open the same type. An address with a type that no
-  longer exists opens the page with the first type selected.
-- [ ] The **Type** field of a placed entity in the room's panel, and a problem in
+- [x] The selected type is part of the address (`#entities:<type id>`), so a reload
+  and a link from elsewhere open the same type. An address with a type that no
+  longer exists opens the page with the first type selected. (Back and forward
+  between opened items are US-132.)
+- [x] The **Type** field of a placed entity in the room's panel, and a problem in
   Problems about an entity type, its properties or its behaviours, open the Entities
   page on that type.
-- [ ] Undo and redo on the Entities page step the project as they do in Project
+- [x] Undo and redo on the Entities page step the project as they do in Project
   settings, and the "Not undone" notice for a grouped property change shows on this
   page.
-- [ ] Project settings keeps Project, Build and Collision classes, with one line
+- [x] Project settings keeps Project, Build and Collision classes, with one line
   saying entity types moved, linking to the Entities page. It no longer lists entity
   types.
-- [ ] Keyboard: the list moves with the arrow keys, Enter or Space selects, and
+- [x] Keyboard: the list moves with the arrow keys, Enter or Space selects, and
   focus goes to the type's name field on **Add entity type**.
-- [ ] `docs/guide/entities.md` takes the entity type, properties and behaviours
+- [x] `docs/guide/entities.md` takes the entity type, properties and behaviours
   sections from `docs/guide/project-settings.md`, with new screenshots. Links in
   `rooms.md`, `interface.md` and the rest of the guide go to the new page, and the
   old anchors in `project-settings.md` say where the sections went. US-018's
   criterion is changed to say the Entities page.
 
 Notes / open questions
-- Collision classes stay in Project settings: they belong to tiles, not entities.
-  Should they get their own page too, or move next to Physics?
-- Should entity types also be a section in the sidebar (like Rooms and Sprites),
-  with each type a row, or is the list on the page enough?
+- Collision classes stay in Project settings: they belong to tiles (author,
+  2026-11-25).
+- Entity types are also a sidebar section, like Rooms and Sprites (author,
+  2026-11-25).
 - Today deleting a placed type does not ask, and what the placed entities become is
   whatever validation reports. If the delete should instead remove those entities,
   or be refused, that is a format and validation question for its own story.
@@ -1830,3 +1833,23 @@ Acceptance criteria
 Notes / open questions
 - US-047 fixes secondary text that shows in the wrong colour; doing both together
   avoids retaking the same screenshots twice.
+
+#### US-132 · Back and forward move between opened items
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** —
+**Touches** app, docs
+
+As an author, I want the browser's (and the desktop app's) back and forward to move
+between the items I opened, so that after following a link (a problem to its entity
+type, an entity type to a room) I can go back to where I was.
+
+Found while building US-019: the open item is kept in the address with
+`history.replaceState`, so a reload or a shared link comes back to it, but back leaves
+the studio instead of going to the last item.
+
+Acceptance criteria
+- [ ] Given I opened a room and then an entity type, when I press back, the room is
+  open again, and forward opens the type again.
+- [ ] Moving between entity types with the arrow keys on the Entities page, or
+  typing in a field, does not add a step per keypress.
+- [ ] In the desktop app, Alt+Left and Alt+Right (Cmd+[ and Cmd+] on macOS) do the
+  same.

@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 
 /** The sidebar's sections, top to bottom. */
-export const SECTIONS = ['Rooms', 'Tilesets', 'Sprites', 'Asset files'] as const
+export const SECTIONS = ['Rooms', 'Tilesets', 'Sprites', 'Entity types', 'Asset files'] as const
 export type SectionTitle = (typeof SECTIONS)[number]
 
 const KEY = 'pecten-studio:sidebar'

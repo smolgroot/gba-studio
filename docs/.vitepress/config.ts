@@ -31,6 +31,7 @@ export default defineConfig({
           { text: 'Rooms and the map editor', link: '/guide/rooms' },
           { text: 'Tilesets', link: '/guide/tilesets' },
           { text: 'Sprites and animations', link: '/guide/sprites' },
+          { text: 'Entities', link: '/guide/entities' },
           { text: 'Pixel editor', link: '/guide/pixel-editor' },
           { text: 'Audio', link: '/guide/audio' },
           { text: 'Project settings', link: '/guide/project-settings' },

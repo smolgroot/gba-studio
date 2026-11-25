@@ -11,7 +11,7 @@ Panels are dockable: drag them, tab them together and split them.
 | Panel | What it holds |
 | --- | --- |
 | **Project** | Everything in the game, see below. |
-| **Document tabs** | One tab per open item: World, a room, a tileset, a sprite, Project settings, Play, Audio, Tools or one tool, or an image in the pixel editor. |
+| **Document tabs** | One tab per open item: World, a room, a tileset, a sprite, Entities, Project settings, Play, Audio, Tools or one tool, or an image in the pixel editor. |
 | **Properties** | The settings of whatever is open or selected: a room's name, size, tileset, music and backgrounds, a sprite's anchor and hitbox, and so on. |
 | **Tiles & Layers** | In a room: its layers, the entity types to place and the collision classes. |
 | **Problems** and **Build** | Below the editor. Problems lists what is wrong; Build runs and streams the build. |
@@ -28,13 +28,14 @@ The top bar shows the project name and, on the right, whether the built ROM is u
 | **Rooms** | Every room with its size in screens. **+** makes a new room (a room needs a tileset first). |
 | **Tilesets** | PNGs of 8x8 tiles with collision classes. **+** makes one from a PNG. |
 | **Sprites** | Sprite sheets with their frame size and number of animations. **+** makes one from a sheet. |
+| **Entity types** | Every entity type with a small picture of its sprite, its behaviours and number of properties. Click one to open it on the [Entities page](./entities); **+** adds a type and opens it. |
 | **Asset files** | Every PNG, audio and other file in `assets/`, with its size. **+** makes a new blank image to draw. Click a PNG to open it in the [pixel editor](./pixel-editor). |
 
 The panel always fills the window's height and never scrolls as a whole. Each open section scrolls its own list, and the open sections share the height between them. Drag the line above a section to give it more or less room; double-click the line to share the height out evenly again. Click a section's title to fold it.
 
 ### The activity bar
 
-The thin strip of icons on the far left works like VS Code's. The top button, or `Ctrl+B`, hides the Project panel to give the editor the room and brings it back. Below it, the fixed pages (World, Project settings, Physics, Play, Audio, [Tools](./tools)) open in one click. The section icons (Rooms, Tilesets, Sprites, Asset files) show the panel with that section open; clicking one whose section is already open folds it.
+The thin strip of icons on the far left works like VS Code's. The top button, or `Ctrl+B`, hides the Project panel to give the editor the room and brings it back. Below it, the fixed pages (World, Project settings, Physics, Play, Audio, [Tools](./tools)) open in one click. The section icons (Rooms, Tilesets, Sprites, Entity types, Asset files) show the panel with that section open; clicking one whose section is already open folds it.
 
 ## Narrow screens and phones
 
@@ -44,7 +45,7 @@ One panel is shown at a time, switched with the tabs along the bottom (Project, 
 
 ## Addresses
 
-The open item is kept in the address bar (`#room:entry`), so a reload or a pasted link comes back to it.
+The open item is kept in the address bar (`#room:entry`, `#entities:sentry-bot`), so a reload or a pasted link comes back to it.
 
 ## Saving, undo and live reload
 
@@ -55,7 +56,7 @@ The open item is kept in the address bar (`#room:entry`), so a reload or a paste
 
 ## Problems
 
-Problems are collected across the whole project and listed in the Problems panel. Click one to open the item it belongs to. They cover:
+Problems are collected across the whole project and listed in the Problems panel. Click one to open the item it belongs to. A problem about an entity type, its properties or its behaviours opens that type on the [Entities page](./entities). They cover:
 
 - missing files and unknown references;
 - rooms with the wrong amount of tile data;
@@ -63,7 +64,7 @@ Problems are collected across the whole project and listed in the Problems panel
 - sprite frames that are not a GBA size;
 - tilesets and rooms over the 1024 background tiles or 16 background palettes, and images the build could not convert (see [Rooms](./rooms#tile-and-palette-budget));
 - entity types' behaviours: unknown ones, and properties missing, unknown or out of range (see [Behaviours](./making-a-game#giving-a-type-its-behaviours));
-- a value stored by a placed entity that does not fit its type's own property, such as a number for a boolean or an option the list does not have, and an integer default past 32 bits (see [Values that do not fit](./project-settings#property-misfit));
+- a value stored by a placed entity that does not fit its type's own property, such as a number for a boolean or an option the list does not have, and an integer default past 32 bits (see [Values that do not fit](./entities#property-misfit));
 - and more.
 
 Fix them before you build; the build helper reports the limits the studio does not check yet (sprite colours, layers) when it runs. See [Build and Play](./build-and-play).

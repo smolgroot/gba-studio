@@ -210,7 +210,7 @@ A `Collectible` is not alive after it is taken. The table of live entities keeps
 
 ### Giving a type its behaviours
 
-Give a type its behaviours in [Project settings](./project-settings#behaviours), where each one has a form, and set a placed entity's own values in the [room panel](./rooms#entity-overrides). The type keeps them in `studio/project.json`, under `behaviours`, by id, with the type's values for their properties:
+Give a type its behaviours on the [Entities page](./entities#behaviours), where each one has a form, and set a placed entity's own values in the [room panel](./rooms#entity-overrides). The type keeps them in `studio/project.json`, under `behaviours`, by id, with the type's values for their properties:
 
 ```json
 {
@@ -231,7 +231,7 @@ Give a type its behaviours in [Project settings](./project-settings#behaviours),
 - List them in the order they are meant to run on the actor: `hazard` after the behaviour that moves it.
 - A type has at most 4. The table of live entities keeps room for 4 behaviours on each entity, whatever its type, so a higher limit would cost every entity more memory (see [Cost](#cost)).
 - A type that lists no behaviours has an empty list, so projects made before behaviours could be listed load as they were.
-- A type's own properties, which the game's code reads by name, are defined in [Project settings](./project-settings#properties), not here. An own property cannot have the name of one of the type's behaviours' properties: the Properties table refuses the name, and **Add a behaviour** does not let you pick a behaviour that has a property named like one of the type's own.
+- A type's own properties, which the game's code reads by name, are defined on the [Entities page](./entities#properties), not here. An own property cannot have the name of one of the type's behaviours' properties: the Properties table refuses the name, and **Add a behaviour** does not let you pick a behaviour that has a property named like one of the type's own.
 
 The build writes each listed behaviour's properties into the [data section](../reference/data-section#entity) after the type's own, with the placed entity's value, the type's, or the default, and records which behaviours each type has and where their properties start (the [behaviours part](../reference/data-section#behaviours)). That is how the game finds them: listing `shooter` on a type makes every entity of it a shooter, with a `fire_every` of 60 unless you set another. The generated loop runs every behaviour a type lists; the game's code decides what their events do, as in the loop below.
 
@@ -437,7 +437,7 @@ The table of live entities is in EWRAM, 108 bytes a slot, with room for 4 behavi
 
 ## The sample game
 
-`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp, respawns on spikes, walks from one room into the next while the camera scrolls, collects coins and diamonds, and is sent back by a patrolling sentry bot. Its `src/main.rs` is about 360 lines, with the sentry bot, coins and diamonds taken from the [behaviours](#behaviours) their types list in `studio/project.json`. It has no shooters, moving platforms, doors, checkpoints, ability pickups or spawners yet, and does nothing with their events. Its loop is one `data::update_entities` call, which runs whatever behaviours each type lists, so a new enemy or pickup needs no change to `main.rs`: give a type a sprite and patrol and hazard, or collectible, place it, and build (see [Making an enemy](./project-settings#making-an-enemy)). It builds from its own folder, with the nightly toolchain pinned in `sample/rust-toolchain.toml` and `agb-gbafix` installed:
+`sample/` is a complete game built this way: a hero that runs, jumps, climbs a ramp, respawns on spikes, walks from one room into the next while the camera scrolls, collects coins and diamonds, and is sent back by a patrolling sentry bot. Its `src/main.rs` is about 360 lines, with the sentry bot, coins and diamonds taken from the [behaviours](#behaviours) their types list in `studio/project.json`. It has no shooters, moving platforms, doors, checkpoints, ability pickups or spawners yet, and does nothing with their events. Its loop is one `data::update_entities` call, which runs whatever behaviours each type lists, so a new enemy or pickup needs no change to `main.rs`: give a type a sprite and patrol and hazard, or collectible, place it, and build (see [Making an enemy](./entities#making-an-enemy)). It builds from its own folder, with the nightly toolchain pinned in `sample/rust-toolchain.toml` and `agb-gbafix` installed:
 
 ```sh
 cd sample && cargo build        # or press Build dev in the studio

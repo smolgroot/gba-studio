@@ -1,4 +1,4 @@
-// Behaviours in the interface: an entity type's list in Project settings, and the
+// Behaviours in the interface: an entity type's list on the Entities page, and the
 // values a placed entity sets differently from its type in the room panel. The forms
 // come from the runtime's declarations (core/src/behaviourschema.ts); every change is
 // one commit, so one undo step.

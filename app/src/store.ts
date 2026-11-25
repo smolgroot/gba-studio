@@ -8,19 +8,24 @@ import type { AgentMessage, BuildMessage, BuildStatus, Bundle, RomStatus } from 
 
 /** What is open in the document area and described in Properties. */
 export interface Selection {
-  kind: 'world' | 'project' | 'physics' | 'audio' | 'play' | 'tools' | 'room' | 'tileset' | 'sprite' | 'asset'
-  /** Document id, the file path of an asset, or for `tools` the tool open (none: the gallery). */
+  kind: 'world' | 'project' | 'physics' | 'entities' | 'audio' | 'play' | 'tools' | 'room' | 'tileset' | 'sprite' | 'asset'
+  /**
+   * Document id, the file path of an asset, for `tools` the tool open (none: the gallery),
+   * or for `entities` the entity type shown (none: the first).
+   */
   id?: string
 }
 export const selectionKey = (s: Selection): string => `${s.kind}:${s.id ?? ''}`
+/** The document tab a selection shows in: the Entities page is one tab whichever type it shows. */
+export const tabKey = (s: Selection): string => (s.kind === 'entities' ? 'entities:' : selectionKey(s))
 
-const KINDS: ReadonlyArray<Selection['kind']> = ['world', 'project', 'physics', 'audio', 'play', 'tools', 'room', 'tileset', 'sprite', 'asset']
+const KINDS: ReadonlyArray<Selection['kind']> = ['world', 'project', 'physics', 'entities', 'audio', 'play', 'tools', 'room', 'tileset', 'sprite', 'asset']
 /** The open item lives in the URL's hash (`#room:entry`), so a reload or a shared link comes back to it. */
 export function selectionFromHash(): Selection {
   const [kind, ...rest] = decodeURIComponent(location.hash.slice(1)).split(':')
   const id = rest.join(':')
   if (!KINDS.includes(kind as Selection['kind'])) return { kind: 'world' }
-  if (kind === 'tools') return id ? { kind, id } : { kind }
+  if (kind === 'tools' || kind === 'entities') return id ? { kind, id } : { kind }
   const single = kind === 'world' || kind === 'project' || kind === 'physics' || kind === 'audio' || kind === 'play'
   return single ? { kind: kind as Selection['kind'] } : id ? { kind: kind as Selection['kind'], id } : { kind: 'world' }
 }
@@ -50,10 +55,10 @@ function withDoc<K extends EditKind>(docs: Docs, kind: K, id: string | undefined
 }
 const docKey = (kind: EditKind, id?: string): string => `${kind}:${id ?? ''}`
 
-/** The document undo acts on for what is open, if any. The Physics tab edits the project file. */
-function editedDoc(selection: Selection): { kind: EditKind; id?: string } | null {
+/** The document undo acts on for what is open, if any. Physics and Entities edit the project file. */
+export function editedDoc(selection: Selection): { kind: EditKind; id?: string } | null {
   if (selection.kind === 'asset' || selection.kind === 'play' || selection.kind === 'tools') return null
-  return selection.kind === 'physics' ? { kind: 'project' } : { kind: selection.kind, id: selection.id }
+  return selection.kind === 'physics' || selection.kind === 'entities' ? { kind: 'project' } : { kind: selection.kind, id: selection.id }
 }
 
 /** Whether two documents say the same thing, whatever order their keys are in. */
@@ -417,6 +422,7 @@ export function selectionTitle(selection: Selection, bundle: Bundle | null): str
     case 'world': return 'World'
     case 'project': return 'Project settings'
     case 'physics': return 'Physics'
+    case 'entities': return 'Entities'
     case 'audio': return 'Audio'
     case 'play': return 'Play'
     case 'tools': return id ? toolName(id) : 'Tools'

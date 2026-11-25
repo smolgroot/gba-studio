@@ -22,7 +22,7 @@ const controlSx = {
   '&:disabled': { opacity: 0.5 },
 } as const
 
-export function TextInput({ value, onCommit, label, placeholder, disabled, allowEmpty }: { value: string; onCommit: (value: string) => void; label: string; placeholder?: string; disabled?: boolean; allowEmpty?: boolean }) {
+export function TextInput({ value, onCommit, label, placeholder, disabled, allowEmpty, autoFocus }: { value: string; onCommit: (value: string) => void; label: string; placeholder?: string; disabled?: boolean; allowEmpty?: boolean; autoFocus?: boolean }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   const commit = () => {
@@ -37,6 +37,7 @@ export function TextInput({ value, onCommit, label, placeholder, disabled, allow
       value={draft}
       placeholder={placeholder}
       disabled={disabled}
+      autoFocus={autoFocus}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={commit}
       onKeyDown={(event) => {
