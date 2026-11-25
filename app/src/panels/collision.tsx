@@ -38,7 +38,6 @@ export function CollisionClasses() {
   const rooms = useStudio((s) => s.bundle?.docs.rooms)
   const commit = useStudio((s) => s.commit)
   const commitGroup = useStudio((s) => s.commitGroup)
-  const notice = useStudio((s) => s.notice)
   /** The class a delete is waiting on an answer for. */
   const [asking, setAsking] = useState<string | null>(null)
   /** Why an id was not taken, by the class it was typed for. */
@@ -122,7 +121,6 @@ export function CollisionClasses() {
           Add collision class
         </Button>
       </Box>
-      {notice && <Typography variant="body2" color="warning.main" role="status" sx={{ px: 2, py: 0.5 }}>{notice}</Typography>}
       <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
         Tiles take their class from their tileset, and a room can paint over them. The order matters: the first class is what a tile with no class has, and a room paints with a class by its place in this list, so new classes go at the end and cannot be moved. The id is how tilesets name the class and what it is called in the game&rsquo;s code (<code>data::class::SOLID</code> for <code>solid</code>), so game code that uses an old id must change with it. Adding or deleting a class, or changing its id, needs a build; a new kind or floor height is patched into the game.
       </Typography>

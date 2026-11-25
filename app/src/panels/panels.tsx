@@ -43,6 +43,7 @@ import { BAR, ui } from '../theme.ts'
 import { AudioEditor } from './audio.tsx'
 import { TypeBehaviours, behaviourNames } from './behaviours.tsx'
 import { CollisionClasses } from './collision.tsx'
+import { TypeProperties } from './properties.tsx'
 import { MidiView } from './midi.tsx'
 import { PhysicsEditor } from './physics.tsx'
 import { PixelEditor } from './pixel.tsx'
@@ -485,12 +486,19 @@ export function DocumentPanel({ selection }: { selection: Selection }) {
   }
 }
 
+/** A type's row when closed: its behaviours, and how many properties of its own it has. */
+function typeSummary(type: Project['entityTypes'][number]): string {
+  const n = type.props.length
+  return `${behaviourNames(type)}${n ? ` · ${n} ${n === 1 ? 'property' : 'properties'}` : ''}`
+}
+
 function ProjectSettings() {
-  // Entity types whose behaviours are shown.
+  // Entity types that are open, showing their properties and behaviours.
   const [open, setOpen] = useState<string[]>([])
   const project = useStudio((s) => s.bundle?.docs.project)
   const sprites = useStudio((s) => s.bundle?.docs.sprites)
   const commit = useStudio((s) => s.commit)
+  const notice = useStudio((s) => s.notice)
   if (!project) return <Message>The project file is missing or has errors. See Problems.</Message>
   const update = (patch: Partial<Project>) => commit('project', undefined, { ...project, ...patch })
   const build = (key: Exclude<keyof Project['build'], 'dataReserve'>, label: string) => (
@@ -502,6 +510,8 @@ function ProjectSettings() {
   return (
     <Box sx={{ height: '100%', overflow: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, minHeight: BAR.tool, borderBottom: '1px solid #111', bgcolor: 'background.default' }}><UndoButtons /></Box>
+      {/* Why the last undo or redo did nothing, if it did not: a change here reached other documents. */}
+      {notice && <Typography variant="body2" color="warning.main" role="status" sx={{ px: 2, py: 0.75, position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.default', borderBottom: '1px solid #111' }}>{notice}</Typography>}
       <Heading>Project</Heading>
       <Fields>
         <Field label="Name"><TextInput label="Project name" value={project.name} onCommit={(name) => update({ name })} /></Field>
@@ -542,12 +552,13 @@ function ProjectSettings() {
               <Button
                 size="small"
                 aria-expanded={open.includes(type.id)}
-                aria-label={`Behaviours of ${type.name}: ${behaviourNames(type)}`}
+                aria-label={`Properties and behaviours of ${type.name}: ${typeSummary(type)}`}
+                title={typeSummary(type)}
                 startIcon={open.includes(type.id) ? <ExpandMoreIcon /> : <ChevronRightIcon />}
                 onClick={() => toggle(type.id)}
-                sx={{ justifyContent: 'flex-start', maxWidth: '100%', color: type.behaviours.length ? 'text.primary' : 'text.secondary', textTransform: 'none' }}
+                sx={{ justifyContent: 'flex-start', maxWidth: '100%', color: type.behaviours.length || type.props.length ? 'text.primary' : 'text.secondary', textTransform: 'none' }}
               >
-                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{behaviourNames(type)}</Box>
+                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{typeSummary(type)}</Box>
               </Button>
             </Box>
             <Box sx={cell}>
@@ -555,6 +566,7 @@ function ProjectSettings() {
             </Box>
             {open.includes(type.id) && (
               <Box sx={{ gridColumn: '1 / -1' }}>
+                <TypeProperties type={type} />
                 <TypeBehaviours type={type} onChange={(next) => setType(index, next)} />
               </Box>
             )}
@@ -570,7 +582,7 @@ function ProjectSettings() {
           Add entity type
         </Button>
       </Box>
-      <Empty>An entity type is a kind of thing placed in rooms: an enemy, a pickup, a door. What it does comes from its behaviours, which the game runs in the order listed, and from the game's own code. A placed entity can set its own values for them in the room's panel. Typed properties of a type's own are edited in studio/project.json for now.</Empty>
+      <Empty>An entity type is a kind of thing placed in rooms: an enemy, a pickup, a door. Open a type to give it properties of its own, which the game's code reads by name, and behaviours, which the game runs in the order listed. A placed entity can set its own values for them in the room's panel.</Empty>
       <CollisionClasses />
     </Box>
   )

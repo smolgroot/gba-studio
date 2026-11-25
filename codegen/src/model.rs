@@ -147,6 +147,13 @@ pub struct BehaviourUse {
 pub struct PropDef {
     pub name: String,
     pub default: Value,
+    /// For an int property: the smallest value the studio lets an entity have. The studio
+    /// checks it; the build does not use it yet.
+    #[serde(default)]
+    pub min: Option<i64>,
+    /// For an int property: the largest value, as `min`.
+    #[serde(default)]
+    pub max: Option<i64>,
 }
 
 #[derive(Deserialize)]

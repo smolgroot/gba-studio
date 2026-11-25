@@ -2,6 +2,7 @@
 import { budgetProblems } from './budget.ts'
 import type { ArtLookup } from './budget.ts'
 import { behaviourEntityProblems, behaviourTypeProblems, isBehaviourProp } from './behaviours.ts'
+import { propertyAllows, propertyMisfit } from './properties.ts'
 import { rleLength } from './rle.ts'
 import { MAX_SCREEN_LAYERS, SCREEN, SPRITE_SIZES, docPath } from './schema.ts'
 import type { Audio, Project, Room, Sprite, Tileset, World } from './schema.ts'
@@ -50,6 +51,12 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
     for (const type of project.entityTypes) {
       if (type.sprite && !docs.sprites[type.sprite]) add('error', file, `entity type "${type.id}" uses unknown sprite "${type.sprite}"`)
       for (const name of duplicates(type.props.map((p) => p.name))) add('error', file, `entity type "${type.id}" has property "${name}" twice`)
+      // The game keeps an int in 32 bits, so a default past that would wrap when the game is built.
+      for (const def of type.props) {
+        if (def.type === 'int' && propertyMisfit({ ...def, min: undefined, max: undefined }, def.default) !== null) {
+          add('error', file, `entity type "${type.id}": property "${def.name}" has default ${def.default}; it is ${propertyAllows({ ...def, min: undefined, max: undefined })}`)
+        }
+      }
     }
     for (const message of behaviourTypeProblems(project.entityTypes)) add('error', file, message)
   }
@@ -112,6 +119,14 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
       for (const name of Object.keys(entity.props)) {
         if (type && !type.props.some((p) => p.name === name) && !isBehaviourProp(type, name)) {
           add('warning', file, `entity ${i} (${entity.type}) has a property "${name}" its type does not define`)
+        }
+      }
+      // A stored value must still fit what its type says (US-016).
+      if (type) {
+        for (const def of type.props) {
+          const value = entity.props[def.name]
+          const problem = value === undefined ? null : propertyMisfit(def, value)
+          if (problem) add('error', file, `entity ${i} (${entity.type}): ${problem}`)
         }
       }
       if (type) for (const message of behaviourEntityProblems(i, type, entity)) add('error', file, message)

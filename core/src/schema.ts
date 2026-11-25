@@ -38,12 +38,19 @@ export const CollisionClass = z
   })
   .refine((c) => (c.kind === 'slope') === (c.slope !== undefined), { message: 'slope heights go with kind "slope", and only with it', path: ['slope'] })
 
+/** What a 32 bit whole number can hold: what the game keeps an int in. */
+export const I32_MIN = -2147483648
+export const I32_MAX = 2147483647
+
 export const PropertyDef = z
   .object({
     name: z.string().regex(/^[a-z][a-z0-9_]*$/, 'snake_case, it becomes a Rust field'),
     type: z.enum(['int', 'bool', 'string', 'enum']),
     default: z.union([z.number().int(), z.boolean(), z.string()]),
     options: z.array(z.string().min(1)).min(1).optional(),
+    /** For an int: the smallest and the largest value. Left out, any whole number that fits in 32 bits. */
+    min: z.number().int().min(I32_MIN).max(I32_MAX).optional(),
+    max: z.number().int().min(I32_MIN).max(I32_MAX).optional(),
   })
   .superRefine((p, ctx) => {
     const kind = typeof p.default
@@ -54,6 +61,11 @@ export const PropertyDef = z
       (p.type === 'enum' && kind === 'string' && (p.options?.includes(p.default as string) ?? false))
     if (!ok) ctx.addIssue({ code: 'custom', message: `default does not fit type "${p.type}"`, path: ['default'] })
     if ((p.type === 'enum') !== (p.options !== undefined)) ctx.addIssue({ code: 'custom', message: 'options go with type "enum", and only with it', path: ['options'] })
+    if (p.type !== 'int' && (p.min !== undefined || p.max !== undefined)) ctx.addIssue({ code: 'custom', message: 'min and max go with type "int", and only with it', path: [p.min !== undefined ? 'min' : 'max'] })
+    if (p.min !== undefined && p.max !== undefined && p.min > p.max) ctx.addIssue({ code: 'custom', message: 'min is more than max', path: ['min'] })
+    if (p.type === 'int' && typeof p.default === 'number' && ((p.min !== undefined && p.default < p.min) || (p.max !== undefined && p.default > p.max))) {
+      ctx.addIssue({ code: 'custom', message: 'default is outside min and max', path: ['default'] })
+    }
   })
 
 /**
@@ -265,6 +277,7 @@ export const Audio = z.object({
 })
 
 export type CollisionClass = z.infer<typeof CollisionClass>
+export type PropertyDef = z.infer<typeof PropertyDef>
 export type EntityType = z.infer<typeof EntityType>
 export type BehaviourUse = z.infer<typeof BehaviourUse>
 export type PlatformerPhysics = z.infer<typeof PlatformerPhysics>

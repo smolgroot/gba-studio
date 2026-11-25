@@ -2,7 +2,7 @@
 // changes the project, a tileset and a room; undo and redo take all three back and
 // forward, and are refused, saying why, when one has been changed since.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { FORMAT_VERSION, Tileset, emptyRoom, newProject, renameClass, rleDecode, rleEncode, withoutClass } from '@pecten-studio/core'
+import { FORMAT_VERSION, Tileset, editProperty, emptyRoom, newProject, renameClass, renameProperty, rleDecode, rleEncode, withPropertyType, withoutClass } from '@pecten-studio/core'
 import type { Bundle } from '../src/api.ts'
 
 let useStudio: typeof import('../src/store.ts').useStudio
@@ -136,5 +136,63 @@ describe('changing a class id in the store', () => {
     useStudio.getState().undo()
     expect(docs().project).toBe(first.project)
     expect(docs().tilesets.ts).toBe(first.tilesets.ts)
+  })
+})
+
+describe('changing a property of an entity type in the store (US-016)', () => {
+  const sentry = { id: 'sentry', name: 'Sentry', colour: '#e5484d', props: [{ name: 'shield', type: 'int' as const, default: 3 }, { name: 'mood', type: 'string' as const, default: 'calm' }], behaviours: [] }
+  beforeEach(() => {
+    const b = bundle()
+    const room = { ...docs().rooms.entry!, entities: [{ type: 'sentry', x: 4, y: 4, props: { shield: 7, mood: 'angry' } }, { type: 'sentry', x: 8, y: 4, props: {} }] }
+    useStudio.setState({ bundle: { ...b, docs: { ...b.docs, project: { ...b.docs.project!, entityTypes: [sentry] }, rooms: { entry: room } } }, history: {}, notice: null })
+  })
+  const rooms = () => docs().rooms
+  const types = () => docs().project!.entityTypes
+
+  /** What the properties table does for a change of type, with the values it drops. */
+  function retype(index: number, to: 'int' | 'bool' | 'string' | 'enum') {
+    const plan = editProperty(docs().project!, rooms(), 'sentry', index, withPropertyType(types()[0]!.props[index]!, to))!
+    useStudio.getState().commitGroup('the property was changed', { kind: 'project' }, plan.project, Object.entries(plan.rooms).map(([id, doc]) => ({ kind: 'room' as const, id, label: doc.name, doc })))
+    return plan.broken
+  }
+
+  it('drops the values that no longer fit with the change, as one undo step', () => {
+    const first = docs()
+    const broken = retype(0, 'bool')
+    expect(broken.map((m) => [m.entity, m.name, m.value])).toEqual([[0, 'shield', 7]])
+    expect(types()[0]!.props[0]).toEqual({ name: 'shield', type: 'bool', default: false })
+    expect(rooms().entry!.entities[0]!.props).toEqual({ mood: 'angry' })
+    useStudio.getState().undo()
+    expect(docs().project).toBe(first.project)
+    expect(docs().rooms.entry).toBe(first.rooms.entry)
+    useStudio.getState().redo()
+    expect(rooms().entry!.entities[0]!.props).toEqual({ mood: 'angry' })
+  })
+
+  it('leaves the rooms alone when the change breaks nothing', () => {
+    const first = docs().rooms.entry
+    retype(1, 'string') // the same kind
+    expect(docs().rooms.entry).toBe(first)
+    // Only the project has a step; the room was not part of it.
+    expect(Object.keys(useStudio.getState().history)).toEqual(['project:'])
+  })
+
+  it('renames the stored values with the property, one undo step across the project and the room', () => {
+    const first = docs()
+    const change = renameProperty(docs().project!, rooms(), 'sentry', 'shield', 'armour')
+    useStudio.getState().commitGroup('the property was renamed', { kind: 'project' }, change.project, Object.entries(change.rooms).map(([id, doc]) => ({ kind: 'room' as const, id, label: doc.name, doc })))
+    expect(types()[0]!.props[0]!.name).toBe('armour')
+    expect(rooms().entry!.entities[0]!.props).toEqual({ armour: 7, mood: 'angry' })
+    useStudio.getState().undo()
+    expect(docs().project).toBe(first.project)
+    expect(docs().rooms.entry).toBe(first.rooms.entry)
+  })
+
+  it('is not undone, with the reason, when a room it changed has been edited since', () => {
+    retype(0, 'bool')
+    useStudio.getState().commit('room', 'entry', { ...rooms().entry!, name: 'Entry hall' })
+    useStudio.getState().undo()
+    expect(types()[0]!.props[0]!.type).toBe('bool')
+    expect(useStudio.getState().notice).toBe('Not undone: Entry was changed after the property was changed. Undo that change first.')
   })
 })

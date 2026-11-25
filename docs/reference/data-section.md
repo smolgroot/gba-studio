@@ -137,6 +137,8 @@ their names, like the type's own, but the game reads them by position: the
 | 12 | 4 | Integer (signed), boolean (0 or 1), or for text the offset of the string |
 | 16 | 4 | For text, the string's length; otherwise 0 |
 
+A property that is one of a list is written as text, its value. The list's options and an integer's smallest and largest are for the studio and are not written.
+
 ### Globals
 
 | Offset | Size | Field |

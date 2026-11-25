@@ -219,6 +219,9 @@ export function behaviourBlocker(type: EntityType, id: string): string | undefin
   if (type.behaviours.some((b) => b.id === id)) return 'the type has it'
   if (type.behaviours.length >= MAX_BEHAVIOURS) return `the type has ${MAX_BEHAVIOURS}, the most it can have`
   const names = behaviourFields(id).map((f) => f.name)
+  // A property of the type's own with the same name is refused when it is made, and here, so the clash is not made the other way round.
+  const own = type.props.find((p) => names.includes(p.name))
+  if (own) return `the type has its own property ${own.name}`
   for (const { declaration } of known(type)) {
     const shared = (declaration.order as readonly string[]).find((n) => names.includes(n))
     if (shared) return `shares ${shared} with ${behaviourLabel(declaration.id)}`

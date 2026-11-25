@@ -146,3 +146,56 @@ describe('entities store only what differs from their type (US-014)', () => {
     expect(answer.text).toContain('has a property "ghost" its type does not define')
   })
 })
+
+describe('entity_type_set tells what a change of properties leaves in the rooms (US-016)', () => {
+  const room = async () => {
+    await call('entity_type_set', {
+      id: 'bot',
+      name: 'Bot',
+      props: [
+        { name: 'mood', type: 'enum', default: 'calm', options: ['calm', 'angry'] },
+        { name: 'shield', type: 'int', default: 3, min: 0, max: 9 },
+      ],
+    })
+    await call('write_document', { kind: 'room', id: 'hall', document: emptyRoom('Hall', 1, 1, 'none') })
+    await call('entity_add', { room: 'hall', type: 'bot', x: 10, y: 10, props: { mood: 'angry', shield: 7 } })
+    await call('entity_add', { room: 'hall', type: 'bot', x: 20, y: 10, props: {} })
+  }
+
+  it('lists the placed values that no longer fit, with their room and entity', async () => {
+    await room()
+    const answer = await call('entity_type_set', {
+      id: 'bot',
+      props: [
+        { name: 'mood', type: 'enum', default: 'calm', options: ['calm'] },
+        { name: 'shield', type: 'int', default: 3, min: 0, max: 5 },
+      ],
+    })
+    expect(answer.text).toContain('Placed values that no longer fit')
+    expect(answer.text).toContain('hall entity 0: mood is "angry"; it is one of calm')
+    expect(answer.text).toContain('hall entity 0: shield is 7; it is a whole number from 0 to 5')
+    expect(answer.text).not.toContain('entity 1')
+  })
+
+  it('lists the values left under a property the type no longer has, as after a rename', async () => {
+    await room()
+    const answer = await call('entity_type_set', { id: 'bot', props: [{ name: 'mood', type: 'enum', default: 'calm', options: ['calm', 'angry'] }, { name: 'armour', type: 'int', default: 3 }] })
+    expect(answer.text).toContain('Placed values for properties the type no longer has')
+    expect(answer.text).toContain('hall entity 0: shield is 7')
+    expect(answer.text).not.toContain('Placed values that no longer fit')
+  })
+
+  it('says nothing extra when everything still fits, or when props are not changed', async () => {
+    await room()
+    const same = await call('entity_type_set', { id: 'bot', props: [{ name: 'mood', type: 'enum', default: 'calm', options: ['calm', 'angry', 'sleepy'] }, { name: 'shield', type: 'int', default: 3, min: 0, max: 9 }] })
+    expect(same.text).not.toContain('Placed values')
+    expect((await call('entity_type_set', { id: 'bot', name: 'Robot' })).text).not.toContain('Placed values')
+  })
+
+  it('accepts min and max for an int, and refuses them anywhere else, saying why', async () => {
+    await call('entity_type_set', { id: 'bot', props: [{ name: 'shield', type: 'int', default: 3, min: 0, max: 9 }] })
+    expect(JSON.parse(readFileSync(path.join(folder, 'studio/project.json'), 'utf8')).entityTypes.find((t: { id: string }) => t.id === 'bot').props[0]).toMatchObject({ min: 0, max: 9 })
+    // The input is refused as the tool reads it, before anything is saved.
+    expect(() => call('entity_type_set', { id: 'bot', props: [{ name: 'on', type: 'bool', default: true, min: 0 }] })).toThrow('min and max go with type \\"int\\"')
+  })
+})

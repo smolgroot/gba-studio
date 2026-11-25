@@ -25,7 +25,7 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import SvgIcon from '@mui/material/SvgIcon'
 import Typography from '@mui/material/Typography'
-import { MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, entityOverride, resizeRoom, rleDecode, rleEncode, rleLength, roomSize, shownEntityValue, spotOfTile } from '@pecten-studio/core'
+import { I32_MAX, I32_MIN, MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, entityOverride, resizeRoom, rleDecode, rleEncode, rleLength, roomSize, shownEntityValue, spotOfTile } from '@pecten-studio/core'
 import type { Background, CollisionClass, EntityType, Room, Sprite, Tileset } from '@pecten-studio/core'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
@@ -888,7 +888,7 @@ export function RoomProperties({ id }: { id: string }) {
               return (
                 <Field key={prop.name} label={prop.name} marked={shown.overridden} mark={`Set on this entity; ${type.name} has ${String(shown.inherited)}`}>
                   {prop.type === 'int' ? (
-                    <NumberInput label={prop.name} value={Number(value)} onCommit={setProp} />
+                    <NumberInput label={prop.name} value={Number(value)} min={prop.min ?? I32_MIN} max={prop.max ?? I32_MAX} onCommit={setProp} />
                   ) : prop.type === 'bool' ? (
                     <SelectInput label={prop.name} value={value ? 'yes' : 'no'} onChange={(next) => setProp(next === 'yes')} options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} />
                   ) : prop.type === 'enum' ? (

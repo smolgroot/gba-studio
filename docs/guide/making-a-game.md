@@ -231,6 +231,7 @@ Give a type its behaviours in [Project settings](./project-settings#behaviours),
 - List them in the order they are meant to run on the actor: `hazard` after the behaviour that moves it.
 - A type has at most 4. The table of live entities keeps room for 4 behaviours on each entity, whatever its type, so a higher limit would cost every entity more memory (see [Cost](#cost)).
 - A type that lists no behaviours has an empty list, so projects made before behaviours could be listed load as they were.
+- A type's own properties, which the game's code reads by name, are defined in [Project settings](./project-settings#properties), not here. An own property cannot have the name of one of the type's behaviours' properties: the Properties table refuses the name, and **Add a behaviour** does not let you pick a behaviour that has a property named like one of the type's own.
 
 The build writes each listed behaviour's properties into the [data section](../reference/data-section#entity) after the type's own, with the placed entity's value, the type's, or the default, and records which behaviours each type has and where their properties start (the [behaviours part](../reference/data-section#behaviours)). That is how the game finds them: listing `shooter` on a type makes every entity of it a shooter, with a `fire_every` of 60 unless you set another. The generated loop runs every behaviour a type lists; the game's code decides what their events do, as in the loop below.
 

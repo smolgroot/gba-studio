@@ -87,9 +87,11 @@ Notes / open questions
 | US-013 | Generated entity dispatch, no hand-written match | E2 | P0 | Done | M |
 | US-014 | Prefabs with per-instance overrides | E2 | P1 | Done | M |
 | US-015 | Edit collision classes in the interface | E2 | P1 | Done | S |
-| US-016 | Edit entity property definitions in the interface | E2 | P1 | Proposed | S |
+| US-016 | Edit entity property definitions in the interface | E2 | P1 | Done | S |
 | US-017 | Entity references between entities | E2 | P1 | Proposed | M |
 | US-018 | Custom behaviours written in the game | E2 | P1 | Proposed | M |
+| US-131 | Codegen checks the values of an entity type's own properties | E2 | P2 | Proposed | S |
+| US-019 | An Entities page for entity types, their properties and behaviours | E2 | P1 | Proposed | M |
 | US-020 | Symbol map of game state | E3 | P0 | Done | M |
 | US-021 | Live entity inspector in the Play panel | E3 | P0 | Done | L |
 | US-021a | Live entity list and selecting on the game screen | E3 | P0 | Done | M |
@@ -521,17 +523,35 @@ Decided (the open questions, settled when the story was built; see `design/US-01
 - Classes cannot be moved: a room paints collision by a class's place in the list.
 
 #### US-016 · Edit entity property definitions in the interface
-**Priority** P1 · **Status** Proposed · **Size** S · **Depends on** —
-**Touches** app, core
+**Priority** P1 · **Status** Done · **Size** S · **Depends on** —
+**Touches** app, core, codegen (model), server, docs
 
 As an author, I want to add and change an entity type's properties (name, type,
 default, range) in Project settings, so that the whole entity setup is in the
 studio.
 
 Acceptance criteria
-- [ ] Every property type in the schema can be defined from the interface.
-- [ ] Changing a property's type reports the placed entities whose values no
-  longer fit.
+- [x] Every property type in the schema can be defined from the interface. (Project
+  settings → a type's Properties table: integer with optional min and max, boolean,
+  text, one of a list; `core/test/properties.test.ts`: `withPropertyType` gives a valid
+  definition from each kind to each other kind, options and limits parse and keep the
+  default valid, `PropertyDef` takes `min` and `max` only on an int, in order, around
+  the default; name checks; the `entity-properties` screenshot.)
+- [x] Changing a property's type reports the placed entities whose values no longer
+  fit. (`core/test/properties.test.ts`: `propertyMisfits`, `newMisfits` and
+  `editProperty` list room, entity, value and reason for a change of kind, a removed
+  option and a narrowed range, and nothing for what still fits or was already wrong;
+  `validate` reports a stored value that does not fit as an error in the room's file;
+  `app/test/store-group.test.ts`: the change and the dropped values are one undo step
+  across the project and the rooms, refused with its reason if a room changed since;
+  `server/test/behaviours.test.ts`: `entity_type_set` lists them; the
+  `entity-property-misfit` screenshot shows the question.)
+
+Decided (the open questions, settled when the story was built; see `design/US-016.md`)
+- The range is int `min` and `max` on `PropertyDef` (additive; `FORMAT_VERSION` stays 1).
+- A change that breaks stored values asks, lists them, and drops them on confirm, in one
+  undo step with the project; Problems reports any that remain.
+- Codegen does not check own properties' values yet: US-131.
 
 #### US-017 · Entity references between entities
 **Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-016
@@ -558,6 +578,94 @@ Acceptance criteria
 - [ ] A behaviour declared in the game crate is listed in Project settings after a
   build.
 - [ ] Documented with an example in `sample/`.
+
+#### US-019 · An Entities page for entity types, their properties and behaviours
+**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-016
+**Touches** app, docs
+
+As an author, I want entity types on a page of their own, with one type shown at a
+time, so that the things my game is made of are not hidden in a settings table
+between the build commands and the collision classes.
+
+Since US-012 and US-016, an entity type in Project settings opens in place inside a
+five-column table, with its properties and every behaviour's form under it. With a
+few types open the page is mostly entity forms, and it does not show the
+sprite, where the type is used, or more than one type's settings side by side with
+the list. Physics already has its own page that edits `studio/project.json`; this
+does the same for `entityTypes`. The project format does not change.
+
+Acceptance criteria
+- [ ] Given a project, the sidebar's top items and the activity bar have
+  **Entities**, after World, with the number of entity types as its detail. It opens
+  a page with the list of types on the left and the selected type on the right.
+- [ ] Each row in the list shows the type's colour, the first frame of its sprite
+  (or the colour as a square when it has none), its name, its behaviours and number
+  of properties, and how many entities of that type are placed in rooms. **Add
+  entity type** is at the top of the list and selects the new type.
+- [ ] The selected type shows, at the top, a large preview of its sprite at whole
+  pixel scales, then its name, colour and sprite. Under them are its Properties and
+  Behaviours, using the existing editors. They sit side by side when the page is
+  wide enough and stack when it is not.
+- [ ] The selected type lists the rooms that place it, with a count for each, and
+  selecting one opens that room.
+- [ ] Deleting a type that is placed in rooms asks first and names how many entities
+  in how many rooms it would leave without a type; deleting an unplaced type does
+  not ask.
+- [ ] The selected type is part of the address (`entities/<type id>`), so reload,
+  back and a link from elsewhere open the same type. An address with a type that no
+  longer exists opens the page with the first type selected.
+- [ ] The **Type** field of a placed entity in the room's panel, and a problem in
+  Problems about an entity type, its properties or its behaviours, open the Entities
+  page on that type.
+- [ ] Undo and redo on the Entities page step the project as they do in Project
+  settings, and the "Not undone" notice for a grouped property change shows on this
+  page.
+- [ ] Project settings keeps Project, Build and Collision classes, with one line
+  saying entity types moved, linking to the Entities page. It no longer lists entity
+  types.
+- [ ] Keyboard: the list moves with the arrow keys, Enter or Space selects, and
+  focus goes to the type's name field on **Add entity type**.
+- [ ] `docs/guide/entities.md` takes the entity type, properties and behaviours
+  sections from `docs/guide/project-settings.md`, with new screenshots. Links in
+  `rooms.md`, `interface.md` and the rest of the guide go to the new page, and the
+  old anchors in `project-settings.md` say where the sections went. US-018's
+  criterion is changed to say the Entities page.
+
+Notes / open questions
+- Collision classes stay in Project settings: they belong to tiles, not entities.
+  Should they get their own page too, or move next to Physics?
+- Should entity types also be a section in the sidebar (like Rooms and Sprites),
+  with each type a row, or is the list on the page enough?
+- Today deleting a placed type does not ask, and what the placed entities become is
+  whatever validation reports. If the delete should instead remove those entities,
+  or be refused, that is a format and validation question for its own story.
+- MCP tools edit `entityTypes` already and need no change; check that
+  `docs/guide/agents.md` does not point at Project settings for entity types.
+
+#### US-131 · Codegen checks the values of an entity type's own properties
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-016
+**Touches** codegen, core, docs
+
+As an author, I want a build to refuse an entity value that does not fit its property
+(the wrong kind, an option the list does not have, a number outside its `min` and
+`max`), so that a hand edit or a coding agent cannot put a value in the game that
+disagrees with the property's definition.
+
+The studio reports such values as errors in Problems since US-016 (`propertyMisfit` in
+`core/src/properties.ts`), but codegen reads only a property's name and default
+(`PropDef` in `codegen/src/model.rs`) and writes whatever kind of value is stored: a
+number where the property is a boolean builds, and the game then reads nothing for it.
+Behaviour properties are checked in both places, in the same words
+(`codegen/src/behaviours.rs`, `core/src/behaviours.ts`, tested against
+`codegen/fixture/bad-behaviours/expected.txt`).
+
+Acceptance criteria
+- [ ] `PropDef` reads a property's `type`, `options`, `min` and `max`, and codegen
+  reports a stored value or default that does not fit, naming the entity, in the same
+  words as `propertyMisfit`.
+- [ ] A fixture of misfits with the expected messages is read by a Rust test and a
+  vitest test, so the two cannot drift apart.
+- [ ] A default past 32 bits is reported, not wrapped.
 
 ---
 

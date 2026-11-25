@@ -22,12 +22,12 @@ const controlSx = {
   '&:disabled': { opacity: 0.5 },
 } as const
 
-export function TextInput({ value, onCommit, label, placeholder, disabled }: { value: string; onCommit: (value: string) => void; label: string; placeholder?: string; disabled?: boolean }) {
+export function TextInput({ value, onCommit, label, placeholder, disabled, allowEmpty }: { value: string; onCommit: (value: string) => void; label: string; placeholder?: string; disabled?: boolean; allowEmpty?: boolean }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
   const commit = () => {
     const next = draft.trim()
-    if (next && next !== value) onCommit(next)
+    if ((next || allowEmpty) && next !== value) onCommit(next)
     else setDraft(value)
   }
   return (

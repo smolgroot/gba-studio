@@ -3,7 +3,7 @@
 // nothing is read or written outside the game folder.
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
-import { BEHAVIOURS, Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, overriddenProps, redundantProps, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
+import { BEHAVIOURS, Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, newMisfits, overriddenProps, propertyUsage, redundantProps, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
 import type { Documents, EntityType, Room } from '@pecten-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
@@ -519,7 +519,10 @@ export const TOOLS: Tool[] = [
       name: z.string().min(1).optional(),
       colour: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
       sprite: Id.nullable().optional().describe('A sprite id, or null for none'),
-      props: z.array(PropertyDef).optional().describe('Replaces the type\'s property definitions'),
+      props: z
+        .array(PropertyDef)
+        .optional()
+        .describe('Replaces the type\'s property definitions: each has a name (snake_case), a type (int, bool, string or enum), a default, for an int an optional min and max, and for an enum its options. The answer lists the placed entities whose stored values no longer fit, and those that store a value for a property the type no longer has. It does not change rooms: use entity_update for that.'),
     }),
     async ({ id, name, colour, sprite, props }, context) => {
       const { docs } = await documents(context)
@@ -534,7 +537,14 @@ export const TOOLS: Tool[] = [
         ...(props ? { props } : {}),
       }
       const entityTypes = existing ? project.entityTypes.map((t) => (t.id === id ? type : t)) : [...project.entityTypes, type]
-      return saveAndReport(context, 'project', undefined, { ...project, entityTypes }, `${existing ? 'Updated' : 'Added'} entity type "${id}".`)
+      // What replacing the definitions leaves behind in the rooms, so an agent can put it right.
+      const broken = existing && props ? newMisfits(docs.rooms, existing, type as EntityType) : []
+      const gone = existing && props ? existing.props.filter((p) => !type.props.some((q) => q.name === p.name)).flatMap((p) => propertyUsage(docs.rooms, id, p.name).map((u) => ({ ...u, name: p.name }))) : []
+      const left = [
+        broken.length ? `\nPlaced values that no longer fit (change them with entity_update):\n${broken.map((m) => `  ${m.room} entity ${m.entity}: ${m.problem}`).join('\n')}` : '',
+        gone.length ? `\nPlaced values for properties the type no longer has (entity_update leaves them out when you pass props without them):\n${gone.map((u) => `  ${u.room} entity ${u.entity}: ${u.name} is ${JSON.stringify(u.value)}`).join('\n')}` : '',
+      ].join('')
+      return saveAndReport(context, 'project', undefined, { ...project, entityTypes }, `${existing ? 'Updated' : 'Added'} entity type "${id}".${left}`)
     },
   ),
 
