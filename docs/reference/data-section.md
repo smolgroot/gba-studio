@@ -139,6 +139,8 @@ their names, like the type's own, but the game reads them by position: the
 
 A property that is one of a list is written as text, its value. The list's options and an integer's smallest and largest are for the studio and are not written.
 
+A reference to another entity is written as an integer: the number of the entity it points at, as `World::entity_index` counts them (rooms in id order, then each room's entities in order, from 0), or -1 for none. The game reads it with `Entity::reference`, which gives that number, or `None` for -1, and `LiveEntities::get` takes the number. Entity ids are for the studio and are not written. Because a reference is an integer, the layout did not change for it, and a ROM built before references existed can be patched with a project that has them.
+
 ### Globals
 
 | Offset | Size | Field |

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "name": "B",
+  "width": 1,
+  "height": 1,
+  "tileset": "tiles",
+  "layers": [{ "name": "Front", "data": [600, 0] }],
+  "entities": [
+    { "type": "door", "id": "door-1", "x": 10, "y": 10 },
+    { "type": "switch", "x": 20, "y": 10, "props": { "opens": "door-1" } }
+  ]
+}

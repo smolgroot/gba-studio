@@ -65,6 +65,7 @@ Problems are collected across the whole project and listed in the Problems panel
 - tilesets and rooms over the 1024 background tiles or 16 background palettes, and images the build could not convert (see [Rooms](./rooms#tile-and-palette-budget));
 - entity types' behaviours: unknown ones, and properties missing, unknown or out of range (see [Behaviours](./making-a-game#giving-a-type-its-behaviours));
 - a value stored by a placed entity that does not fit its type's own property, such as a number for a boolean or an option the list does not have, and an integer default past 32 bits (see [Values that do not fit](./entities#property-misfit));
+- references between entities: a target no entity has, a target of a type the property may not point at, an id two entities have, and a type a property may point at that the project does not have (see [References between entities](./rooms#entity-references));
 - and more.
 
 Fix them before you build; the build helper reports the limits the studio does not check yet (sprite colours, layers) when it runs. See [Build and Play](./build-and-play).

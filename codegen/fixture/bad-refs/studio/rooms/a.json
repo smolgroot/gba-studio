@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "A",
+  "width": 1,
+  "height": 1,
+  "tileset": "tiles",
+  "layers": [{ "name": "Front", "data": [600, 0] }],
+  "entities": [
+    { "type": "switch", "x": 10, "y": 10, "props": { "opens": "door-9" } },
+    { "type": "switch", "x": 20, "y": 10, "props": { "opens": "sign-1", "anything": "door-1" } },
+    { "type": "sign", "id": "sign-1", "x": 30, "y": 10 },
+    { "type": "switch", "x": 40, "y": 10, "props": { "anything": 7 } },
+    { "type": "door", "id": "door-1", "x": 50, "y": 10 }
+  ]
+}

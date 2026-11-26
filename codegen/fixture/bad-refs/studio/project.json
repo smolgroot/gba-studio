@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "Bad references",
+  "build": { "dev": "true", "release": "true", "devRom": "dist/dev.gba", "releaseRom": "dist/game.gba" },
+  "collisionClasses": [{ "id": "empty", "name": "Empty", "colour": "#000000", "kind": "empty" }],
+  "entityTypes": [
+    {
+      "id": "switch",
+      "name": "Switch",
+      "colour": "#ffffff",
+      "props": [
+        { "name": "opens", "type": "ref", "default": "", "types": ["door", "gate"] },
+        { "name": "anything", "type": "ref", "default": "" }
+      ]
+    },
+    { "id": "door", "name": "Door", "colour": "#000000" },
+    { "id": "sign", "name": "Sign", "colour": "#888888" }
+  ]
+}

@@ -27,6 +27,10 @@ interface EditorState {
   showCollision: boolean
   /** Whether the room's background pictures are drawn behind its tiles. */
   showBackgrounds: boolean
+  /** Whether lines are drawn from entities to the entities they point at (US-017). */
+  showRefs: boolean
+  /** The reference property of the selected entity whose target is being picked on the map. */
+  picking: string | null
   set: (patch: Partial<Omit<EditorState, 'set'>>) => void
 }
 
@@ -41,5 +45,7 @@ export const useEditor = create<EditorState>((set) => ({
   showGrid: true,
   showCollision: false,
   showBackgrounds: true,
+  showRefs: true,
+  picking: null,
   set: (patch) => set(patch),
 }))

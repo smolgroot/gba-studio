@@ -19,7 +19,7 @@ Open a room from the Rooms list, or select it on the [world map](./world-map) an
 
 The **right mouse button** erases while using the brush or rectangle. Zoom with the toolbar buttons or `Ctrl` + wheel. The mouse position is shown as a tile and screen coordinate. Undo and redo are on the toolbar.
 
-Toolbar toggles show a **tile grid**, the **collision** overlay, and **guides** at every screen boundary (240x160 pixels).
+Toolbar toggles show a **tile grid**, the **collision** overlay, **guides** at every screen boundary (240x160 pixels), the backgrounds, and the lines of [references between entities](#entity-references).
 
 ## Play from here
 
@@ -56,7 +56,7 @@ Entities are placed by their feet: the middle of the bottom edge. An entity type
 
 An entity type works as a prefab: a placed entity follows its type until you change that entity, and the room file keeps only what you changed. **Selected entity** in Properties shows two kinds of property:
 
-- the type's **own properties**, the integer, boolean, text or list ones defined for the type on the [Entities page](./entities#properties), after the position;
+- the type's **own properties**, the integer, boolean, text, list or entity ones defined for the type on the [Entities page](./entities#properties), after the position (an entity one is a [reference](#entity-references));
 - the properties of the type's [behaviours](./entities#behaviours), under a heading for each behaviour.
 
 A field shows the type's value until you set one for this entity. For a behaviour's property, that is the value the type gives it, or the behaviour's default if the type gives none. One sentry bot can carry a bigger shield, or walk further or slower, than the others this way.
@@ -81,6 +81,46 @@ Because an entity keeps only what it changed, a change to the type's value reach
 A room saved before the studio left such values out may hold a value equal to the type's. The game gets the same value either way. The panel shows it as set on the entity, blue and with a reset button, and the value is dropped the next time that entity's values are written, by the panel or by an [agent's tool](./agents#the-tools).
 
 Changing what a property allows can leave an entity with a value that no longer fits: an option taken out of a list, a smaller largest, a new type. The Entities page asks first, lists those entities, and drops their values if you agree, so they follow the type again; see [Entities that store a value](./entities#property-placed). Renaming a property keeps the values. If a value is wrong anyway, from a hand edit say, the [Problems panel](./interface#problems) lists it as an error in the room.
+
+### References between entities {#entity-references}
+
+A property of the kind **Another entity** points at another placed entity: a switch at the door it opens, a door at the door it leads to. Add one to a type on the [Entities page](./entities#properties). Each placed entity sets its own; the type's default is none.
+
+![The room panel with a switch selected: an arrow from it to the door it opens in the same room, a dashed arrow from that door to the room's edge with the name of the room its destination is in, and in Selected entity the list of what opens points at with the Pick on the map button](/screenshots/entity-references.png)
+
+In **Selected entity**, a reference is a list. It starts with **None**, then lists the entities it may point at: this room's first, then those of other rooms, with the room's name in front. An entry reads "Door at 200, 100 (entity 4)", or "door-1 · Door at 200, 100" for an entity that has an id. The entity itself is not listed. Choose one to point at it.
+
+To pick the target on the map instead, press the crosshair button beside the list, **Pick on the map**. The entities it may point at in this room get a blue outline and the others are dimmed, and a dashed blue line runs from the entity to the pointer. Click one to point at it. Press `Escape`, click empty ground, or choose a tool to stop. Picking works whichever tool is on. The button is greyed out when nothing in this room may be chosen; pick from the list then.
+
+A reference you set is marked like any other value set on the entity: its name turns blue, with a reset button that sets it back to none.
+
+#### Ids
+
+A reference stores the **id** of the entity it points at, so it still finds it after the entity moves, or after an entity before it in the room is deleted. An entity has no id until something first points at it. Choosing it then gives it one, made of its type's id and the smallest number not yet taken: `door-1`, `door-2`. When the target is in another room, both rooms change in one undo step.
+
+**Selected entity** shows an **Id** row for an entity that has one, with how many entities point at it: "nothing points at it", "1 entity points at it", "3 entities point at it". You cannot change an id in the panel. You can set one by editing the room file, or with an [agent's tool](./agents#references). An id names one entity in the whole project.
+
+#### Lines on the map
+
+The map draws an arrow from each entity to each entity it points at, in the colour of the pointing entity's type. Lines that start or end at the selected entity are drawn stronger. A line follows a marker while you drag it.
+
+When the target is in another room, a dashed arrow runs to this room's edge, towards where that room is on the [world map](./world-map), and ends in a small label with the room's name. Click the label to open that room. If either room is not on the world map, the arrow is a short stub with the label.
+
+**Show references** in the toolbar (the link icon, after **Show backgrounds**) hides and shows the lines. It is on by default.
+
+#### When the target is gone
+
+Deleting an entity that something points at does not ask. The reference then points at an id no entity has: the map draws no line for it, the pointing entity gets a red dashed outline, and hovering it says why, for example `opens points at "door-1", which no entity has`. Undo brings the entity back.
+
+The [Problems panel](./interface#problems) lists these as errors on the room, and the build stops on them, since it cannot give the game a number for a target that does not exist:
+
+| Problem | Example |
+| --- | --- |
+| A target no entity has | entity 0 (switch): opens points at "door-9", which no entity has. It was deleted, or its id changed: pick another target or set it to None |
+| A target of a type it may not point at | entity 1 (switch): opens points at "sign-1", of type "sign"; it may point at type "door" or "gate" |
+| An id two entities have | entity 0 (door) has id "door-1", which entity 4 of a has too; an id names one entity, so change or remove one of them |
+
+The game gets a reference as the number of the entity it points at; see [Making a game with it](./making-a-game#references).
 
 ## Room properties
 

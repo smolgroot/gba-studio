@@ -80,6 +80,18 @@ fn entities_are_numbered_across_rooms() {
 }
 
 #[test]
+fn a_reference_is_the_number_of_the_entity_it_points_at() {
+    let mut rooms = vec![room(&["."], None), room(&["."], None)];
+    rooms[0].entities = vec![coin(0), EntityData { kind: 1, x: 4, y: 0, props: vec![("opens", Prop::Int(2)), ("spare", Prop::Int(-1))] }];
+    rooms[1].entities = vec![coin(0)];
+    let world = world_of(rooms);
+    let switch = world.room(0).entity(1);
+    assert_eq!(switch.reference("opens"), Some(world.entity_index(1, 0)));
+    assert_eq!(switch.reference("spare"), None, "-1 points at nothing");
+    assert_eq!(switch.reference("missing"), None, "no such property");
+}
+
+#[test]
 fn reads_back_everything_written() {
     let mut first = room(&["#..", ".=/"], Some((3, -1)));
     first.id = "cave";

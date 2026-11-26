@@ -3,6 +3,7 @@ import { budgetProblems } from './budget.ts'
 import type { ArtLookup } from './budget.ts'
 import { behaviourEntityProblems, behaviourTypeProblems, isBehaviourProp } from './behaviours.ts'
 import { propertyAllows, propertyMisfit } from './properties.ts'
+import { refProblems } from './refs.ts'
 import { rleLength } from './rle.ts'
 import { MAX_SCREEN_LAYERS, SCREEN, SPRITE_SIZES, docPath } from './schema.ts'
 import type { Audio, Project, Room, Sprite, Tileset, World } from './schema.ts'
@@ -168,6 +169,9 @@ export function validateProject(docs: Documents, assetExists: (path: string) => 
     }
     for (const sfx of audio.sfx) needAsset(file, sfx.file)
   }
+
+  // References between entities, and the ids they name (US-017).
+  for (const { file, message } of refProblems(docs)) add('error', file, message)
 
   if (art) problems.push(...budgetProblems(docs, art))
   return problems

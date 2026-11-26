@@ -61,6 +61,20 @@ const ENTITY_WORDS: usize = data::ENTITY_SLOTS.div_ceil(32);
 let mut found = Collected::<ENTITY_WORDS>::new();
 ```
 
+### References {#references}
+
+A property of the kind **Another entity** (a `ref`, see [References between entities](./rooms#entity-references)) reaches the game as the number of the entity it points at, its number in the world: the one `World::entity_index` gives and `LiveEntities::get` takes. `entity.reference("opens")` gives it as `Option<usize>`, `None` when the property points at nothing:
+
+```rust
+if let Some(door) = entity.reference("opens")
+    && let Some(target) = entities.get(door)
+{
+    // the switch's door, if its room has been entered
+}
+```
+
+Look the number up when the entity is set up, not every frame: like `entity.int`, it finds the property by name. The ids the studio shows are not in the ROM, so the number is all the game has. The sample does not use references yet.
+
 ## The runtime
 
 `runtime/` provides:

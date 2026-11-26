@@ -1,0 +1,5 @@
+studio/project.json: entity type "switch": property "opens" may point at type "gate", which the project does not have
+studio/rooms/a.json: entity 0 (switch): opens points at "door-9", which no entity has. It was deleted, or its id changed: pick another target or set it to None
+studio/rooms/a.json: entity 1 (switch): opens points at "sign-1", of type "sign"; it may point at type "door" or "gate"
+studio/rooms/a.json: entity 3 (switch): anything is 7; it is the id of an entity, or "" for none
+studio/rooms/b.json: entity 0 (door) has id "door-1", which entity 4 of a has too; an id names one entity, so change or remove one of them

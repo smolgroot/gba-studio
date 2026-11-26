@@ -74,7 +74,7 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 | `read_document`, `write_document`, `delete_document` | Whole documents, checked against the schemas before writing |
 | `room_read_cells`, `room_fill`, `room_paint` | Read and change tile layers and collision by cell, without touching the run-length data |
 | `room_create`, `room_resize`, `room_update`, `world_place` | Make, size and rename rooms, set their tileset, music, backgrounds and darkening, arrange the world map |
-| `entity_add`, `entity_update`, `entity_remove` | Entities in a room |
+| `entity_add`, `entity_update`, `entity_remove` | Entities in a room, their ids and their references to other entities |
 | `entity_type_set`, `entity_type_remove` | Entity types and their typed properties; `entity_type_set` says which placed values the new properties leave wrong |
 | `entity_type_add_behaviour`, `entity_type_remove_behaviour` | Give an entity type a behaviour or change its values; take one away |
 | `tileset_create`, `tileset_set_collision` | Tilesets from a PNG in the folder; collision classes by tile list or range |
@@ -89,7 +89,7 @@ In the [desktop app](./desktop#coding-agents), each open project has its own end
 
 `entity_add` and `entity_update` store only the values that differ from the entity's type: a property's default, or a behaviour's property as the type sets it. A value equal to the type's is left out, so the entity follows the type if it changes, and the answer says so, for example "Left out 2 values that Bot already has (shield, patrol): the entity follows the type." `entity_update` compares with the type the entity has after the call. A name the type does not have is kept, and the answer reports it as a problem. A room written earlier that stores a value equal to the type's builds the same; the value is dropped the next time the entity's values are written. See [Values set on one entity](./rooms#entity-overrides).
 
-`entity_type_set` replaces a type's `props`, the definitions of its own properties. Each has a `name` (lowercase letters, digits and `_`, starting with a letter), a `type` (`int`, `bool`, `string` or `enum`) and a `default`; an `int` may have `min` and `max`, and an `enum` has `options`. It does not change any room, and it cannot tell a rename from a property taken away and another added. So its answer lists what the new definitions leave in the rooms, by room and entity number (counted from 0, as `validate` counts them): "Placed values that no longer fit", with why (`hall entity 0: shield is 7; it is a whole number from 0 to 5`), and "Placed values for properties the type no longer has". An agent puts them right with `entity_update`, passing every value it means to keep. `validate` reports a value that does not fit as an error in the room. The build does not check these values yet. See [Properties](./entities#properties).
+`entity_type_set` replaces a type's `props`, the definitions of its own properties. Each has a `name` (lowercase letters, digits and `_`, starting with a letter), a `type` (`int`, `bool`, `string`, `enum` or `ref`) and a `default`; an `int` may have `min` and `max`, an `enum` has `options`, and a `ref` has the default `""` and may have `types` (see [References](#references)). It does not change any room, and it cannot tell a rename from a property taken away and another added. So its answer lists what the new definitions leave in the rooms, by room and entity number (counted from 0, as `validate` counts them): "Placed values that no longer fit", with why (`hall entity 0: shield is 7; it is a whole number from 0 to 5`), and "Placed values for properties the type no longer has". An agent puts them right with `entity_update`, passing every value it means to keep. `validate` reports a value that does not fit as an error in the room. The build does not check these values yet. See [Properties](./entities#properties).
 
 When the ROM `run_rom` runs is out of date, its answer ends with a line that says so, for example "This ROM is out of date: Rust source changed: src/main.rs. Run the build tool to see the change.", or, when only level data changed, a note to run `patch_rom`. An agent then knows the pictures do not show its last edit.
 
@@ -108,6 +108,14 @@ No tool creates, changes or deletes a file under `assets/`: agents can use the a
 Both answer with the problems left in `project.json`, such as a value out of range. `entity_type_set` keeps the behaviours a type has. A placed entity sets its own value for a behaviour's property through `props` in `entity_add` and `entity_update`, which answer with the problems in its room. `entity_update`'s `props` replace all of the entity's own values, those of its type's properties and of its behaviours, so pass the ones to keep; any equal to the type's are left out, as above. `pecten-studio schema` gives each behaviour's properties under `behaviours`.
 
 An agent can make a new enemy this way with no Rust: `sprite_create` from a PNG in the folder, `entity_type_set` with the sprite, `entity_type_add_behaviour` with `patrol` and then `hazard`, `entity_add`, `build`, and `run_rom` to see it walk.
+
+### References {#references}
+
+A `ref` property points at another placed entity, in any room (see [References between entities](./rooms#entity-references)). `entity_type_set` defines one as `{ "name": "opens", "type": "ref", "default": "", "types": ["door"] }`; `types`, the entity types it may point at, is optional.
+
+A reference names its target by the target's `id`. `entity_add` and `entity_update` take an optional `id`: lowercase letters, digits, `-` and `_`, unique in the project. They refuse one that another entity has, and say which entity has it. To point a switch at a door that has no id, give the door one with `entity_update`, then set the switch's property to it: `"props": { "opens": "door-1" }`. `""` points at nothing.
+
+`entity_remove` answers with the references it left pointing at nothing, by room, entity number and property, numbered as they are after the removal. `validate` reports those as errors, along with a target of a type the property may not point at, an id two entities have, and a `types` entry naming a type the project does not have.
 
 ### Making a tileset and a room with no art
 

@@ -169,6 +169,7 @@
     },
     {
       "type": "sign",
+      "id": "sign-1",
       "x": 64,
       "y": 136,
       "props": {
@@ -183,7 +184,8 @@
       "props": {
         "weight": 70000,
         "style": "stone",
-        "needs_ability": 7
+        "needs_ability": 7,
+        "next": "sign-1"
       }
     }
   ],

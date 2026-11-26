@@ -34,7 +34,7 @@ const rooms = (): Record<string, Room> => ({
 describe('a property definition', () => {
   it('can be an int with limits, a bool, text or one of a list: all four parse', () => {
     for (const def of sentry.props) expect(PropertyDef.safeParse(def).success, def.name).toBe(true)
-    expect(PROPERTY_TYPES.map((t) => t.value)).toEqual(['int', 'bool', 'string', 'enum'])
+    expect(PROPERTY_TYPES.map((t) => t.value)).toEqual(['int', 'bool', 'string', 'enum', 'ref'])
   })
 
   it('takes min and max only on an int, in order, with the default between', () => {
@@ -89,9 +89,10 @@ describe('what a definition allows', () => {
 })
 
 describe('a change of kind', () => {
-  const kinds = ['int', 'bool', 'string', 'enum'] as const
+  const kinds = ['int', 'bool', 'string', 'enum', 'ref'] as const
   it('gives a valid definition from each kind to each other kind', () => {
-    for (const from of sentry.props) {
+    const limitedRef: Def = { name: 'opens', type: 'ref', default: '', types: ['door'] }
+    for (const from of [...sentry.props, limitedRef]) {
       for (const to of kinds) {
         const next = withPropertyType(from, to)
         expect(PropertyDef.safeParse(next).success, `${from.type} to ${to}`).toBe(true)
@@ -100,6 +101,7 @@ describe('a change of kind', () => {
         expect(propertyMisfit(next, next.default), `${from.type} to ${to}: the default fits`).toBeNull()
         expect(next.options !== undefined).toBe(to === 'enum')
         expect(next.min === undefined && next.max === undefined || to === 'int').toBe(true)
+        expect(next.types === undefined || (to === 'ref' && from.type === 'ref')).toBe(true)
       }
     }
   })

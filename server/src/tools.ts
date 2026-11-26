@@ -3,7 +3,7 @@
 // nothing is read or written outside the game folder.
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
-import { BEHAVIOURS, Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, newMisfits, overriddenProps, propertyUsage, redundantProps, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
+import { BEHAVIOURS, Background, FORMAT_VERSION, Id, MAX_BACKGROUNDS, MAX_DIM, MULTI_DOCS, PropertyDef, SCREEN, SINGLE_DOCS, SPRITE_SIZES, TILE, docPath, emptyRoom, newMisfits, overriddenProps, pointersTo, propertyUsage, redundantProps, resizeRoom, rleEncode, slugify, uniqueId } from '@pecten-studio/core'
 import type { Documents, EntityType, Room } from '@pecten-studio/core'
 import type { Builder } from './build.ts'
 import { KEY_BITS, runRom } from './emulator.ts'
@@ -100,6 +100,20 @@ function overrides(type: EntityType, props: Record<string, number | boolean | st
   const dropped = redundantProps(type, props)
   const noun = dropped.length === 1 ? 'value' : 'values'
   return { props: overriddenProps(type, props), note: dropped.length ? ` Left out ${dropped.length} ${noun} that ${type.name} already has (${dropped.join(', ')}): the entity follows the type.` : '' }
+}
+
+/** What the entity tools say about references (US-017). */
+const REF_NOTE = 'A property of type ref points at another placed entity, in any room: its value is that entity\'s id, or "" for none. Give the entity an id first, with entity_update, if it has none. A ref may be limited to some entity types.'
+const ID_NOTE = 'What ref properties of other entities name it by: lowercase letters, digits, - and _, unique in the project'
+
+/** Refuses an id another entity has, naming that entity. */
+function checkEntityId(docs: Documents, id: string | undefined, self: { room: string; index: number } | null): void {
+  if (id === undefined) return
+  for (const [room, doc] of Object.entries(docs.rooms)) {
+    doc.entities.forEach((entity, index) => {
+      if (entity.id === id && !(self?.room === room && self.index === index)) throw new HttpError(409, `entity ${index} of ${room} (${entity.type}) already has id "${id}"; an id names one entity in the project`)
+    })
+  }
 }
 
 export const TOOLS: Tool[] = [
@@ -289,26 +303,28 @@ export const TOOLS: Tool[] = [
 
   tool(
     'entity_add',
-    'Places an entity in a room. x and y are pixels from the room\'s top-left and mark the entity\'s feet: the middle of its bottom edge. To stand on a floor whose top is tile row r, use y = r * 8. props are the values that differ from the entity type\'s (a property\'s default, or a behaviour property as the type sets it); a value equal to the type\'s is left out, so the entity follows the type if it changes.',
-    z.object({ room: Id, type: Id, x: z.number().int().min(0), y: z.number().int().min(0), props: z.record(z.string(), z.union([z.number().int(), z.boolean(), z.string()])).default({}) }),
-    async ({ room: id, type, x, y, props }, context) => {
+    `Places an entity in a room. x and y are pixels from the room\'s top-left and mark the entity\'s feet: the middle of its bottom edge. To stand on a floor whose top is tile row r, use y = r * 8. props are the values that differ from the entity type\'s (a property\'s default, or a behaviour property as the type sets it); a value equal to the type\'s is left out, so the entity follows the type if it changes. ${REF_NOTE}`,
+    z.object({ room: Id, type: Id, id: Id.optional().describe(ID_NOTE), x: z.number().int().min(0), y: z.number().int().min(0), props: z.record(z.string(), z.union([z.number().int(), z.boolean(), z.string()])).default({}) }),
+    async ({ room: id, type, id: entityId, x, y, props }, context) => {
       const { docs } = await documents(context)
       const room = roomOf(docs, id)
       if (!docs.project?.entityTypes.some((t) => t.id === type)) throw new HttpError(400, `no entity type "${type}"; types are: ${docs.project?.entityTypes.map((t) => t.id).join(', ') || 'none'}`)
+      checkEntityId(docs, entityId, null)
       const own = overrides(docs.project?.entityTypes.find((t) => t.id === type)!, props)
-      return saveAndReport(context, 'room', id, { ...room, entities: [...room.entities, { type, x, y, props: own.props }] }, `Added entity ${room.entities.length} (${type}) to ${id}.${own.note}`)
+      return saveAndReport(context, 'room', id, { ...room, entities: [...room.entities, { type, ...(entityId ? { id: entityId } : {}), x, y, props: own.props }] }, `Added entity ${room.entities.length} (${type}) to ${id}.${own.note}`)
     },
   ),
 
   tool(
     'entity_update',
-    'Moves an entity or changes its type or properties. props replaces all of the entity\'s own values: those of its type\'s properties, and of its type\'s behaviour properties, that differ from the type\'s; a value equal to the type\'s is not stored, so the entity follows the type if it changes. Entities are numbered from 0 in the order read_document lists them.',
-    z.object({ room: Id, index: z.number().int().min(0), type: Id.optional(), x: z.number().int().min(0).optional(), y: z.number().int().min(0).optional(), props: z.record(z.string(), z.union([z.number().int(), z.boolean(), z.string()])).optional() }),
+    `Moves an entity, gives it an id, or changes its type or properties. props replaces all of the entity\'s own values: those of its type\'s properties, and of its type\'s behaviour properties, that differ from the type\'s; a value equal to the type\'s is not stored, so the entity follows the type if it changes. Entities are numbered from 0 in the order read_document lists them. ${REF_NOTE}`,
+    z.object({ room: Id, index: z.number().int().min(0), type: Id.optional(), id: Id.optional().describe(ID_NOTE), x: z.number().int().min(0).optional(), y: z.number().int().min(0).optional(), props: z.record(z.string(), z.union([z.number().int(), z.boolean(), z.string()])).optional() }),
     async ({ room: id, index, ...patch }, context) => {
       const { docs } = await documents(context)
       const room = roomOf(docs, id)
       const entity = room.entities[index]
       if (!entity) throw new HttpError(404, `${id} has ${room.entities.length} entities; there is no entity ${index}`)
+      checkEntityId(docs, patch.id, { room: id, index })
       const merged = { ...entity, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
       // Against the type the entity has now, so a change of type keeps only what differs from the new one.
       const type = docs.project?.entityTypes.find((t) => t.id === merged.type)
@@ -320,8 +336,14 @@ export const TOOLS: Tool[] = [
   tool('entity_remove', 'Removes an entity from a room. The entities after it move down one number.', z.object({ room: Id, index: z.number().int().min(0) }), async ({ room: id, index }, context) => {
     const { docs } = await documents(context)
     const room = roomOf(docs, id)
-    if (!room.entities[index]) throw new HttpError(404, `${id} has ${room.entities.length} entities; there is no entity ${index}`)
-    return saveAndReport(context, 'room', id, { ...room, entities: room.entities.filter((_, i) => i !== index) }, `Removed entity ${index} from ${id}.`)
+    const removed = room.entities[index]
+    if (!removed) throw new HttpError(404, `${id} has ${room.entities.length} entities; there is no entity ${index}`)
+    // What pointed at it now points at nothing, which the problems below report too.
+    const pointers = removed.id === undefined ? [] : pointersTo(docs.rooms, docs.project?.entityTypes ?? [], removed.id).filter((p) => !(p.room === id && p.index === index))
+      // Numbered as they are after the removal: those after it in its room move down one.
+      .map((p) => (p.room === id && p.index > index ? { ...p, index: p.index - 1 } : p))
+    const left = pointers.length ? `\nThese pointed at it and now point at nothing (set them with entity_update):\n${pointers.map((p) => `  ${p.room} entity ${p.index}: ${p.prop}`).join('\n')}` : ''
+    return saveAndReport(context, 'room', id, { ...room, entities: room.entities.filter((_, i) => i !== index) }, `Removed entity ${index} from ${id}.${left}`)
   }),
 
   tool(
@@ -522,7 +544,7 @@ export const TOOLS: Tool[] = [
       props: z
         .array(PropertyDef)
         .optional()
-        .describe('Replaces the type\'s property definitions: each has a name (snake_case), a type (int, bool, string or enum), a default, for an int an optional min and max, and for an enum its options. The answer lists the placed entities whose stored values no longer fit, and those that store a value for a property the type no longer has. It does not change rooms: use entity_update for that.'),
+        .describe('Replaces the type\'s property definitions: each has a name (snake_case), a type (int, bool, string, enum or ref), a default, for an int an optional min and max, for an enum its options, and for a ref an optional types: the entity type ids it may point at. A ref points at another placed entity: its default is "" (none), and a placed entity sets it to the id of the entity it points at. The answer lists the placed entities whose stored values no longer fit, and those that store a value for a property the type no longer has. It does not change rooms: use entity_update for that.'),
     }),
     async ({ id, name, colour, sprite, props }, context) => {
       const { docs } = await documents(context)

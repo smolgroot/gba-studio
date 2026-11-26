@@ -832,6 +832,16 @@ impl<'a> Entity<'a> {
             _ => None,
         }
     }
+
+    /// The entity a reference property points at, as its number in the world (what
+    /// [`World::entity_index`] gives and [`crate::behaviour::live::LiveEntities::get`]
+    /// takes), or `None` when it points at nothing or the entity has no such property.
+    /// A reference is written as an integer, -1 for none. Look it up when the entity is
+    /// set up, not every frame: it compares names like [`Entity::int`].
+    #[inline]
+    pub fn reference(&self, name: &str) -> Option<usize> {
+        usize::try_from(self.int(name)?).ok()
+    }
 }
 
 /// One behaviour's properties on one entity, read by their position in the order the

@@ -88,9 +88,10 @@ Notes / open questions
 | US-014 | Prefabs with per-instance overrides | E2 | P1 | Done | M |
 | US-015 | Edit collision classes in the interface | E2 | P1 | Done | S |
 | US-016 | Edit entity property definitions in the interface | E2 | P1 | Done | S |
-| US-017 | Entity references between entities | E2 | P1 | Proposed | M |
+| US-017 | Entity references between entities | E2 | P1 | Done | M |
 | US-018 | Custom behaviours written in the game | E2 | P1 | Proposed | M |
 | US-131 | Codegen checks the values of an entity type's own properties | E2 | P2 | Proposed | S |
+| US-133 | Rename an entity's id, carrying the references to it | E2 | P2 | Proposed | S |
 | US-019 | An Entities page for entity types, their properties and behaviours | E2 | P1 | Done | M |
 | US-020 | Symbol map of game state | E3 | P0 | Done | M |
 | US-021 | Live entity inspector in the Play panel | E3 | P0 | Done | L |
@@ -555,17 +556,35 @@ Decided (the open questions, settled when the story was built; see `design/US-01
 - Codegen does not check own properties' values yet: US-131.
 
 #### US-017 · Entity references between entities
-**Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-016
-**Touches** core, app, codegen
+**Priority** P1 · **Status** Done · **Size** M · **Depends on** US-016
+**Touches** core, app, codegen, runtime, server, docs
 
 As an author, I want a property that points at another placed entity (a switch to
 its door, a door to its destination), picked by clicking it on the map, so that
 connections are not typed by hand.
 
 Acceptance criteria
-- [ ] A `ref` property type, optionally limited to some entity types.
-- [ ] The map draws a line from an entity to what it refers to.
-- [ ] A reference to a deleted entity is a problem.
+- [x] A `ref` property type, optionally limited to some entity types. (`PropertyDef`
+  `type: "ref"` with optional `types`, and an optional `id` on placed entities:
+  `core/test/refs.test.ts` and `core/test/properties.test.ts` for the schema, the words
+  and a change of kind; codegen's fixture sign has a ref that builds to the target's
+  number and the studio's section writer gives the same bytes
+  (`server/test/sectionwriter.test.ts`); `Entity::reference` in a runtime host test;
+  the tools in `server/test/behaviours.test.ts`; the `entity-property-ref` screenshot.)
+- [x] The map draws a line from an entity to what it refers to. (`refLinks` in
+  `core/test/refs.test.ts`: same room, following a dragged marker, to the edge towards
+  another room with its name, a stub off the map, none for a missing target; the
+  `entity-references` screenshot shows both kinds of line.)
+- [x] A reference to a deleted entity is a problem. (`refProblems` and `validate` in
+  `core/test/refs.test.ts`; `codegen/fixture/bad-refs/expected.txt` read by codegen's
+  `reports_bad_references` and by `server/test/refrules.test.ts`, for validation and
+  the section writer; `entity_remove` answers with what it broke.)
+
+Decided (the open questions, settled when the story was built; see `design/US-017.md`)
+- References may point into another room: picked from the list, drawn as an arrow to
+  the room's edge with the room's name.
+- Ids are given by the studio and shown, not edited in the panel: US-133.
+- Deleting an entity something points at does not ask; Problems reports it.
 
 #### US-018 · Custom behaviours written in the game
 **Priority** P1 · **Status** Proposed · **Size** M · **Depends on** US-011
@@ -669,6 +688,27 @@ Acceptance criteria
 - [ ] A fixture of misfits with the expected messages is read by a Rust test and a
   vitest test, so the two cannot drift apart.
 - [ ] A default past 32 bits is reported, not wrapped.
+
+#### US-133 · Rename an entity's id, carrying the references to it
+**Priority** P2 · **Status** Proposed · **Size** S · **Depends on** US-017
+**Touches** core, app, server, docs
+
+As an author, I want to give a placed entity an id of my choosing, such as
+`vault_door`, so that references to it read well in the room files and in the tools.
+
+Since US-017 the studio gives an entity an id (`door-1`) when something first points
+at it, and Selected entity shows it without letting it be changed: a new id would
+leave every reference to the old one pointing at nothing. A hand edit or
+`entity_update` can set one, and Problems then reports the references it broke.
+
+Acceptance criteria
+- [ ] Selected entity's Id can be edited. An id that is not valid, or that another
+  entity has, is refused with the reason.
+- [ ] Every reference to the old id, in any room, takes the new one, in one grouped
+  undo step with the entity's room, refused with its reason if a room changed since
+  (as a collision class rename).
+- [ ] Clearing the id of an entity something points at asks first and names what
+  points at it.
 
 ---
 

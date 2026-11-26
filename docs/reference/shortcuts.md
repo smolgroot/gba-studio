@@ -29,6 +29,7 @@
 | `P` | Play from here |
 | `H`, or hold `Space` | Pan |
 | `Delete` | Remove the selected entity |
+| `Escape` | Stop picking a reference's target on the map |
 | Right mouse button | Erase while using the brush or rectangle |
 | `Ctrl` + wheel | Zoom |
 

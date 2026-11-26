@@ -16,6 +16,7 @@
 pub mod behaviours;
 mod image;
 mod model;
+mod refs;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -220,6 +221,9 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
 
     let classes = &docs.project.collision_classes;
     let types = &docs.project.entity_types;
+    // Entities by id, numbered as the game numbers them, for the references that name them.
+    let entity_ids = refs::by_id(&docs);
+    refs::problems(&docs, &mut problems);
     let room_ids: Vec<&String> = docs.rooms.keys().collect();
     let tileset_ids: Vec<&String> = docs.tilesets.keys().collect();
     let sprite_ids: Vec<&String> = docs.sprites.keys().collect();
@@ -400,6 +404,10 @@ pub fn generate(options: &Options) -> Result<Report, Error> {
                 .props
                 .iter()
                 .filter_map(|def| {
+                    if def.kind == "ref" {
+                        // The number of the entity it points at; a bad one is reported above.
+                        return Some((def.name.as_str(), Prop::Int(refs::number(&entity_ids, entity, def))));
+                    }
                     let value = match entity.props.get(&def.name).unwrap_or(&def.default) {
                         Value::Bool(b) => Prop::Bool(*b),
                         Value::Number(number) => Prop::Int(number.as_i64().unwrap_or(0) as i32),
@@ -1008,6 +1016,10 @@ mod tests {
         use pecten_studio_rt::behaviour::{Behaviour, Checkpoint, Door, Patrol};
         assert_eq!(signs.iter().map(|sign| Door::from_entity(sign).map(|door| door.needs)).collect::<Vec<_>>(), [Some(Some(4)), Some(Some(7))]);
         assert!(Checkpoint::from_entity(&signs[0]).is_some());
+        // A reference is the number of the entity it points at: the first sign is entity 1.
+        assert_eq!(signs.iter().map(|sign| sign.reference("next")).collect::<Vec<_>>(), [None, Some(1)]);
+        assert_eq!(signs[1].int("next"), Some(1), "written as an integer");
+        assert_eq!(signs[0].int("next"), Some(-1), "none is -1");
         assert_eq!(Patrol::from_entity(&signs[0]), None, "signs do not patrol");
         let collision = entry.collision();
         let at = |col: usize, row: usize| collision[row * 60 + col];
@@ -1149,6 +1161,20 @@ mod tests {
         let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixture/bad-behaviours");
         let out = std::env::temp_dir().join(format!("pecten-studio-build-behaviours-{}", std::process::id()));
         let error = generate(&Options { project: fixture.clone(), out: out.clone() }).err().expect("a project with bad settings does not build");
+        let expected = fs::read_to_string(fixture.join("expected.txt")).unwrap();
+        let mut reported = error.0.clone();
+        reported.sort();
+        let mut lines: Vec<String> = expected.lines().filter(|line| !line.is_empty()).map(String::from).collect();
+        lines.sort();
+        assert_eq!(reported, lines);
+        fs::remove_dir_all(out).ok();
+    }
+
+    #[test]
+    fn reports_bad_references() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixture/bad-refs");
+        let out = std::env::temp_dir().join(format!("pecten-studio-build-refs-{}", std::process::id()));
+        let error = generate(&Options { project: fixture.clone(), out: out.clone() }).err().expect("a project with bad references does not build");
         let expected = fs::read_to_string(fixture.join("expected.txt")).unwrap();
         let mut reported = error.0.clone();
         reported.sort();

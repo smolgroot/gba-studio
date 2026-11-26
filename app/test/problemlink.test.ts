@@ -11,6 +11,8 @@ const broken: EntityType[] = [
   { id: 'huge', name: 'Huge', colour: '#ffffff', props: [{ name: 'hp', type: 'int', default: 2 ** 40 }], behaviours: [] },
   { id: 'odd', name: 'Odd', colour: '#ffffff', props: [], behaviours: [{ id: 'no-such-behaviour', props: {} }] },
   { id: 'fast', name: 'Fast', colour: '#ffffff', props: [], behaviours: [{ id: 'patrol', props: { patrol_pace: -5, nonsense: 1 } }] },
+  // US-017: a reference limited to a type the project does not have.
+  { id: 'lever', name: 'Lever', colour: '#ffffff', props: [{ name: 'opens', type: 'ref', default: '', types: ['gate'] }], behaviours: [] },
 ]
 
 function docs(): Documents {

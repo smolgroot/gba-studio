@@ -45,12 +45,15 @@ export const I32_MAX = 2147483647
 export const PropertyDef = z
   .object({
     name: z.string().regex(/^[a-z][a-z0-9_]*$/, 'snake_case, it becomes a Rust field'),
-    type: z.enum(['int', 'bool', 'string', 'enum']),
+    /** `ref` points at another placed entity: its value is that entity's `id`, or "" for none. */
+    type: z.enum(['int', 'bool', 'string', 'enum', 'ref']),
     default: z.union([z.number().int(), z.boolean(), z.string()]),
     options: z.array(z.string().min(1)).min(1).optional(),
     /** For an int: the smallest and the largest value. Left out, any whole number that fits in 32 bits. */
     min: z.number().int().min(I32_MIN).max(I32_MAX).optional(),
     max: z.number().int().min(I32_MIN).max(I32_MAX).optional(),
+    /** For a ref: the entity types it may point at. Left out, it may point at any. */
+    types: z.array(Id).min(1).optional(),
   })
   .superRefine((p, ctx) => {
     const kind = typeof p.default
@@ -58,9 +61,12 @@ export const PropertyDef = z
       (p.type === 'int' && kind === 'number') ||
       (p.type === 'bool' && kind === 'boolean') ||
       (p.type === 'string' && kind === 'string') ||
-      (p.type === 'enum' && kind === 'string' && (p.options?.includes(p.default as string) ?? false))
-    if (!ok) ctx.addIssue({ code: 'custom', message: `default does not fit type "${p.type}"`, path: ['default'] })
+      (p.type === 'enum' && kind === 'string' && (p.options?.includes(p.default as string) ?? false)) ||
+      (p.type === 'ref' && p.default === '')
+    if (p.type === 'ref' && !ok) ctx.addIssue({ code: 'custom', message: 'a ref\'s default is "": it points at nothing until a placed entity sets it', path: ['default'] })
+    else if (!ok) ctx.addIssue({ code: 'custom', message: `default does not fit type "${p.type}"`, path: ['default'] })
     if ((p.type === 'enum') !== (p.options !== undefined)) ctx.addIssue({ code: 'custom', message: 'options go with type "enum", and only with it', path: ['options'] })
+    if (p.type !== 'ref' && p.types !== undefined) ctx.addIssue({ code: 'custom', message: 'types go with type "ref", and only with it', path: ['types'] })
     if (p.type !== 'int' && (p.min !== undefined || p.max !== undefined)) ctx.addIssue({ code: 'custom', message: 'min and max go with type "int", and only with it', path: [p.min !== undefined ? 'min' : 'max'] })
     if (p.min !== undefined && p.max !== undefined && p.min > p.max) ctx.addIssue({ code: 'custom', message: 'min is more than max', path: ['min'] })
     if (p.type === 'int' && typeof p.default === 'number' && ((p.min !== undefined && p.default < p.min) || (p.max !== undefined && p.default > p.max))) {
@@ -220,6 +226,8 @@ export const Background = z.object({
 
 export const Entity = z.object({
   type: Id,
+  /** What a `ref` property of another entity names it by: unique in the project. Given when something first points at it. */
+  id: Id.optional(),
   /** Position in pixels from the room's top-left. */
   x: z.number().int().min(0),
   y: z.number().int().min(0),
@@ -287,6 +295,7 @@ export type Project = z.infer<typeof Project>
 export type Tileset = z.infer<typeof Tileset>
 export type Sprite = z.infer<typeof Sprite>
 export type Background = z.infer<typeof Background>
+export type Entity = z.infer<typeof Entity>
 export type Room = z.infer<typeof Room>
 export type World = z.infer<typeof World>
 export type Audio = z.infer<typeof Audio>

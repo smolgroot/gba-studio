@@ -14,11 +14,11 @@ import DialogTitle from '@mui/material/DialogTitle'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import {
-  I32_MAX, I32_MIN, PROPERTY_TYPES, editProperty, newProperty, propertyNameProblem, propertyUsage, renameProperty, withLimits, withOptions, withPropertyType, withoutProperty,
+  I32_MAX, I32_MIN, PROPERTY_TYPES, editProperty, newProperty, propertyNameProblem, propertyUsage, renameProperty, withLimits, withOptions, withPropertyType, withTypes, withoutProperty,
 } from '@pecten-studio/core'
 import type { EntityType, PropertyDef } from '@pecten-studio/core'
 import { useState } from 'react'
-import { NumberInput, OptionalNumberInput, SelectInput, TextInput } from '../fields.tsx'
+import { Checkbox, NumberInput, OptionalNumberInput, SelectInput, TextInput } from '../fields.tsx'
 import { useStudio } from '../store.ts'
 
 /** A smallest or largest value: empty for none, else a whole number that fits in 32 bits. */
@@ -136,7 +136,7 @@ export function TypeProperties({ type }: { type: EntityType }) {
       {type.props.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 1, pb: 1 }}>No properties. Placed {type.name} entities have only their behaviours&rsquo; values.</Typography>
       ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 1fr) minmax(90px, 0.8fr) minmax(80px, 0.8fr) minmax(0, 1.4fr) max-content', alignItems: 'center' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 1fr) minmax(140px, 0.8fr) minmax(90px, 0.8fr) minmax(0, 1.4fr) max-content', alignItems: 'center' }}>
           {['Name', 'Type', 'Default', 'Allowed', ''].map((title, i) => (
             <Typography key={i} variant="caption" color="text.secondary" sx={{ px: 1 }}>{title}</Typography>
           ))}
@@ -151,6 +151,9 @@ export function TypeProperties({ type }: { type: EntityType }) {
                   <NumberInput label={`Default of ${def.name} in ${type.name}`} value={Number(def.default)} min={def.min ?? I32_MIN} max={def.max ?? I32_MAX} onCommit={(next) => edit(index, { ...def, default: next })} />
                 ) : def.type === 'bool' ? (
                   <SelectInput label={`Default of ${def.name} in ${type.name}`} value={def.default ? 'yes' : 'no'} onChange={(next) => edit(index, { ...def, default: next === 'yes' })} options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} />
+                ) : def.type === 'ref' ? (
+                  // A type cannot point all its entities at one placed entity: each sets its own in the room.
+                  <Typography variant="body2" color="text.secondary" title="Each placed entity picks what it points at, in the room">None</Typography>
                 ) : def.type === 'enum' ? (
                   <SelectInput label={`Default of ${def.name} in ${type.name}`} value={String(def.default)} onChange={(next) => edit(index, { ...def, default: next })} options={(def.options ?? []).map((o) => ({ value: o, label: o }))} />
                 ) : (
@@ -171,6 +174,15 @@ export function TypeProperties({ type }: { type: EntityType }) {
                       else refused(index, 'The smallest is over the largest.')
                     }} />
                   </>
+                ) : def.type === 'ref' ? (
+                  <Box role="group" aria-label={`Entity types ${def.name} in ${type.name} may point at`} sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', columnGap: 1.5, alignItems: 'center' }}>
+                    {project.entityTypes.map((t) => (
+                      <Checkbox key={t.id} checked={def.types?.includes(t.id) ?? false} onChange={(on) => edit(index, withTypes(def, on ? [...(def.types ?? []), t.id] : (def.types ?? []).filter((x) => x !== t.id)))}>
+                        {t.name}
+                      </Checkbox>
+                    ))}
+                    {!def.types && <Typography variant="caption" color="text.secondary">Any type</Typography>}
+                  </Box>
                 ) : def.type === 'enum' ? (
                   <TextInput label={`Options of ${def.name} in ${type.name}, separated by commas`} value={(def.options ?? []).join(', ')} onCommit={(text) => {
                     const next = withOptions(def, text)

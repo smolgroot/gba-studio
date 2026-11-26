@@ -65,9 +65,9 @@ A property is a named value that every entity of a type carries: a shield, a moo
 | Column | Meaning |
 | --- | --- |
 | **Name** | Lowercase letters, digits and `_`, starting with a letter. It becomes a field in the game's code. |
-| **Type** | **Integer**, **Boolean**, **Text** or **One of a list**. |
-| **Default** | What every entity of the type has until you set its own. A number; **Yes** or **No**; text, which may be empty; or one of the list's options. |
-| **Allowed** | For an integer, an optional **Smallest** and **Largest**. For a list, its options, separated by commas. Nothing for a boolean or text. |
+| **Type** | **Integer**, **Boolean**, **Text**, **One of a list** or **Another entity**. |
+| **Default** | What every entity of the type has until you set its own. A number; **Yes** or **No**; text, which may be empty; or one of the list's options. For another entity it is always **None**: each placed entity sets its own. |
+| **Allowed** | For an integer, an optional **Smallest** and **Largest**. For a list, its options, separated by commas. For another entity, a checkbox for each entity type: the types it may point at. Nothing for a boolean or text. |
 
 The bin at the end of a row deletes the property. **Add property** below the table adds an integer called `property` (`property_2`, `property_3` and so on if that is taken) with a default of 0. Change it in its row.
 
@@ -81,9 +81,19 @@ An integer is a whole number that fits in 32 bits, from -2,147,483,648 to 2,147,
 
 A list needs at least one option. Type them separated by commas. A blank option and a repeated one are left out. If you take out the option that is the default, the first option becomes the default.
 
-Changing a property's **Type** gives it a default of the new type: 0, **No**, empty, or the first option. A new list starts with one option: the text the property had as its default, or `option` if it had none. The options and limits of the old type go. A value that a placed entity stored is never converted: 7 does not become "7".
+### Another entity {#ref-properties}
 
-Each own property costs 20 bytes on every placed entity of its type in the level data, and a text or list value also adds its text, once. A type with 4 properties, placed 50 times, takes 4,000 bytes. The [Build panel's](./build-and-play#level-data-use) level data readout counts them.
+A property of the kind **Another entity** points at one placed entity, in the same room or another: a switch at the door it opens, a door at where it leads. Each placed entity picks its own target in the [room panel](./rooms#entity-references), from a list or by clicking it on the map, and the map draws a line to it. The type's default is **None**.
+
+![The Entities page with the switch selected: its property opens is Another entity, with None as its default, and may point only at doors](/screenshots/entity-property-ref.png)
+
+Under **Allowed**, tick the entity types it may point at, so a switch offers only doors. With none ticked, it says **Any type** and may point at any entity. If you delete a type that a reference lists, the [Problems panel](./interface#problems) reports it in `project.json`, for example "entity type "switch": property "opens" may point at type "gate", which the project does not have"; click it to open the type here.
+
+The game gets the number of the entity it points at, or nothing for **None**; see [References](./making-a-game#references).
+
+Changing a property's **Type** gives it a default of the new type: 0, **No**, empty, the first option, or **None**. A new list starts with one option: the text the property had as its default, or `option` if it had none. The options and limits of the old type go. A value that a placed entity stored is never converted: 7 does not become "7".
+
+Each own property costs 20 bytes on every placed entity of its type in the level data, and a text or list value also adds its text, once. A reference costs the same 20 bytes, and an entity's id costs nothing: it is not written to the ROM. A type with 4 properties, placed 50 times, takes 4,000 bytes. The [Build panel's](./build-and-play#level-data-use) level data readout counts them.
 
 ### Entities that store a value {#property-placed}
 

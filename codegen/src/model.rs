@@ -146,7 +146,14 @@ pub struct BehaviourUse {
 #[derive(Deserialize)]
 pub struct PropDef {
     pub name: String,
+    /// `int`, `bool`, `string`, `enum` or `ref`. Only a `ref` is written differently: as
+    /// the number of the entity it points at.
+    #[serde(rename = "type", default)]
+    pub kind: String,
     pub default: Value,
+    /// For a ref: the entity types it may point at. Empty, any.
+    #[serde(default)]
+    pub types: Vec<String>,
     /// For an int property: the smallest value the studio lets an entity have. The studio
     /// checks it; the build does not use it yet.
     #[serde(default)]
@@ -261,6 +268,9 @@ pub struct Layer {
 pub struct Entity {
     #[serde(rename = "type")]
     pub kind: String,
+    /// What a ref property of another entity names it by; unique in the project.
+    #[serde(default)]
+    pub id: Option<String>,
     pub x: i32,
     pub y: i32,
     #[serde(default)]

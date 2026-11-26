@@ -5,7 +5,7 @@
 // stores a value only where it differs from the type's (US-014: `prefab.ts`). See
 // design/US-016.md.
 import { behaviourFields } from './behaviours.ts'
-import { I32_MAX, I32_MIN } from './schema.ts'
+import { I32_MAX, I32_MIN, Id } from './schema.ts'
 import type { EntityType, PropertyDef, Room } from './schema.ts'
 
 type Value = number | boolean | string
@@ -16,6 +16,7 @@ export const PROPERTY_TYPES: ReadonlyArray<{ value: PropertyDef['type']; label: 
   { value: 'bool', label: 'Boolean' },
   { value: 'string', label: 'Text' },
   { value: 'enum', label: 'One of a list' },
+  { value: 'ref', label: 'Another entity' },
 ]
 
 /** What a definition allows, in words: "a whole number from 0 to 9", "true or false", "one of calm, angry". */
@@ -23,6 +24,7 @@ export function propertyAllows(def: PropertyDef): string {
   if (def.type === 'bool') return 'true or false'
   if (def.type === 'string') return 'text'
   if (def.type === 'enum') return `one of ${(def.options ?? []).join(', ')}`
+  if (def.type === 'ref') return `the id of an entity${def.types ? ` of type ${def.types.map((t) => `"${t}"`).join(' or ')}` : ''}, or "" for none`
   // A limit left out is the edge of what 32 bits hold, and the words say so: a value past it does not fit.
   if (def.min === undefined && def.max === undefined) return 'a whole number that fits in 32 bits'
   return `a whole number from ${def.min ?? I32_MIN} to ${def.max ?? I32_MAX}`
@@ -37,7 +39,10 @@ export function propertyMisfit(def: PropertyDef, value: unknown): string | null 
         ? typeof value === 'string'
         : def.type === 'enum'
           ? typeof value === 'string' && (def.options ?? []).includes(value)
-          : typeof value === 'number' && Number.isInteger(value) && value >= (def.min ?? I32_MIN) && value <= (def.max ?? I32_MAX)
+          : def.type === 'ref'
+            // Whether an entity has the id is a question across rooms: see refs.ts.
+            ? typeof value === 'string' && (value === '' || Id.safeParse(value).success)
+            : typeof value === 'number' && Number.isInteger(value) && value >= (def.min ?? I32_MIN) && value <= (def.max ?? I32_MAX)
   return fits ? null : `${def.name} is ${JSON.stringify(value)}; it is ${propertyAllows(def)}`
 }
 
@@ -126,6 +131,7 @@ export function withPropertyType(def: PropertyDef, type: PropertyDef['type']): P
   const { name } = def
   if (type === 'bool') return { name, type, default: false }
   if (type === 'string') return { name, type, default: '' }
+  if (type === 'ref') return { name, type, default: '' }
   if (type === 'enum') {
     const first = typeof def.default === 'string' && def.default !== '' ? def.default : 'option'
     return { name, type, default: first, options: [first] }
@@ -142,6 +148,12 @@ export function withOptions(def: PropertyDef, text: string): PropertyDef | null 
   const options = [...new Set(text.split(',').map((o) => o.trim()).filter((o) => o !== ''))]
   if (options.length === 0) return null
   return { ...def, options, default: options.includes(def.default as string) ? def.default : options[0]! }
+}
+
+/** A ref's definition limited to some entity types; none (an empty list) lets it point at any. */
+export function withTypes(def: PropertyDef, types: readonly string[]): PropertyDef {
+  const { types: _types, ...rest } = def
+  return types.length ? { ...rest, types: [...new Set(types)] } : rest
 }
 
 /** The definition with new limits (undefined: none). The default moves to the nearest limit if it would be outside. Null if the smallest is over the largest. */

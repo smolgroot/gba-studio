@@ -7,6 +7,8 @@
 // against codegen/fixture/expected/studio_data.bin, which codegen's tests check too.
 import { behaviourPositions, behaviourValues } from './behaviours.ts'
 import { dimFlags } from './dim.ts'
+import { propertyMisfit } from './properties.ts'
+import { entityNumbers, refProblems } from './refs.ts'
 import { rleDecode, rleLength } from './rle.ts'
 import { roomSize } from './room.ts'
 import type { Documents } from './validate.ts'
@@ -359,6 +361,10 @@ export function writeSection(docs: Documents, compiled: Manifest, capacity: numb
     parts[S_CLASSES]!.u8(KINDS[c.kind] ?? 0, c.slope?.left ?? 0, c.slope?.right ?? 0, 0)
   }
 
+  // A reference is written as the number of the entity it points at (US-017).
+  const numbers = entityNumbers(docs.rooms)
+  for (const { file, message } of refProblems(docs)) problems.push(`${file}: ${message}`)
+
   const usedTiles = tilesetIds.map(() => new Set<number>())
   const mostLayers = tilesetIds.map(() => 0)
   let entityCount = 0
@@ -459,7 +465,16 @@ export function writeSection(docs: Documents, compiled: Manifest, capacity: numb
         problems.push(`${file}: entity ${n} (${entity.type}) has a behaviour property with no value or a value that does not fit; see the Problems panel`)
         return
       }
-      const written = [...defs.map((def) => ({ name: def.name, value: entity.props[def.name] ?? def.default })), ...behaviourProps]
+      const written = [
+        ...defs.map((def) => {
+          const value = entity.props[def.name] ?? def.default
+          if (def.type !== 'ref') return { name: def.name, value }
+          const misfit = propertyMisfit(def, value)
+          if (misfit) problems.push(`${file}: entity ${n} (${entity.type}): ${misfit}`)
+          return { name: def.name, value: typeof value === 'string' ? (numbers.get(value) ?? -1) : -1 }
+        }),
+        ...behaviourProps,
+      ]
       parts[S_ENTITIES]!.u16(kind, entity.x, entity.y, written.length)
       parts[S_ENTITIES]!.u32(propCount)
       for (const { name, value } of written) {

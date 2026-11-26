@@ -199,3 +199,41 @@ describe('entity_type_set tells what a change of properties leaves in the rooms 
     expect(() => call('entity_type_set', { id: 'bot', props: [{ name: 'on', type: 'bool', default: true, min: 0 }] })).toThrow('min and max go with type \\"int\\"')
   })
 })
+
+describe('references through the entity tools (US-017)', () => {
+  beforeEach(async () => {
+    await call('entity_type_set', { id: 'door', name: 'Door' })
+    await call('entity_type_set', { id: 'switch', name: 'Switch', props: [{ name: 'opens', type: 'ref', default: '', types: ['door'] }] })
+    await call('write_document', { kind: 'room', id: 'hall', document: emptyRoom('Hall', 1, 1, 'none') })
+  })
+  const room = () => JSON.parse(readFileSync(path.join(folder, 'studio/rooms/hall.json'), 'utf8'))
+
+  it('take a ref property with the types it may point at, and say how to set one', () => {
+    expect(TOOLS.find((t) => t.name === 'entity_update')!.description).toContain('its value is that entity\'s id')
+    const project = JSON.parse(readFileSync(path.join(folder, 'studio/project.json'), 'utf8'))
+    expect(project.entityTypes.find((t: { id: string }) => t.id === 'switch').props).toEqual([{ name: 'opens', type: 'ref', default: '', types: ['door'] }])
+  })
+
+  it('give an entity an id and point another at it, with no problem left', async () => {
+    await call('entity_add', { room: 'hall', type: 'door', x: 100, y: 100 })
+    await call('entity_add', { room: 'hall', type: 'switch', x: 10, y: 100 })
+    await call('entity_update', { room: 'hall', index: 0, id: 'vault' })
+    const answer = await call('entity_update', { room: 'hall', index: 1, props: { opens: 'vault' } })
+    expect(answer.text).not.toContain('points at')
+    expect(room().entities).toMatchObject([{ type: 'door', id: 'vault' }, { type: 'switch', props: { opens: 'vault' } }])
+  })
+
+  it('refuse an id another entity has, naming it', async () => {
+    await call('entity_add', { room: 'hall', type: 'door', id: 'vault', x: 100, y: 100 })
+    await expect(call('entity_add', { room: 'hall', type: 'door', id: 'vault', x: 50, y: 100 })).rejects.toThrow('entity 0 of hall (door) already has id "vault"')
+    await call('entity_update', { room: 'hall', index: 0, id: 'vault' })
+  })
+
+  it('answer a reference to a missing entity with the problem, and a removal with what it broke', async () => {
+    await call('entity_add', { room: 'hall', type: 'door', id: 'vault', x: 100, y: 100 })
+    await call('entity_add', { room: 'hall', type: 'switch', x: 10, y: 100, props: { opens: 'vault' } })
+    const removed = await call('entity_remove', { room: 'hall', index: 0 })
+    expect(removed.text).toContain('These pointed at it and now point at nothing (set them with entity_update):\n  hall entity 0: opens')
+    expect(removed.text).toContain('opens points at "vault", which no entity has')
+  })
+})

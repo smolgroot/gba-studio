@@ -10,6 +10,7 @@ import FormatColorFillIcon from '@mui/icons-material/FormatColorFill'
 import Grid4x4Icon from '@mui/icons-material/Grid4x4'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined'
+import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined'
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutlined'
 import PanToolOutlinedIcon from '@mui/icons-material/PanToolOutlined'
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined'
@@ -26,8 +27,8 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import SvgIcon from '@mui/material/SvgIcon'
 import Typography from '@mui/material/Typography'
-import { I32_MAX, I32_MIN, MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, entityOverride, resizeRoom, rleDecode, rleEncode, rleLength, roomSize, shownEntityValue, spotOfTile } from '@pecten-studio/core'
-import type { Background, CollisionClass, EntityType, Room, Sprite, Tileset } from '@pecten-studio/core'
+import { I32_MAX, I32_MIN, MAX_BACKGROUNDS, MAX_SCREEN_LAYERS, SCREEN, TILE, entityOverride, pointAt, refLinks, refTargets, resizeRoom, rleDecode, rleEncode, rleLength, roomSize, shownEntityValue, spotOfTile } from '@pecten-studio/core'
+import type { Background, CollisionClass, Room, Tileset } from '@pecten-studio/core'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { fileUrl } from '../api.ts'
@@ -40,6 +41,7 @@ import { BAR, ui } from '../theme.ts'
 import { BehaviourOverrides } from './behaviours.tsx'
 import { ImportButton } from './common.tsx'
 import { DimLevel, DimToggle } from './dim.tsx'
+import { EntityIdField, EntityMarker, RefInput, RefLines, commitRooms } from './entitymap.tsx'
 import { RoomBudgetReadout } from './budget.tsx'
 import { Divider, GridOverlay, Message, ToolButton, Viewport, useImage } from './views.tsx'
 
@@ -104,7 +106,7 @@ export function RoomEditor({ id }: { id: string }) {
   const redo = useStudio((s) => s.redo)
   const depth = useHistoryDepth()
   const image = useImage(tileset?.image)
-  const { tool, entity, showGrid, showCollision, showBackgrounds, set } = useEditor()
+  const { tool, entity, showGrid, showCollision, showBackgrounds, showRefs, set } = useEditor()
   const [hover, setHover] = useState<{ cx: number; cy: number } | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
 
@@ -115,7 +117,8 @@ export function RoomEditor({ id }: { id: string }) {
       if (event.target instanceof HTMLElement && /^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName)) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       const match = TOOLS.find((t) => t.key === event.key.toLowerCase())
-      if (match) set({ tool: match.tool })
+      if (match) set({ tool: match.tool, picking: null })
+      if (event.key === 'Escape') set({ picking: null })
       const selected = useEditor.getState().entity
       if ((event.key === 'Delete' || event.key === 'Backspace') && selected !== null && room.entities[selected]) {
         commit('room', id, { ...room, entities: room.entities.filter((_, i) => i !== selected) })
@@ -133,7 +136,7 @@ export function RoomEditor({ id }: { id: string }) {
   useEffect(() => {
     if (!isOpen || layerCount === 0 || opened.current === id) return
     opened.current = id
-    set({ entity: null, layer: layerCount - 1, hidden: [] })
+    set({ entity: null, layer: layerCount - 1, hidden: [], picking: null })
   }, [isOpen, id, layerCount, set])
   useEffect(() => {
     if (!isOpen) opened.current = ''
@@ -146,7 +149,7 @@ export function RoomEditor({ id }: { id: string }) {
   const tools = (
     <>
       {TOOLS.map((t) => (
-        <ToolButton key={t.tool} title={t.title} active={tool === t.tool} onClick={() => set({ tool: t.tool })}>{t.icon}</ToolButton>
+        <ToolButton key={t.tool} title={t.title} active={tool === t.tool} onClick={() => set({ tool: t.tool, picking: null })}>{t.icon}</ToolButton>
       ))}
       <Divider />
       <ToolButton title="Undo (Ctrl+Z)" disabled={depth.undo === 0} onClick={undo}><UndoIcon /></ToolButton>
@@ -155,6 +158,7 @@ export function RoomEditor({ id }: { id: string }) {
       <ToolButton title="Tile grid" active={showGrid} onClick={() => set({ showGrid: !showGrid })}><Grid4x4Icon /></ToolButton>
       <ToolButton title="Show collision" active={showCollision} onClick={() => set({ showCollision: !showCollision })}><BlockOutlinedIcon /></ToolButton>
       <ToolButton title={room.backgrounds?.length ? 'Show backgrounds' : 'Show backgrounds (this room has none: add one in Properties)'} active={showBackgrounds} disabled={!room.backgrounds?.length} onClick={() => set({ showBackgrounds: !showBackgrounds })}><WallpaperOutlinedIcon /></ToolButton>
+      <ToolButton title="Show references: lines from entities to the entities they point at" active={showRefs} onClick={() => set({ showRefs: !showRefs })}><LinkOutlinedIcon /></ToolButton>
     </>
   )
   const info = hover
@@ -196,10 +200,12 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
   const classes = useStudio((s) => s.bundle?.docs.project?.collisionClasses)
   const entityTypes = useStudio((s) => s.bundle?.docs.project?.entityTypes)
   const sprites = useStudio((s) => s.bundle?.docs.sprites)
+  const rooms = useStudio((s) => s.bundle?.docs.rooms)
+  const world = useStudio((s) => s.bundle?.docs.world)
   const commit = useStudio((s) => s.commit)
   const playFromHere = useStudio((s) => s.playFromHere)
   const editor = useEditor()
-  const { tool, stamp, hidden, showGrid, showCollision, showBackgrounds, set } = editor
+  const { tool, stamp, hidden, showGrid, showCollision, showBackgrounds, showRefs, picking, set } = editor
   const layer = editor.layer === 'collision' ? 'collision' : Math.min(editor.layer, room.layers.length - 1)
   const tileClasses = useTileClasses(tileset, classes)
 
@@ -211,6 +217,8 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
   const spaceHeld = useRef(false)
   const [rect, setRect] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [dragged, setDragged] = useState<{ index: number; x: number; y: number } | null>(null)
+  /** Where the pointer is while a reference's target is picked, in room pixels. */
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null)
 
   const sheetCols = Math.floor(image.width / TILE)
   const sheetTiles = sheetCols * Math.floor(image.height / TILE)
@@ -380,6 +388,11 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
     if (panning && event.pointerType === 'touch') return
     if (event.button > 2) return
     event.preventDefault()
+    // Picking a target: clicking empty ground stops it.
+    if (picking !== null && !panning) {
+      set({ picking: null })
+      return
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
     const { cx, cy } = cellOf(event)
     const s: Stroke = { kind: 'paint', erase: tool === 'eraser' || event.button === 2, ox: cx, oy: cy, lastX: cx, lastY: cy, changed: false }
@@ -416,6 +429,10 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
   }
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const { cx, cy } = cellOf(event)
+    if (picking !== null) {
+      const box = surface.current!.getBoundingClientRect()
+      setPointer({ x: (event.clientX - box.left) / zoom, y: (event.clientY - box.top) / zoom })
+    }
     if (hover?.cx !== cx || hover?.cy !== cy) setHover({ cx, cy })
     const s = stroke.current
     const w = work.current
@@ -448,12 +465,26 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
     if (s.changed) save(w)
   }
 
-  // Entities are moved by dragging their marker while the entity tool is on.
+  // The entities the reference being picked may point at, in this room.
+  const selectedEntity = editor.entity !== null ? room.entities[editor.entity] : undefined
+  const pickDef = picking !== null && selectedEntity ? entityTypes?.find((t) => t.id === selectedEntity.type)?.props.find((p) => p.name === picking && p.type === 'ref') : undefined
+  const pickable = new Set(pickDef && rooms && entityTypes ? refTargets(rooms, entityTypes, id, editor.entity!, pickDef).filter((t) => t.here).map((t) => t.index) : [])
+
+  // Entities are moved by dragging their marker while the entity tool is on. While a
+  // reference's target is picked, clicking one chooses it, whichever tool is on.
   const onEntityDown = (event: ReactPointerEvent<HTMLElement>, index: number) => {
-    if (tool !== 'entity' || event.button !== 0) return
+    if (event.button !== 0) return
+    if (pickDef && rooms && entityTypes) {
+      event.stopPropagation()
+      if (pickable.has(index)) commitRooms(id, pointAt(rooms, entityTypes, id, editor.entity!, pickDef.name, { room: id, index }))
+      set({ picking: null })
+      setPointer(null)
+      return
+    }
+    if (tool !== 'entity') return
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
-    set({ entity: index })
+    set({ entity: index, picking: null })
     stroke.current = { kind: 'entity', erase: false, ox: 0, oy: 0, lastX: 0, lastY: 0, changed: false, entity: index }
   }
   const onEntityMove = (event: ReactPointerEvent<HTMLElement>) => {
@@ -472,6 +503,10 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
     setDragged(null)
   }
 
+  // The lines of this room's references, following a marker while it is dragged.
+  const links = rooms && entityTypes ? refLinks(rooms, entityTypes, world, id, dragged) : []
+  const broken = new Map(links.flatMap((l) => (l.kind === 'missing' ? [[l.entity, `${l.prop} points at "${l.value}", which no entity has`] as const] : [])))
+
   const cell = TILE * zoom
   const paints = tool === 'brush' || tool === 'rect' || tool === 'fill'
   const brushW = paints && tool === 'brush' && layer !== 'collision' ? stamp.w : 1
@@ -486,7 +521,7 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
       onPointerCancel={onPointerUp}
       onPointerLeave={() => setHover(null)}
       onContextMenu={(event) => event.preventDefault()}
-      sx={{ position: 'relative', width: cols * cell, height: rows * cell, cursor: tool === 'pan' ? 'grab' : tool === 'entity' ? 'copy' : 'crosshair', userSelect: 'none' }}
+      sx={{ position: 'relative', width: cols * cell, height: rows * cell, cursor: pickDef ? 'default' : tool === 'pan' ? 'grab' : tool === 'entity' ? 'copy' : 'crosshair', userSelect: 'none' }}
     >
       {showBackgrounds && room.backgrounds?.map((background, index) => <BackgroundPicture key={index} image={background.image} zoom={zoom} dim={background.dim ? room.dimLevel ?? 0 : 0} />)}
       <canvas ref={tilesCanvas} className="pixelated" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
@@ -494,6 +529,9 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
       {showGrid && zoom >= 2 && <GridOverlay stepX={cell} stepY={cell} colour="rgba(255,255,255,0.07)" />}
       {/* Screen boundaries: the units a room is sized in. */}
       <GridOverlay stepX={SCREEN.width * zoom} stepY={SCREEN.height * zoom} colour="rgba(76,159,254,0.6)" />
+      {showRefs && entityTypes && (
+        <RefLines room={room} links={links} types={entityTypes} sprites={sprites} zoom={zoom} selected={editor.entity} pointer={pickDef ? pointer : null} width={cols * TILE} height={rows * TILE} />
+      )}
       {room.entities.map((entity, index) => {
         const at = dragged?.index === index ? dragged : entity
         const type = entityTypes?.find((t) => t.id === entity.type)
@@ -506,7 +544,9 @@ function Surface({ id, room, tileset, image, zoom, scroller, hover, setHover }: 
             sprite={type?.sprite ? sprites?.[type.sprite] : undefined}
             zoom={zoom}
             selected={editor.entity === index}
-            interactive={tool === 'entity'}
+            interactive={tool === 'entity' || pickDef !== undefined}
+            pick={pickDef ? pickable.has(index) : undefined}
+            broken={broken.get(index)}
             label={type?.name ?? `${entity.type} (unknown type)`}
             onPointerDown={(event) => onEntityDown(event, index)}
             onPointerMove={onEntityMove}
@@ -531,51 +571,6 @@ export function BackgroundPicture({ image, zoom, dim = 0 }: { image: string; zoo
   const dimmed = useMemo(() => (dim > 0 && picture && picture !== 'error' ? dimmedCopy(picture, dim).toDataURL() : null), [picture, dim])
   if (!picture || picture === 'error') return null
   return <Box className="pixelated" sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: `url("${dimmed ?? fileUrl(image, revision)}")`, backgroundSize: `${picture.width * zoom}px ${picture.height * zoom}px`, backgroundRepeat: 'repeat' }} />
-}
-
-/** An entity on the map: its sprite's first frame if its type has one, else a square in the type's colour. */
-function EntityMarker({ x, y, type, sprite, zoom, selected, interactive, label, ...handlers }: {
-  x: number
-  y: number
-  type: EntityType | undefined
-  sprite: Sprite | undefined
-  zoom: number
-  selected: boolean
-  interactive: boolean
-  label: string
-  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void
-  onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void
-  onPointerUp: () => void
-}) {
-  const revision = useStudio((s) => s.revision)
-  const sheet = useImage(sprite && sprite.image.toLowerCase().endsWith('.png') ? sprite.image : undefined)
-  const drawn = sprite && sheet && sheet !== 'error'
-  const box = drawn
-    ? { left: x - sprite.anchor.x, top: y - sprite.anchor.y, width: sprite.frame.width, height: sprite.frame.height }
-    : { left: x - TILE / 2, top: y - TILE, width: TILE, height: TILE }
-  return (
-    <Box
-      title={label}
-      {...handlers}
-      onPointerCancel={handlers.onPointerUp}
-      className="pixelated"
-      sx={{
-        position: 'absolute',
-        left: box.left * zoom,
-        top: box.top * zoom,
-        width: box.width * zoom,
-        height: box.height * zoom,
-        pointerEvents: interactive ? 'auto' : 'none',
-        cursor: 'move',
-        touchAction: 'none',
-        outline: selected ? '2px solid #fff' : drawn ? 'none' : '1px solid rgba(255,255,255,0.8)',
-        outlineOffset: selected ? 1 : 0,
-        ...(drawn
-          ? { backgroundImage: `url("${fileUrl(sprite.image, revision)}")`, backgroundSize: `${sheet.width * zoom}px ${sheet.height * zoom}px`, backgroundPosition: '0 0', backgroundRepeat: 'no-repeat' }
-          : { bgcolor: type?.colour ?? '#888' }),
-      }}
-    />
-  )
 }
 
 const rowSx = (selected: boolean) => ({
@@ -882,6 +877,7 @@ export function RoomProperties({ id }: { id: string }) {
                 </IconButton>
               )}
             </Field>
+            <EntityIdField entity={entity} />
             <Field label="Position">
               <NumberInput label="X in pixels" value={entity.x} min={0} max={room.width * SCREEN.width - 1} onCommit={(x) => updateEntity({ x })} />
               <NumberInput label="Y in pixels" value={entity.y} min={0} max={room.height * SCREEN.height - 1} onCommit={(y) => updateEntity({ y })} />
@@ -893,7 +889,9 @@ export function RoomProperties({ id }: { id: string }) {
               const setProp = (next: number | boolean | string) => updateEntity({ props: entityOverride(type, entity.props, prop.name, next) })
               return (
                 <Field key={prop.name} label={prop.name} marked={shown.overridden} mark={`Set on this entity; ${type.name} has ${String(shown.inherited)}`}>
-                  {prop.type === 'int' ? (
+                  {prop.type === 'ref' ? (
+                    <RefInput roomId={id} index={selected!} entity={entity} def={prop} />
+                  ) : prop.type === 'int' ? (
                     <NumberInput label={prop.name} value={Number(value)} min={prop.min ?? I32_MIN} max={prop.max ?? I32_MAX} onCommit={setProp} />
                   ) : prop.type === 'bool' ? (
                     <SelectInput label={prop.name} value={value ? 'yes' : 'no'} onChange={(next) => setProp(next === 'yes')} options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} />

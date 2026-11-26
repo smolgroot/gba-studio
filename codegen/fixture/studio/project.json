@@ -89,6 +89,14 @@
             "wood",
             "stone"
           ]
+        },
+        {
+          "name": "next",
+          "type": "ref",
+          "default": "",
+          "types": [
+            "sign"
+          ]
         }
       ],
       "behaviours": [
